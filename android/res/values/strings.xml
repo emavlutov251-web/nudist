@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Нудист</string>
+    <string name="sc_server">Сменить сервер</string>
+    <string name="sc_server_long">Сменить адрес сервера</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="server" android:enabled="true" android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/sc_server" android:shortcutLongLabel="@string/sc_server_long">
+        <intent android:action="ru.nudist.app.CHANGE_SERVER" android:targetPackage="ru.nudist.app" android:targetClass="ru.nudist.app.MainActivity" />
+    </shortcut>
+</shortcuts>

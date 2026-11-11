@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="rail">#14251C</color>
+    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/rail</item>
+        <item name="android:statusBarColor">@color/rail</item>
+        <item name="android:navigationBarColor">@color/rail</item>
+        <item name="android:colorAccent">#2BB36A</item>
+    </style>
+</resources>

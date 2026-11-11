@@ -1,0 +1,1 @@
+{ "name": "Нудист", "short_name": "Нудист", "description": "Мессенджер, которому нечего скрывать", "start_url": "/", "display": "standalone", "background_color": "#14251C", "theme_color": "#14251C", "lang": "ru", "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }] }

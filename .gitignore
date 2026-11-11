@@ -1,0 +1,4 @@
+data/
+node_modules/
+# тестовый ключ подписи APK остаётся только у владельца
+android/nudist.keystore

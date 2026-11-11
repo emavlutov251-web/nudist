@@ -1,0 +1,12 @@
+const fs=require('fs');
+const names=`menu search x plus send paperclip smile mic video phone phone-off mic-off video-off monitor-up settings user users megaphone hash volume-2 volume-x headphones headphone-off bell bell-off pin reply forward pencil trash-2 copy check check-check clock lock shield star bookmark archive folder image file map-pin chart-column ellipsis-vertical ellipsis chevron-down chevron-right chevron-left chevron-up arrow-left arrow-down arrow-up compass log-out qr-code moon sun palette download upload play pause eye eye-off at-sign link crown bot zap gift hand circle-dot message-circle message-square messages-square calendar flag ban info sticker laugh languages keyboard database smartphone key-round globe music skip-forward skip-back repeat shuffle maximize layout-grid sparkles leaf panel-right share-2 user-plus timer trending-up list bold italic strikethrough code quote radio scroll-text table wand-sparkles coins badge-check circle-help refresh-cw camera thumbs-up activity server file-text heart external-link funnel image-play contact square-pen circle-user door-open shield-check volume-1 mouse-pointer-click type history bell-ring gamepad-2 rocket user-minus user-x circle-alert monitor laptop hard-drive accessibility wrench layers tag terminal webhook store wallet circle-play circle-stop minus square grip-vertical sliders-horizontal message-circle-more signal venetian-mask ghost party-popper dices glasses`.split(/\s+/);
+const out={};const miss=[];
+for(const n of names){try{let s=fs.readFileSync('node_modules/lucide-static/icons/'+n+'.svg','utf8');s=s.replace(/<!--[\s\S]*?-->/g,'').replace(/<svg[^>]*>/,'').replace('</svg>','').replace(/\s*\n\s*/g,'').trim();out[n]=s;}catch(e){miss.push(n)}}
+fs.writeFileSync('/home/user/nudist/public/js/icons.js','// Сгенерировано из lucide-static (ISC License, https://lucide.dev)\nexport const ICONS='+JSON.stringify(out)+';\n');
+console.log('missing',miss,'size',JSON.stringify(out).length);
+const d=require('emojibase-data/ru/compact.json');
+const groups={};
+for(const e of d){ if(e.group===undefined||e.group===2) continue; (groups[e.group]=groups[e.group]||[]).push([e.unicode,e.label,(e.tags||[]).join(' ')].join('|')); }
+const order=[0,1,3,4,5,6,7,8,9];
+fs.writeFileSync('/home/user/nudist/public/js/emoji-data.js','// Сгенерировано из emojibase-data (MIT License)\nexport const EMOJI='+JSON.stringify(order.map(g=>groups[g]))+';\n');
+console.log(fs.statSync('/home/user/nudist/public/js/emoji-data.js').size);
