@@ -3,6 +3,7 @@
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 
 const ROOT = path.join(__dirname, '..');
+const Cloud = require('./cloud');
 const DATA = process.env.DATA_DIR || path.join(ROOT, 'data');
 const UPLOADS = path.join(DATA, 'uploads');
 fs.mkdirSync(UPLOADS, { recursive: true });
@@ -30,7 +31,9 @@ function flush() {
   if (saving) { saveTimer = setTimeout(flush, 200); return; }
   if (!dirty) return;
   dirty = false; saving = true;
-  fs.writeFile(DB_FILE + '.tmp', JSON.stringify(db), err => {
+  const text = JSON.stringify(db);
+  Cloud.queue(text);
+  fs.writeFile(DB_FILE + '.tmp', text, err => {
     if (err) { console.error('[db] ошибка записи', err.message); saving = false; dirty = true; if (!saveTimer) saveTimer = setTimeout(flush, 5000); return; }
     fs.rename(DB_FILE + '.tmp', DB_FILE, () => { saving = false; });
   });

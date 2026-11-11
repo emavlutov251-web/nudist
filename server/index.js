@@ -3,6 +3,7 @@
 const http = require('http'), fs = require('fs'), path = require('path'), zlib = require('zlib'), crypto = require('crypto');
 const { WebSocketServer } = require('./vendor/ws');
 const C = require('./core');
+const Cloud = require('./cloud');
 const A = require('./auth');
 const R = require('./rpc');
 const G = require('./guild');
@@ -48,7 +49,8 @@ function serveStatic(req, res, rel) {
 function serveUpload(req, res, name) {
   if (!/^[\w-]+\.[a-z0-9]{1,8}$/.test(name)) return json(res, 404, { error: 'not found' });
   const file = path.join(C.UPLOADS, name);
-  fs.stat(file, (err, stt) => {
+  fs.stat(file, async (err, stt) => {
+    if (err && Cloud.enabled && await Cloud.getUpload(name, file)) return serveUpload(req, res, name);   // диск хостинга стёрт — берём из облака
     if (err) return json(res, 404, { error: 'not found' });
     const ext = name.split('.').pop(), inline = INLINE_UPLOAD.has(ext);
     const q = new URL(req.url, 'http://x').searchParams.get('n');
@@ -83,7 +85,12 @@ function handleUpload(req, res) {
   req.on('data', d => { size += d.length; if (size > max && !dead) { dead = true; out.destroy(); fs.unlink(tmp, () => {}); json(res, 413, { error: `Файл больше ${maxMb} МБ` }); req.destroy(); } });
   req.pipe(out);
   req.on('aborted', () => { if (!dead) { dead = true; out.destroy(); fs.unlink(tmp, () => {}); } });
-  out.on('finish', () => { if (!dead) json(res, 200, { url: '/u/' + fname, name, size, mime: (req.headers['content-type'] || 'application/octet-stream').slice(0, 100) }); });
+  out.on('finish', async () => {
+    if (dead) return;
+    try { await Cloud.putUpload(fname, tmp); }
+    catch (e) { console.error('[cloud] файл не сохранён:', e.message); fs.unlink(tmp, () => {}); return json(res, 502, { error: 'Не удалось сохранить файл в хранилище. Попробуйте ещё раз.' }); }
+    json(res, 200, { url: '/u/' + fname, name, size, mime: (req.headers['content-type'] || 'application/octet-stream').slice(0, 100) });
+  });
   out.on('error', () => { if (!dead) { dead = true; json(res, 500, { error: 'Не удалось сохранить файл' }); } });
 }
 
@@ -93,7 +100,7 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x'), p = url.pathname;
     if (p.startsWith('/u/')) return serveUpload(req, res, p.slice(3));
     if (p === '/api/upload' && req.method === 'POST') return handleUpload(req, res);
-    if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size });
+    if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined });
     if (p === '/api/config') return json(res, 200, { flags: db.flags, name: 'Нудист', version: '1.0.0' });
     if (p.startsWith('/api/admin/')) { const r = Adm.httpApi(p, req.headers.authorization); return json(res, r.code, r.body); }
     if (p.startsWith('/api/')) {
@@ -204,6 +211,11 @@ Seed.seed();
 const HOST = process.env.HOST || '0.0.0.0';
 server.on('error', e => { console.error('[fatal] сервер не запустился:', e.message); process.exit(1); });
 server.listen(PORT, HOST, () => console.log(`🍃 «Нудист» запущен: http://${HOST}:${PORT}  (админка: /admin)`));
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { C.flushSync(); process.exit(0); });
+let stopping = false;
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => {
+  if (stopping) return; stopping = true;
+  C.flushSync();
+  Cloud.final(JSON.stringify(db)).catch(e => console.error('[cloud]', e.message)).finally(() => process.exit(0));
+});
 process.on('uncaughtException', e => console.error('[fatal]', e));
 process.on('unhandledRejection', e => console.error('[rejection]', e));
