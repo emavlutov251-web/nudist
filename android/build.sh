@@ -8,9 +8,14 @@ BT="$SDK/build-tools/34.0.0"; JAR="$SDK/platforms/android-34/android.jar"
 # JDK 11 или 17: с JDK 21 падает d8 из build-tools 34 (NullPointerException на анонимных классах).
 if [ -n "${JDK_HOME:-}" ]; then export JAVA_HOME="$JDK_HOME" PATH="$JDK_HOME/bin:$PATH"; elif [ -d /usr/lib/jvm/jdk-11 ]; then export JAVA_HOME=/usr/lib/jvm/jdk-11 PATH="/usr/lib/jvm/jdk-11/bin:$PATH"; fi
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
-VERSION_CODE="${VERSION_CODE:-1}"; VERSION_NAME="${VERSION_NAME:-1.0}"
+VERSION_CODE="${VERSION_CODE:-2}"; VERSION_NAME="${VERSION_NAME:-1.1}"
+# SERVER_URL=https://… вшивает адрес сервера: приложение открывает его сразу, без экрана настройки.
+SERVER_URL="${SERVER_URL:-}"
+case "$SERVER_URL" in *[\<\>\&\"\']*) echo "В SERVER_URL недопустимые символы"; exit 1;; esac
+cp -r res "$W/res"
+printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="default_server" translatable="false">%s</string>\n</resources>\n' "$SERVER_URL" > "$W/res/values/server.xml"
 
-"$BT/aapt2" compile --dir res -o "$W/res.zip"
+"$BT/aapt2" compile --dir "$W/res" -o "$W/res.zip"
 "$BT/aapt2" link -o "$W/app.apk" -I "$JAR" --manifest AndroidManifest.xml --java "$W/gen" \
   --min-sdk-version 26 --target-sdk-version 34 --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" "$W/res.zip"
 mkdir -p "$W/classes" "$W/dex"

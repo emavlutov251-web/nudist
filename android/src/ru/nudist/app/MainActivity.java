@@ -30,6 +30,7 @@ import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -72,7 +73,15 @@ public class MainActivity extends Activity {
         setContentView(root);
         createWebView();
         String server = prefs.getString("server", null);
-        if (server != null) web.loadUrl(server + "/");
+        if (server == null) {
+            // Адрес, вшитый при сборке (SERVER_URL=… ./build.sh). Пустой — спросить у человека.
+            String builtIn = normalize(getString(R.string.default_server));
+            if (builtIn != null) {
+                server = builtIn;
+                prefs.edit().putString("server", server).apply();
+            }
+        }
+        if (server != null) open(server);
         if (server == null || ACTION_CHANGE_SERVER.equals(getIntent().getAction())) showSetup(null);
     }
 
@@ -122,6 +131,13 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+                if (!request.isForMainFrame() || response.getStatusCode() < 500) return;
+                mainFrameFailed = true;
+                showError("Сервер просыпается или недоступен", "Ответ сервера: " + response.getStatusCode());
+            }
+
+            @Override
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
                 handler.cancel();
                 mainFrameFailed = true;
@@ -130,7 +146,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (!mainFrameFailed && panel != null && "error".equals(panel.getTag())) hidePanel();
+                if (!mainFrameFailed && panel != null && ("error".equals(panel.getTag()) || "loading".equals(panel.getTag()))) hidePanel();
             }
         });
 
@@ -341,6 +357,14 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** Открывает сервер и, пока страница грузится, показывает заставку: спящий сервер отвечает до минуты. */
+    private void open(String server) {
+        LinearLayout box = newPanel("loading");
+        box.addView(text("🍃 Нудист", 34, C_INK, true));
+        box.addView(text("Открываю…\nЕсли сервер спал, первое открытие занимает до минуты.", 16, C_DIM, false));
+        web.loadUrl(server + "/");
+    }
+
     private void showSetup(String problem) {
         final LinearLayout box = newPanel("setup");
         box.addView(text("🍃 Нудист", 34, C_INK, true));
@@ -365,13 +389,19 @@ public class MainActivity extends Activity {
             @Override
             public void onClick(View v) {
                 final String url = normalize(input.getText().toString());
+                if (input.getText().toString().trim().length() == 0) {
+                    status.setTextColor(C_WARN);
+                    status.setText("Введите адрес сервера.");
+                    return;
+                }
                 if (url == null) {
+                    status.setTextColor(C_WARN);
                     status.setText("Это не похоже на адрес. Пример: https://nudist.example.com или 192.168.1.5:3000");
                     return;
                 }
                 go.setEnabled(false);
                 status.setTextColor(C_DIM);
-                status.setText("Стучимся на сервер…");
+                status.setText("Стучимся на сервер… Если он спал, это займёт до минуты.");
                 probe(url, new Probe() {
                     @Override
                     public void done(String error) {
@@ -384,7 +414,7 @@ public class MainActivity extends Activity {
                         prefs.edit().putString("server", url).apply();
                         hidePanel();
                         web.clearHistory();
-                        web.loadUrl(url + "/");
+                        open(url);
                     }
                 });
             }
@@ -406,13 +436,12 @@ public class MainActivity extends Activity {
         LinearLayout box = newPanel("error");
         box.addView(text("🙈 " + title, 24, C_INK, true));
         box.addView(text(prefs.getString("server", "") + "\n" + details, 14, C_DIM, false));
-        box.addView(text("Проверьте, что сервер запущен и телефон видит его по сети.", 16, C_INK, false));
+        box.addView(text("Проверьте интернет. Если сервер спал, подождите минуту и попробуйте снова.", 16, C_INK, false));
         Button retry = button("Попробовать снова", true);
         retry.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                hidePanel();
-                web.loadUrl(prefs.getString("server", "") + "/");
+                open(prefs.getString("server", ""));
             }
         });
         box.addView(retry);
@@ -451,8 +480,8 @@ public class MainActivity extends Activity {
                 HttpURLConnection c = null;
                 try {
                     c = (HttpURLConnection) new URL(base + "/api/config").openConnection();
-                    c.setConnectTimeout(7000);
-                    c.setReadTimeout(7000);
+                    c.setConnectTimeout(20000);
+                    c.setReadTimeout(70000);
                     int code = c.getResponseCode();
                     String type = c.getContentType();
                     if (code != 200 || type == null || !type.contains("json")) error = "По этому адресу отвечает не «Нудист» (код " + code + "). Проверьте адрес и порт.";
