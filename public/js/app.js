@@ -155,4 +155,5 @@ window.addEventListener('focus', () => bump());
 
 applyTheme();
 render(html`<${App} />`, document.getElementById('app'));
+if (window.__boot) window.__boot.ok();
 boot();

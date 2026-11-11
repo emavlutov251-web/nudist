@@ -102,6 +102,10 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/upload' && req.method === 'POST') return handleUpload(req, res);
     if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined });
     if (p === '/api/config') return json(res, 200, { flags: db.flags, name: 'Нудист', version: '1.0.0' });
+    if (p === '/api/clientlog' && req.method === 'POST') {      // телефон сообщает, почему приложение не запустилось
+      try { A.limit('clog:' + ipOf(req), 20, 600e3); const b = (await readBody(req, 6000)).toString('utf8').replace(/[\r\n]+/g, ' ').slice(0, 1500); console.log('[client]', (req.headers['user-agent'] || '').slice(0, 200), '|', b); } catch (e) { /* лимит или мусор */ }
+      return json(res, 200, { ok: true });
+    }
     if (p.startsWith('/api/admin/')) { const r = Adm.httpApi(p, req.headers.authorization); return json(res, r.code, r.body); }
     if (p.startsWith('/api/')) {
       const fn = A.api[p.slice(5)]; if (!fn || req.method !== 'POST') return json(res, 404, { error: 'not found' });
