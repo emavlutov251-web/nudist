@@ -62,13 +62,56 @@ H['admin.user.ban'] = (c, p) => {
 };
 H['admin.user.mute'] = (c, p) => { const u = target(c, p.id); const h = int(p.hours, 0, 8760); u.muted = h ? now() + h * 3600e3 : undefined; log(c, h ? 'user.mute' : 'user.unmute', `${R.uname(u)}${h ? ' на ' + h + ' ч' : ''}`); };
 H['admin.user.logout'] = (c, p) => { const u = target(c, p.id); for (const t of Object.keys(db.sessions)) if (db.sessions[t].user === u.id) A.killSession(t); log(c, 'user.logout', R.uname(u)); };
+// Роли администраторов. Назначает главный админ; тех, кто равен ему по рангу, может менять только владелец сервиса.
+function roleBlock(me, u) {
+  if (rank(me) < RANK.superadmin) return 'Назначать администраторов может только главный админ';
+  if (!u || u.deleted) return 'Пользователь не найден';
+  if (u.bot) return 'Боту роль администратора не выдать';
+  if (u.id === me.id) return 'Свою роль менять нельзя';
+  if (C.isOwner(u)) return 'Роль владельца сервиса изменить нельзя';
+  if (!C.isOwner(me) && rank(u) >= rank(me)) return 'Роль главного админа может менять только владелец сервиса';
+  return '';
+}
+function applyRole(c, u, role) {
+  need(!role || RANK[role], 'Неизвестная роль');
+  u.admin = role || undefined;
+  const badges = (u.badges || []).filter(b => b !== 'staff'); if (u.admin) badges.push('staff'); u.badges = badges;
+  save(); R.selfUpdate(u); C.broadcastUser(u); log(c, 'user.role', `${R.uname(u)} (@${u.username || u.id}): ${u.admin || 'роль снята'}`);
+}
+const staffView = (me, u) => ({ id: u.id, username: u.username, name: R.uname(u), avatar: u.avatar, color: u.color, role: u.admin || null, owner: C.isOwner(u), online: C.isOnline(u.id), seen: u.seen, can: !roleBlock(me, u) });
+H['admin.staff'] = c => {
+  const me = guard(c, 'viewer');
+  const list = Object.values(db.users).filter(u => u.admin && !u.deleted && !u.bot).sort((a, b) => (C.isOwner(b) - C.isOwner(a)) || rank(b) - rank(a) || (a.created || 0) - (b.created || 0));
+  return { me: { id: me.id, role: me.admin, owner: C.isOwner(me) }, staff: list.map(u => staffView(me, u)) };
+};
+H['admin.staff.find'] = (c, p) => {
+  const me = guard(c, 'superadmin'); const q = str(p.q, 64).toLowerCase().replace(/^@/, '');
+  if (p.id) { const u = db.users[str(p.id, 32)]; need(u && !u.deleted, 'Пользователь не найден'); return { users: [staffView(me, u)] }; }
+  if (!q) return { users: [] };
+  const list = Object.values(db.users).filter(u => !u.deleted && !u.bot && u.id !== me.id && ((u.username || '') + ' ' + R.uname(u)).toLowerCase().includes(q));
+  list.sort((a, b) => ((b.username || '').toLowerCase() === q) - ((a.username || '').toLowerCase() === q) || (b.seen || 0) - (a.seen || 0));
+  return { users: list.slice(0, 20).map(u => staffView(me, u)) };
+};
+H['admin.role.set'] = (c, p) => {
+  const me = guard(c, 'viewer'), u = db.users[str(p.id, 32)], why = roleBlock(me, u); need(!why, why);
+  applyRole(c, u, p.role ? str(p.role, 16) : null);
+  return { ok: true, role: u.admin || null };
+};
+// При старте: владельцам из OWNERS — роль главного админа.
+for (const oid of C.OWNERS) {
+  const u = db.users[oid];
+  if (!u || u.deleted || u.bot) { console.error('[owners] аккаунт', oid, 'не найден — проверьте переменную OWNERS'); continue; }
+  if (u.admin !== 'superadmin' || !(u.badges || []).includes('staff')) { u.admin = 'superadmin'; u.badges = [...(u.badges || []).filter(b => b !== 'staff'), 'staff']; save(); console.log('[owners] главный админ:', R.uname(u), '@' + (u.username || u.id)); }
+}
+
 H['admin.user.set'] = (c, p) => {
-  const u = target(c, p.id, 'admin'); const ch = [];
+  const roleOnly = p.admin !== undefined && C.isOwner(db.users[c.uid]);   // владелец может менять роль и у равных по рангу
+  const u = roleOnly ? db.users[p.id] : target(c, p.id, 'admin'); const ch = []; need(u && !u.deleted, 'Пользователь не найден');
   if (p.badges !== undefined) { u.badges = (Array.isArray(p.badges) ? p.badges : []).filter(b => ['verified', 'staff', 'developer'].includes(b)); ch.push('бейджи: ' + (u.badges.join(', ') || '—')); }
   if (p.premiumDays !== undefined) { const d = int(p.premiumDays, 0, 3650); u.premiumUntil = d ? now() + d * 864e5 : undefined; ch.push(d ? 'премиум на ' + d + ' дн.' : 'премиум снят'); }
   if (p.stars !== undefined) { u.stars = int(p.stars, 0, 1e9); ch.push('листики = ' + u.stars); }
   if (p.listed !== undefined && u.bot) { u.listed = !!p.listed; ch.push(u.listed ? 'бот в каталоге' : 'бот убран из каталога'); }
-  if (p.admin !== undefined) { guard(c, 'superadmin'); need(u.id !== c.uid, 'Свою роль менять нельзя'); need(!p.admin || RANK[p.admin], 'Неизвестная роль'); u.admin = p.admin || undefined; ch.push('роль: ' + (u.admin || 'нет')); }
+  if (p.admin !== undefined) { const why = roleBlock(db.users[c.uid], u); need(!why, why); applyRole(c, u, p.admin || null); ch.push('роль: ' + (u.admin || 'нет')); }
   save(); R.selfUpdate(u); C.broadcastUser(u); log(c, 'user.set', `${R.uname(u)}: ${ch.join('; ')}`);
 };
 H['admin.reports'] = (c, p) => {

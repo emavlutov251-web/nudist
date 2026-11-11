@@ -154,6 +154,8 @@ export function rpc(m, p) {
 }
 /** rpc с показом ошибки тостом; возвращает undefined при ошибке */
 export const call = (m, p) => rpc(m, p).catch(e => { toast(e.message, 'err'); });
+// Админ-панель: в Android-приложении новых вкладок нет, поэтому открываем в том же окне (назад — ссылка «Вышка» в панели).
+export const openAdmin = () => { if (/NudistAndroid/.test(navigator.userAgent)) location.href = '/admin'; else window.open('/admin', '_blank'); };
 export function upload(file, { onProgress, name, signal } = {}) {
   return new Promise((ok, no) => {
     const x = new XMLHttpRequest(); x.open('POST', '/api/upload');

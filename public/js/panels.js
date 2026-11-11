@@ -5,7 +5,7 @@ import { NOTIF_SOUNDS, sfx, confetti } from './fun.js';
 import qrcode from '/vendor/qrcode.js';
 import { ServerPanel } from './guildui.js';
 import { startCall } from './rtc.js';
-import { openSettings } from './settings.js';
+import { openSettings, AdminRoleDlg } from './settings.js';
 
 // ═════ QR ═════
 export function QR({ text, size = 180 }) {
@@ -52,6 +52,7 @@ function Profile({ id, userId, username }) {
         { icon: contact ? 'user-minus' : 'user-plus', label: contact ? 'Убрать из контактов' : 'В контакты', run: () => call('me.contact', { id: u.id, on: !contact }) },
         S.flags.stars && !u.bot && { emoji: '🍃', label: 'Подарить листики', run: async () => { const v = await promptDlg({ title: 'Подарить листики', label: `Сколько? У вас ${S.me.stars || 0} 🍃`, type: 'number', value: '10', ok: 'Подарить' }); if (v && +v > 0) { const r = await call('stars.send', { to: u.id, n: Math.floor(+v) }); if (r !== undefined) { toast('Подарок отправлен'); confetti(); } } } },
         u.username && { icon: 'qr-code', label: 'QR-код профиля', run: () => openModal(QrModal, { title: 'QR профиля', text: link('u=' + u.username), hint: 'Наведите камеру — откроется профиль @' + u.username }) },
+        S.me.admin === 'superadmin' && !u.bot && { icon: 'shield', label: 'Роль администратора…', run: () => openModal(AdminRoleDlg, { user: u }) },
         '-', { icon: 'ban', label: blocked ? 'Разблокировать' : 'Заблокировать', danger: !blocked, run: () => call('me.block', { id: u.id, on: !blocked }) },
         { icon: 'flag', label: 'Пожаловаться', danger: true, run: async () => { const t = await promptDlg({ title: 'Жалоба на пользователя', label: 'Что случилось?', area: true, ok: 'Отправить' }); if (t !== null) { const r = await call('report', { type: 'user', target: u.id, reason: 'other', text: t }); if (r) toast('Жалоба отправлена модераторам'); } } },
       ], { anchor: e.currentTarget })}><${Icon} n="ellipsis" /><span>Ещё</span></button></div>`}

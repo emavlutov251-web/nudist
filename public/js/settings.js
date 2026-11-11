@@ -1,18 +1,18 @@
 // Настройки: профиль, аккаунт, приватность и 2FA, устройства, уведомления, оформление, чаты, папки, звонки, данные.
-import { html, useState, useEffect, useRef, S, bump, rpc, call, toast, Icon, Avatar, Badges, cx, openModal, closeModal, Modal, userName, fmtFull, fmtSize, fmtNum, copyText, download, confirmDlg, promptDlg, Spinner, Toggle, uploadAvatar, upload, pickFile, setSetting, local, useAsync, AV_COLORS, DEFAULT_SETTINGS } from './lib.js';
+import { html, useState, useEffect, useRef, S, bump, rpc, call, toast, Icon, Avatar, Badges, cx, openModal, closeModal, Modal, userName, fmtFull, fmtSize, fmtNum, copyText, download, confirmDlg, promptDlg, Spinner, Toggle, uploadAvatar, upload, pickFile, setSetting, local, useAsync, AV_COLORS, DEFAULT_SETTINGS, openAdmin } from './lib.js';
 import { sfx, NOTIF_SOUNDS, PACKS, Sticker } from './fun.js';
 import { logout, accounts, switchAccount, addAccount, sendPayload } from './store.js';
 import { QR, StarsModal, StatusDlg, FolderEditor, showProfile } from './panels.js';
 
-const TABS = [['profile', 'user', 'Профиль'], ['account', 'key-round', 'Аккаунт'], ['privacy', 'lock', 'Приватность'], ['devices', 'monitor-smartphone', 'Устройства'], ['notif', 'bell', 'Уведомления'], ['look', 'palette', 'Оформление'], ['chats', 'message-circle', 'Чаты и медиа'], ['folders', 'folder', 'Папки'], ['calls', 'phone', 'Звонки'], ['data', 'database', 'Данные'], ['adv', 'flask-conical', 'Продвинутые']];
+const TABS = [['profile', 'user', 'Профиль'], ['account', 'key-round', 'Аккаунт'], ['privacy', 'lock', 'Приватность'], ['devices', 'monitor-smartphone', 'Устройства'], ['notif', 'bell', 'Уведомления'], ['look', 'palette', 'Оформление'], ['chats', 'message-circle', 'Чаты и медиа'], ['folders', 'folder', 'Папки'], ['calls', 'phone', 'Звонки'], ['data', 'database', 'Данные'], ['adv', 'flask-conical', 'Продвинутые'], ['admins', 'shield', 'Администраторы']];
 export function openSettings(tab) { openModal(Settings, { tab }); }
 function Settings({ id, tab: t0 }) {
   const [tab, setTab] = useState(t0 || (window.innerWidth < 720 ? '' : 'profile')), me = S.me, cur = TABS.find(t => t[0] === tab);
-  const Body = { profile: Profile, account: Account, privacy: Privacy, devices: Devices, notif: Notif, look: Look, chats: Chats, folders: Folders, calls: Calls, data: Data, adv: Adv }[tab];
+  const Body = { profile: Profile, account: Account, privacy: Privacy, devices: Devices, notif: Notif, look: Look, chats: Chats, folders: Folders, calls: Calls, data: Data, adv: Adv, admins: Admins }[tab];
   return html`<${Modal} id=${id} title=${cur ? cur[2] : 'Настройки'} icon="settings" wide cls=${cx('settings', tab && 'in-tab')}>
     <div class="set"><nav class="set-nav" aria-label="Разделы настроек">
       <button class="set-me" onClick=${() => setTab('profile')}><${Avatar} src=${me.avatar} name=${userName(me)} color=${me.color} s=${44} /><span><b>${userName(me)} <${Badges} list=${me.badges} s=${13} /></b><small>${me.username ? '@' + me.username : me.phone || ''}</small></span></button>
-      ${TABS.map(([k, ic, l]) => html`<button class=${cx(tab === k && 'on')} onClick=${() => setTab(k)}><${Icon} n=${ic} s=${18} />${l}</button>`)}
+      ${TABS.filter(t => t[0] !== 'admins' || me.admin).map(([k, ic, l]) => html`<button class=${cx(tab === k && 'on')} onClick=${() => setTab(k)}><${Icon} n=${ic} s=${18} />${l}</button>`)}
       <button onClick=${() => openModal(StarsModal)}><${Icon} n="leaf" s=${18} />Листики и Премиум<small>${fmtNum(me.stars || 0)} 🍃</small></button>
       <button class="danger" onClick=${async () => { if (await confirmDlg({ title: 'Выйти из аккаунта?', text: 'Секретные чаты на этом устройстве станут нечитаемыми.', ok: 'Выйти', danger: true })) logout(); }}><${Icon} n="log-out" s=${18} />Выйти</button>
       <p class="hint">Нудист · веб-версия<br/>Нам нечего скрывать. Вам — есть что: загляните в «Приватность».</p></nav>
@@ -252,5 +252,52 @@ function Adv() {
     <pre class="code mono">${`curl ${location.origin}/bot<ТОКЕН>/getMe\ncurl ${location.origin}/bot<ТОКЕН>/getUpdates?timeout=25\ncurl -H 'Content-Type: application/json' \\\n  -d '{"chat_id":"<ID>","text":"Привет, голые люди!"}' \\\n  ${location.origin}/bot<ТОКЕН>/sendMessage`}</pre>
     <p class="hint">Входящие вебхуки для каналов сервера: Настройки сервера → «Вебхуки». Ключи интеграционного API сервиса выдаются в админ-панели.</p>
     <div class="row wrap"><button class="btn ghost" onClick=${() => { copyText(JSON.stringify({ ua: navigator.userAgent, me: S.me.id, conn: S.conn, chats: Object.keys(S.chats).length, servers: Object.keys(S.servers).length, flags: S.flags, settings: { ...S.settings, folders: undefined, stickers: undefined, gifs: undefined }, time: new Date().toISOString() }, null, 2)); toast('Отладочная сводка скопирована'); }}><${Icon} n="bug" s=${16} /> Скопировать отладочную сводку</button>
-      ${S.me.admin && html`<button class="btn ghost" onClick=${() => window.open('/admin', '_blank')}><${Icon} n="shield" s=${16} /> Админ-панель</button>`}</div></div>`;
+      ${S.me.admin && html`<button class="btn ghost" onClick=${openAdmin}><${Icon} n="shield" s=${16} /> Админ-панель</button>`}</div></div>`;
+}
+
+// ───── администраторы сервиса
+const ADMIN_ROLES = [['viewer', 'Наблюдатель', 'видит статистику и списки, ничего не меняет'], ['moderator', 'Модератор', 'разбирает жалобы, банит и отключает звук'], ['admin', 'Админ', 'ещё управляет чатами, бейджами, функциями и видит журнал'], ['superadmin', 'Главный админ', 'может всё, включая назначение админов']];
+const roleName = r => (ADMIN_ROLES.find(x => x[0] === r) || [0, 'Без роли'])[1];
+const RoleSelect = ({ value, onChange, none }) => html`<select class="role-sel" aria-label="Роль" value=${value || ''} onChange=${e => onChange(e.target.value)}>${none && html`<option value="">${none}</option>`}${ADMIN_ROLES.map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select>`;
+async function setAdminRole(u, role) {
+  if (!role && !(await confirmDlg({ title: 'Снять роль администратора?', text: `${u.name} потеряет доступ к админ-панели.`, ok: 'Снять роль', danger: true }))) return false;
+  const r = await call('admin.role.set', { id: u.id, role: role || null }); if (!r) return false;
+  toast(role ? `${u.name}: ${roleName(role).toLowerCase()}` : `${u.name} больше не администратор`); return true;
+}
+function Admins() {
+  const a = useAsync(() => rpc('admin.staff'), []), d = a.data;
+  const [q, setQ] = useState(''), [found, setFound] = useState(null), [pick, setPick] = useState({});
+  const boss = d && d.me.role === 'superadmin';
+  useEffect(() => {
+    if (!boss || !q.trim()) { setFound(null); return; }
+    let live = true; const t = setTimeout(() => rpc('admin.staff.find', { q }).then(r => live && setFound(r.users), () => live && setFound([])), 250);
+    return () => { live = false; clearTimeout(t); };
+  }, [q, boss]);
+  const change = async (u, role) => { if (await setAdminRole(u, role)) { setQ(''); setFound(null); } a.reload(); };
+  const Row = (u, right) => html`<div class="row-item adm-row"><${Avatar} src=${u.avatar} name=${u.name} color=${u.color} s=${40} /><div class="ri-m"><b>${u.name}${u.id === d.me.id ? ' — это вы' : ''}</b><span>${u.username ? '@' + u.username + ' · ' : ''}${u.owner ? 'владелец сервиса' : u.role ? roleName(u.role).toLowerCase() : 'без роли'}${u.online ? ' · в сети' : ''}</span></div>${right}</div>`;
+  if (a.error) return html`<div class="form"><p class="hint">${a.error}</p></div>`;
+  if (!d) return html`<${Spinner} />`;
+  return html`<div class="form">
+    <p class="hint">Администраторы следят за порядком во всём «Нудисте»: жалобы, баны, функции сервиса. ${boss ? 'Вы можете назначать и снимать их.' : 'Назначать и снимать их может только главный админ.'}</p>
+    <h5>Команда</h5>
+    ${d.staff.map(u => Row(u, u.can ? html`<${RoleSelect} value=${u.role} none="Снять роль" onChange=${v => change(u, v)} />` : null))}
+    ${boss && html`<h5>Добавить администратора</h5>
+      <label class="fld"><span>Кого назначить</span><input type="text" class="adm-q" autocomplete="off" autocapitalize="off" value=${q} placeholder="Имя или @username" onInput=${e => setQ(e.target.value)} /></label>
+      ${found && !found.length && html`<p class="hint">Никого не нашли. Человек должен быть зарегистрирован в «Нудисте».</p>`}
+      ${found && found.map(u => Row(u, u.can ? html`<${RoleSelect} value=${pick[u.id] || u.role || 'admin'} onChange=${v => setPick({ ...pick, [u.id]: v })} /><button class="btn sm" disabled=${(pick[u.id] || u.role || 'admin') === u.role} onClick=${() => change(u, pick[u.id] || u.role || 'admin')}>Назначить</button>` : html`<small class="hint">нельзя изменить</small>`))}
+      <h5>Что может каждая роль</h5>
+      ${ADMIN_ROLES.map(([, l, t]) => html`<p class="hint"><b>${l}</b> — ${t}.</p>`)}`}
+    <button class="btn ghost" onClick=${openAdmin}><${Icon} n="shield" s=${16} /> Открыть админ-панель</button></div>`;
+}
+// Роль администратора из профиля человека
+export function AdminRoleDlg({ id, user }) {
+  const a = useAsync(() => rpc('admin.staff.find', { id: user.id }), []), u = a.data && a.data.users[0];
+  const [role, setRole] = useState(null), cur = role === null ? (u && u.role) || 'admin' : role;
+  return html`<${Modal} id=${id} title="Роль администратора" icon="shield">
+    ${a.error ? html`<p class="hint">${a.error}</p>` : !u ? html`<${Spinner} />` : !u.can ? html`<p class="hint">Роль этого человека изменить нельзя${u.owner ? ': он владелец сервиса' : ''}.</p>` : html`<div class="form">
+      <p class="hint">${u.name}${u.username ? ' (@' + u.username + ')' : ''} сейчас: ${u.role ? roleName(u.role).toLowerCase() : 'без роли'}.</p>
+      <label class="fld"><span>Новая роль</span><${RoleSelect} value=${cur} onChange=${setRole} /></label>
+      <p class="hint">${roleName(cur)} ${(ADMIN_ROLES.find(x => x[0] === cur) || [])[2]}.</p>
+      <div class="row wrap"><button class="btn" disabled=${cur === u.role} onClick=${async () => { if (await setAdminRole(u, cur)) closeModal(id); }}>Назначить</button>
+        ${u.role && html`<button class="btn danger" onClick=${async () => { if (await setAdminRole(u, null)) closeModal(id); }}>Снять роль</button>`}</div></div>`}<//>`;
 }

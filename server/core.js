@@ -103,8 +103,12 @@ function pubUser(u, vid) {
   if (u.private && u.id !== vid && !(u.contacts || []).includes(vid)) { delete o.bio; delete o.links; delete o.city; delete o.birthday; o.private = true; }
   return o;
 }
+// Владельцы сервиса: id аккаунтов через запятую в переменной OWNERS. Они всегда главные админы,
+// их роль никто не может снять, и только они могут менять роль других главных админов.
+const OWNERS = new Set(String(process.env.OWNERS || '').split(',').map(s => s.trim()).filter(Boolean));
+const isOwner = u => !!u && OWNERS.has(u.id);
 function selfUser(u) {
-  return { ...pubUser(u, u.id), phone: u.phone, email: u.email, stars: u.stars || 0, premiumUntil: u.premiumUntil, privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, private: !!u.private, lastDaily: u.lastDaily, taps: u.tapDay === today() ? u.taps : 0 };
+  return { ...pubUser(u, u.id), phone: u.phone, email: u.email, stars: u.stars || 0, premiumUntil: u.premiumUntil, privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, owner: isOwner(u) || undefined, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, private: !!u.private, lastDaily: u.lastDaily, taps: u.tapDay === today() ? u.taps : 0 };
 }
 function broadcastUser(u) { for (const uid of conns.keys()) emit(uid, 'user', pubUser(u, uid)); }
 
@@ -339,4 +343,4 @@ function usernameTaken(n, exceptId) {
   return false;
 }
 
-module.exports = { metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

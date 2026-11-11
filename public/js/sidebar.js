@@ -1,5 +1,5 @@
 // Левая часть: рейка серверов, список чатов с папками и историями, каналы сервера, поиск.
-import { html, useState, useEffect, useRef, useMemo, S, bump, rpc, call, toast, Icon, Logo, Avatar, ChatAvatar, Badges, cx, showMenu, openModal, chatInfo, msgPreview, fmtShort, isMuted, userName, lastSeen, kindIcon, setSetting, debounce, addUsers, Empty, Spinner, local, plural, fmtNum, md, confirmDlg, promptDlg, fmtFull } from './lib.js';
+import { html, useState, useEffect, useRef, useMemo, S, bump, rpc, call, toast, Icon, Logo, Avatar, ChatAvatar, Badges, cx, showMenu, openModal, chatInfo, msgPreview, fmtShort, isMuted, userName, lastSeen, kindIcon, setSetting, debounce, addUsers, Empty, Spinner, local, plural, fmtNum, md, confirmDlg, promptDlg, fmtFull, openAdmin } from './lib.js';
 import { openChat, openUser, logout, accounts, switchAccount, addAccount, totalUnread } from './store.js';
 import { CreateChat, ContactsModal, showProfile, StatusDlg, BotsCatalog, StarsModal, chatActions, JoinPreview, CallsModal, FolderEditor } from './panels.js';
 import { CreateServer, Discover, openServerSettings, ChannelDlg, EventsModal, InviteModal, RoleMsgDlg } from './guildui.js';
@@ -169,7 +169,7 @@ function MeBar() {
     '-',
     ...accounts().filter(a => a.token !== S.token && a.name).map(a => ({ icon: 'circle-user', label: a.name, hint: a.username ? '@' + a.username : '', run: () => switchAccount(a.token) })),
     { icon: 'plus', label: 'Добавить аккаунт', run: addAccount },
-    me.admin && { icon: 'shield', label: 'Админ-панель', run: () => window.open('/admin', '_blank') },
+    me.admin && { icon: 'shield', label: 'Админ-панель', run: openAdmin },
     '-',
     { icon: 'log-out', label: 'Выйти', danger: true, run: async () => { if (await confirmDlg({ title: 'Выйти из аккаунта?', text: 'Секретные чаты этого устройства после выхода прочитать не получится.', ok: 'Выйти', danger: true })) logout(); } },
   ], { head: html`<div class="menu-head"><${Avatar} src=${me.avatar} name=${userName(me)} color=${me.color} s=${40} /><div><b>${userName(me)}</b><small>${me.username ? '@' + me.username : me.phone}</small></div></div>` });
