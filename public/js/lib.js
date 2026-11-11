@@ -13,10 +13,11 @@ export const DEFAULT_SETTINGS = {
 export const S = {
   token: null, ready: false, offline: false, me: null, users: {}, chats: {}, servers: {}, msgs: {}, hist: {}, typing: {}, rooms: {}, stories: [], flags: {}, prices: {}, sys: null, conn: null,
   settings: structuredClone(DEFAULT_SETTINGS), toasts: [], modals: [], menu: null, viewer: null, storyView: null, player: null,
-  ui: { chat: null, thread: null, server: null, folder: 'all', panel: false, list: true, archive: false, q: '', reply: null, edit: null, sel: null, boss: false, jump: null },
+  ui: { chat: null, thread: null, server: null, folder: 'all', panel: false, list: true, archive: false, q: '', reply: null, edit: null, sel: null, boss: false, jump: null, trail: [] },
 };
 window.__S = S; // для отладки
 let scheduled = false; const subs = new Set();
+export const onBump = f => { subs.add(f); };
 export function bump() { if (scheduled) return; scheduled = true; requestAnimationFrame(() => { scheduled = false; for (const f of subs) f(); }); }
 export function useStore() { const [, f] = useReducer(x => x + 1, 0); useEffect(() => { subs.add(f); return () => subs.delete(f); }, []); }
 

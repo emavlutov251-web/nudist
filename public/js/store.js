@@ -92,9 +92,11 @@ const saveDraft = (id, text) => { const c = S.chats[id]; if (!c || (c.draft || '
 export { saveDraft };
 export function openChat(id, o = {}) {
   const c = S.chats[id]; if (!c) return;
+  // След для кнопки «Назад»: если в чат перешли прямо из другого чата (ссылка, упоминание, профиль), назад вернёмся в него.
+  if (!o.noTrail) { if (S.ui.chat && !S.ui.list && S.ui.chat !== id && innerWidth <= 800) { S.ui.trail = [...(S.ui.trail || []).filter(x => x !== id), S.ui.chat].slice(-8); } else if (S.ui.chat !== id || S.ui.list) S.ui.trail = []; }
   S.ui.chat = id; S.ui.thread = o.thread || null; S.ui.list = false; S.ui.reply = null; S.ui.edit = null; S.ui.sel = null; S.ui.jump = o.jump || null;
   if (c.server) S.ui.server = c.server; else if (!o.keepServer) S.ui.server = null;
-  if (location.hash !== '#c=' + id) history.replaceState(null, '', '#c=' + id);
+  if (location.hash !== '#c=' + id) history.replaceState(history.state, '', '#c=' + id);
   local.set('lastChat', id);
   const k = msgKey(id, S.ui.thread), h = (S.hist[k] = S.hist[k] || {});
   h.unreadFrom = !o.thread && c.unread > 0 ? c.read : null;
@@ -102,7 +104,7 @@ export function openChat(id, o = {}) {
   else if (!h.loaded || h.moreAfter) loadHistory(id, { thread: o.thread, around: !o.thread && c.unread > 35 ? c.read + 1 : undefined });
   bump();
 }
-export function closeChat() { S.ui.chat = null; S.ui.thread = null; S.ui.list = true; history.replaceState(null, '', location.pathname); bump(); }
+export function closeChat() { S.ui.trail = []; S.ui.chat = null; S.ui.thread = null; S.ui.list = true; history.replaceState(history.state, '', location.pathname); bump(); }
 export async function openUser(userId) {
   try { const r = await rpc('dm.open', { user: userId }); const v = r.chat || r; if (r.user) S.users[r.user.id] = r.user; upsertChat(v); openChat(v.id); } catch (e) { toast(e.message, 'err'); }
 }

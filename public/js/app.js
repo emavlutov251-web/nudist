@@ -8,6 +8,7 @@ import { InfoPanel, JoinPreview, QR, showProfile } from './panels.js';
 import { CallLayer } from './rtc.js';
 import { MediaViewer, StoryViewer, AudioBar } from './media.js';
 import { openSettings } from './settings.js';
+import { hashFromHistory } from './back.js';
 
 // ═════ Вход ═════
 const SLOGANS = ['Мессенджер, которому нечего скрывать.', 'Скрывать нечего. Но шифруем на совесть.', 'Голая правда и немного стикеров.', 'Одежда — по желанию. Двухфакторка — обязательно.'];
@@ -144,12 +145,12 @@ async function handleHash(first) {
   const h = location.hash.slice(1); if (!h) { if (first && innerWidth > 800) { const l = local.get('lastChat'); if (l && S.chats[l]) openChat(l); } return; }
   const p = new URLSearchParams(h);
   if (p.get('c') && S.chats[p.get('c')]) { if (S.ui.chat !== p.get('c')) openChat(p.get('c')); }
-  else if (p.get('qr')) { history.replaceState(null, '', location.pathname); if (await confirmDlg({ title: 'Вход на новом устройстве', text: 'Разрешить вход в ваш аккаунт на устройстве, которое показало этот QR-код? Соглашайтесь, только если это вы.', ok: 'Разрешить вход' })) { if (await call('qr.approve', { id: p.get('qr') }) !== undefined) toast('Готово: новое устройство вошло в аккаунт'); } }
-  else if (p.get('join')) { history.replaceState(null, '', location.pathname); openModal(JoinPreview, { q: p.get('join') }); }
-  else if (p.get('u')) { history.replaceState(null, '', location.pathname); showProfile(null, p.get('u')); }
+  else if (p.get('qr')) { history.replaceState(history.state, '', location.pathname); if (await confirmDlg({ title: 'Вход на новом устройстве', text: 'Разрешить вход в ваш аккаунт на устройстве, которое показало этот QR-код? Соглашайтесь, только если это вы.', ok: 'Разрешить вход' })) { if (await call('qr.approve', { id: p.get('qr') }) !== undefined) toast('Готово: новое устройство вошло в аккаунт'); } }
+  else if (p.get('join')) { history.replaceState(history.state, '', location.pathname); openModal(JoinPreview, { q: p.get('join') }); }
+  else if (p.get('u')) { history.replaceState(history.state, '', location.pathname); showProfile(null, p.get('u')); }
 }
 onReady(first => handleHash(first));
-window.addEventListener('hashchange', () => S.ready && handleHash(false));
+window.addEventListener('hashchange', () => S.ready && !hashFromHistory() && handleHash(false));
 window.addEventListener('focus', () => bump());
 
 applyTheme();

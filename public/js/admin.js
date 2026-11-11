@@ -174,7 +174,7 @@ function App() {
     try { const init = await connect(token); const me = await rpc('admin.me'); setSt({ phase: 'in', role: me.role, me: init.me }); }
     catch (e) { try { ws && ws.close(); } catch (x) { /* пусто */ } setSt({ phase: /прав/.test(e.message) ? 'denied' : 'login', note: /прав/.test(e.message) ? '' : e.message }); } };
   useEffect(() => { onDead = lost => setSt(s => s.phase === 'in' ? { phase: 'login', note: lost ? 'Соединение потеряно. Войдите снова.' : 'Сессия завершена.' } : s); const tk = getToken(); if (tk) enter(tk); }, []);
-  useEffect(() => { location.hash = tab; }, [tab]);
+  useEffect(() => { history.replaceState(history.state, '', '#' + tab); }, [tab]);   // без новых записей в истории: «Назад» сразу возвращает в мессенджер
   if (st.phase === 'load') return html`<div class="alogin"><${Spin} /></div>`;
   if (st.phase === 'login') return html`<${Login} onToken=${enter} note=${st.note} />`;
   if (st.phase === 'denied') return html`<div class="alogin"><div class="acard"><h1><${Icon} n="shield-x" s=${26} /> Сюда нельзя</h1><p>У этого аккаунта нет роли персонала. На вышку пускают только спасателей.</p><p class="hint">Роль выдаёт суперадмин: первый зарегистрированный пользователь сервиса становится им автоматически.</p><a class="btn wide" href="/">Вернуться в мессенджер</a><button class="btn ghost wide" onClick=${() => { localStorage.removeItem(LS); setSt({ phase: 'login' }); }}>Войти другим аккаунтом</button></div></div>`;

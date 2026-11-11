@@ -289,11 +289,29 @@ public class MainActivity extends Activity {
             hidePanel();
             return;
         }
-        if (panel == null && web.canGoBack()) {
-            web.goBack();
+        if (panel != null) {
+            moveTaskToBack(true);
             return;
         }
-        moveTaskToBack(true);
+        // Спрашиваем у самого мессенджера: он закрывает верхний экран (меню, окно, панель, чат, папку)
+        // и отвечает 1. Ответ 0 — закрывать нечего, сворачиваемся. -1 — страница без обработчика (например, админка).
+        try {
+            web.evaluateJavascript(
+                "(function(){try{return window.nudistBack?(window.nudistBack()?1:0):-1}catch(e){return -1}})()",
+                new ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String v) {
+                        if ("1".equals(v)) return;
+                        if (!"0".equals(v) && web.canGoBack()) {
+                            web.goBack();
+                            return;
+                        }
+                        moveTaskToBack(true);
+                    }
+                });
+        } catch (Throwable e) {
+            moveTaskToBack(true);
+        }
     }
 
     @Override

@@ -14,7 +14,7 @@ const { db, save, now, emit } = C;
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC = path.join(C.ROOT, 'public');
-const MIME = { html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', json: 'application/json', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', ico: 'image/x-icon', woff2: 'font/woff2', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', mp3: 'audio/mpeg', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', pdf: 'application/pdf', webmanifest: 'application/manifest+json', txt: 'text/plain; charset=utf-8' };
+const MIME = { apk: 'application/vnd.android.package-archive', html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', json: 'application/json', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', ico: 'image/x-icon', woff2: 'font/woff2', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', mp3: 'audio/mpeg', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', pdf: 'application/pdf', webmanifest: 'application/manifest+json', txt: 'text/plain; charset=utf-8' };
 const INLINE_UPLOAD = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'mp4', 'webm', 'mov', 'mp3', 'ogg', 'oga', 'opus', 'wav', 'm4a', 'aac', 'flac', 'pdf', 'txt']);
 const CSP = "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'self' https:; object-src 'none'; base-uri 'self'";
 
@@ -217,5 +217,19 @@ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => {
   C.flushSync();
   Cloud.final(JSON.stringify(db)).catch(e => console.error('[cloud]', e.message)).finally(() => process.exit(0));
 });
+// ───── не засыпать на бесплатных хостингах (Render усыпляет сервис после 15 минут без входящих запросов)
+// KEEP_AWAKE: не задано — будим себя круглые сутки, кроме 02:00–06:00 по Москве (экономия бесплатных часов); always — без ночной паузы; off — выключено.
+{
+  const self = (process.env.KEEP_AWAKE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, ''), mode = (process.env.KEEP_AWAKE || '').toLowerCase();
+  if (self && mode !== 'off' && typeof fetch === 'function') {
+    const ping = () => {
+      const h = (new Date().getUTCHours() + 3) % 24;
+      if (mode !== 'always' && h >= 2 && h < 6 && !C.conns.size) return;
+      fetch(self + '/api/health', { headers: { 'user-agent': 'nudist-keep-awake' }, signal: AbortSignal.timeout(20000) }).then(r => r.arrayBuffer()).catch(e => console.error('[keep-awake]', e.message));
+    };
+    setInterval(ping, 5 * 60000).unref();
+    console.log('[keep-awake] сервис будит сам себя: ' + self);
+  }
+}
 process.on('uncaughtException', e => console.error('[fatal]', e));
 process.on('unhandledRejection', e => console.error('[rejection]', e));

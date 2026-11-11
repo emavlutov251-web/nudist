@@ -3,11 +3,17 @@ import { html, useState, useEffect, useRef, S, bump, rpc, call, toast, Icon, Ava
 import { sfx, NOTIF_SOUNDS, PACKS, Sticker } from './fun.js';
 import { logout, accounts, switchAccount, addAccount, sendPayload } from './store.js';
 import { QR, StarsModal, StatusDlg, FolderEditor, showProfile } from './panels.js';
+import { backHooks } from './back.js';
 
 const TABS = [['profile', 'user', 'Профиль'], ['account', 'key-round', 'Аккаунт'], ['privacy', 'lock', 'Приватность'], ['devices', 'monitor-smartphone', 'Устройства'], ['notif', 'bell', 'Уведомления'], ['look', 'palette', 'Оформление'], ['chats', 'message-circle', 'Чаты и медиа'], ['folders', 'folder', 'Папки'], ['calls', 'phone', 'Звонки'], ['data', 'database', 'Данные'], ['adv', 'flask-conical', 'Продвинутые'], ['admins', 'shield', 'Администраторы']];
 export function openSettings(tab) { openModal(Settings, { tab }); }
 function Settings({ id, tab: t0 }) {
   const [tab, setTab] = useState(t0 || (window.innerWidth < 720 ? '' : 'profile')), me = S.me, cur = TABS.find(t => t[0] === tab);
+  useEffect(() => {
+    const inTab = () => !!tab && window.innerWidth <= 720, h = () => { if (!inTab()) return false; setTab(''); return true; };
+    h.depth = inTab; backHooks.set(id, h); bump();
+    return () => backHooks.delete(id);
+  }, [tab]);
   const Body = { profile: Profile, account: Account, privacy: Privacy, devices: Devices, notif: Notif, look: Look, chats: Chats, folders: Folders, calls: Calls, data: Data, adv: Adv, admins: Admins }[tab];
   return html`<${Modal} id=${id} title=${cur ? cur[2] : 'Настройки'} icon="settings" wide cls=${cx('settings', tab && 'in-tab')}>
     <div class="set"><nav class="set-nav" aria-label="Разделы настроек">

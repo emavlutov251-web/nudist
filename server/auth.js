@@ -35,6 +35,7 @@ function limit(key, n, ms) {
   if (arr.length >= n) fail('Слишком много попыток. Остыньте, выпейте воды и попробуйте позже.');
   arr.push(t); buckets.set(key, arr);
 }
+setInterval(() => { const t = now() - 3600e3; for (const [k, arr] of buckets) if (!arr.length || arr[arr.length - 1] < t) buckets.delete(k); }, 600e3).unref();
 setInterval(() => { const t = now(); for (const [k, a] of buckets) if (!a.length || a[a.length - 1] < t - 3600e3) buckets.delete(k); }, 600e3).unref();
 
 // ───── пользователи и сессии
@@ -105,7 +106,7 @@ function second(u, b) { // вторая ступень: пароль (для в�
 const api = {
   register(b, meta) {
     need(db.flags.registration, 'Регистрация временно закрыта. Пляж переполнен.');
-    limit('reg:' + meta.ip, 10, 3600e3);
+    limit('reg:' + meta.ip, 120, 3600e3);
     const username = str(b.username, 32), password = typeof b.password === 'string' ? b.password : '';
     need(USERNAME_RE.test(username), 'Username: латиница, цифры и _, от 3 до 32 символов, начинается с буквы');
     need(!C.usernameTaken(username), 'Этот username уже занят. Кто-то разделся раньше вас.');
@@ -114,14 +115,16 @@ const api = {
     return createSession(u, meta);
   },
   login(b, meta) {
-    limit('login:' + meta.ip, 15, 600e3);
-    const u = db.users[C.byName.get(str(b.username, 32).replace(/^@/, '').toLowerCase())];
+    // Лимиты на подбор пароля: строгий на пару «адрес + аккаунт», мягкие на адрес (за одним адресом оператора сидят сотни людей) и на аккаунт.
+    const lname = str(b.username, 32).replace(/^@/, '').toLowerCase();
+    limit('login:' + meta.ip + ':' + lname, 10, 600e3); limit('loginu:' + lname, 40, 600e3); limit('login:' + meta.ip, 300, 600e3);
+    const u = db.users[C.byName.get(lname)];
     if (!u || u.bot || !checkPass(b.password, u.pass)) fail('Неверный username или пароль');
     return second(u, b) || createSession(u, meta);
   },
   'phone/start'(b, meta) {
     need(db.flags.phoneAuth, 'Вход по номеру отключён администратором');
-    limit('sms:' + meta.ip, 8, 600e3);
+    limit('sms:' + meta.ip, 60, 600e3);
     const phone = normPhone(b.phone); need(phone, 'Введите номер в международном формате, например +7 999 123-45-67');
     const code = String(crypto.randomInt(10000, 100000));
     phoneCodes.set(phone, { code, exp: now() + 300e3, tries: 0 });
