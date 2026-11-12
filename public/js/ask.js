@@ -25,7 +25,13 @@
     var name = d.name || d.username;
     $('name').textContent = name; $('uname').textContent = '@' + d.username; document.title = name + ' ждёт анонимный вопрос · Нудист';
     var a = $('ava');
-    if (d.avatar) { a.textContent = ''; a.style.backgroundImage = 'url("' + String(d.avatar).replace(/["\\\n]/g, '') + '")'; }
+    if (d.avatar) {
+      var src = String(d.avatar).replace(/["\\\n]/g, '');
+      if (/\.(mp4|webm|mov|m4v)$/i.test(src)) { // аватар-видео: картинкой его не показать
+        var v = document.createElement('video'); v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.setAttribute('muted', '');
+        v.onloadeddata = function () { a.textContent = ''; a.appendChild(v); }; v.src = src;
+      } else { a.textContent = ''; a.style.backgroundImage = 'url("' + src + '")'; }
+    }
     else { a.textContent = (name.match(/[^\s_@]/) || ['🍃'])[0].toUpperCase(); a.style.backgroundColor = COLORS[(d.color || 0) % 8]; }
     if (!d.open) show('closed');
   });
