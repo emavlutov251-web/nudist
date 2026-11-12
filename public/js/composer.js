@@ -2,16 +2,18 @@
 import { html, useState, useEffect, useRef, useLayoutEffect, useMemo, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, cx, showMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtFull, fmtDur, fmtSize, userName, promptDlg, addUsers, Empty, Spinner, plural, TTL_OPTS, setSetting, debounce, pickFile, upload, Toggle, kindIcon } from './lib.js';
 import { msgKey, saveDraft, sendPayload, uploads, sendFiles, encryptFor, encryptFile, openChat } from './store.js';
 import { Sticker, PACKS, stickerHints, SLASH, MemeModal } from './fun.js';
-import { EMOJI } from './emoji-data.js';
 import { pickUsers, openMiniApp } from './panels.js';
 
 // ═════ Эмодзи / стикеры / GIF ═════
-let EM = null; const emo = () => EM || (EM = EMOJI.map(g => g.map(s => { const [e, n, t] = s.split('|'); return { e, n, t: (n + ' ' + (t || '')).toLowerCase() }; })));
+// Словарь эмодзи (200 КБ) не нужен, чтобы открыть чат: подгружаем его, когда человек тянется к смайликам.
+let EMOJI = null, emoLoad = null;
+export const loadEmoji = () => emoLoad || (emoLoad = import('./emoji-data.js').then(m => { EMOJI = m.EMOJI; bump(); }).catch(() => { emoLoad = null; }));
+let EM = null; const emo = () => EM || (EMOJI ? (EM = EMOJI.map(g => g.map(s => { const [e, n, t] = s.split('|'); return { e, n, t: (n + ' ' + (t || '')).toLowerCase() }; }))) : (loadEmoji(), []));
 const GROUPS = [['🕒', 'Недавние'], ['😀', 'Смайлы'], ['👋', 'Люди'], ['🐻', 'Природа'], ['🍔', 'Еда'], ['✈️', 'Путешествия'], ['⚽', 'Занятия'], ['💡', 'Предметы'], ['🔣', 'Символы'], ['🏳️', 'Флаги']];
 export function EmojiPicker({ only, chat, onEmoji, onSticker, onGif }) {
   const [tab, setTab] = useState('emoji'), [g, setG] = useState(0), [q, setQ] = useState(''), [pack, setPack] = useState('leaf');
   const srv = chat && chat.server && S.servers[chat.server], custom = !only && srv ? srv.emojis || [] : [], prem = (S.me.premiumUntil || 0) > Date.now();
-  const found = useMemo(() => { const s = q.trim().toLowerCase(); if (!s) return null; const out = []; for (const grp of emo()) for (const x of grp) { if (x.t.includes(s)) out.push(x); if (out.length >= 120) return out; } return out; }, [q]);
+  const found = useMemo(() => { const s = q.trim().toLowerCase(); if (!s) return null; const out = []; for (const grp of emo()) for (const x of grp) { if (x.t.includes(s)) out.push(x); if (out.length >= 120) return out; } return out; }, [q, !!EMOJI]);
   const pickE = e => { const r = S.settings.recentEmoji || []; if (r[0] !== e) setSetting({ recentEmoji: [e, ...r.filter(x => x !== e)].slice(0, 24) }); onEmoji(e); };
   const grid = l => html`<div class="em-grid">${l.map(x => html`<button title=${x.n} onClick=${() => pickE(x.e)}>${x.e}</button>`)}</div>`;
   const mine = S.settings.stickers || [], gifs = S.settings.gifs || [];
@@ -21,7 +23,7 @@ export function EmojiPicker({ only, chat, onEmoji, onSticker, onGif }) {
   return html`<div class="picker" onMouseDown=${e => e.target.tagName !== 'INPUT' && e.preventDefault()}>
     ${tab === 'emoji' && html`<div class="pk-search"><${Icon} n="search" s=${15} /><input placeholder="Поиск эмодзи: кот, огонь, стыд…" value=${q} onInput=${e => setQ(e.target.value)} /></div>
       ${!found && html`<div class="pk-groups">${GROUPS.map(([e, n], i) => html`<button class=${cx(g === i && 'on')} title=${n} onClick=${() => setG(i)}>${e}</button>`)}</div>`}
-      <div class="pk-body">${found ? (found.length ? grid(found) : html`<p class="hint center">Такого эмодзи нет. Изобразите словами.</p>`) : g === 0 ? html`${custom.length > 0 && html`<h5>Эмодзи сервера «${srv.name}»</h5><div class="em-grid">${custom.map(x => html`<button title=${':' + x.name + ':'} onClick=${() => onEmoji(':' + x.name + ':')}><img src=${x.url} alt=${x.name} /></button>`)}</div>`}<h5>Недавние</h5>${grid((S.settings.recentEmoji || []).map(e => ({ e, n: '' })))}<h5>Смайлы</h5>${grid(emo()[0].slice(0, 64))}` : grid(emo()[g - 1])}</div>`}
+      <div class="pk-body">${found ? (found.length ? grid(found) : html`<p class="hint center">Такого эмодзи нет. Изобразите словами.</p>`) : g === 0 ? html`${custom.length > 0 && html`<h5>Эмодзи сервера «${srv.name}»</h5><div class="em-grid">${custom.map(x => html`<button title=${':' + x.name + ':'} onClick=${() => onEmoji(':' + x.name + ':')}><img src=${x.url} alt=${x.name} /></button>`)}</div>`}<h5>Недавние</h5>${grid((S.settings.recentEmoji || []).map(e => ({ e, n: '' })))}<h5>Смайлы</h5>${grid((emo()[0] || []).slice(0, 64))}` : grid(emo()[g - 1] || [])}</div>`}
     ${tab === 'stickers' && html`<div class="pk-groups">${packs.map(p => html`<button class=${cx(pack === p.id && 'on')} title=${p.name} onClick=${() => setPack(p.id)}>${p.icon}</button>`)}<button class=${cx(pack === 'my' && 'on')} title="Мои стикеры" onClick=${() => setPack('my')}>⭐</button></div>
       <div class="pk-body">${pack === 'my' ? html`<h5>Мои стикеры</h5><div class="st-grid">${mine.map(s => html`<span class="st-my"><${Sticker} st=${s} size=${84} onClick=${() => onSticker(s)} /><button title="Удалить" onClick=${() => setSetting({ stickers: mine.filter(x => x !== s) })}>×</button></span>`)}<button class="st-add" onClick=${newSticker}><${Icon} n="plus" s=${22} /><span>Из картинки</span></button></div><p class="hint">Любое фото из чата тоже можно превратить в стикер: правый клик → «Сделать стикером».</p>`
         : cur && html`<h5>${cur.name}${cur.id === 'react' && !prem ? ' · только для Премиума' : ''}</h5><div class=${cx('st-grid', cur.id === 'react' && !prem && 'locked')}>${cur.items.map(s => html`<${Sticker} st=${s} size=${84} onClick=${() => cur.id === 'react' && !prem ? toast('Эксклюзивный набор. Премиум стоит 500 🍃 — их можно натапать в «Листопаде».') : onSticker({ ...s, pack: cur.id })} />`)}</div>`}</div>`}
@@ -67,14 +69,16 @@ function ScheduledModal({ id, chat }) {
   return html`<${Modal} id=${id} title="Отложенные сообщения" icon="clock" cls="small">${!d ? html`<${Spinner} />` : !d.length ? html`<${Empty} icon="clock" title="Ничего не запланировано" text="Правый клик по кнопке отправки → «Отложить»." />` : d.map(x => html`<div class="row-item"><div class="ri-m"><b>${fmtFull(x.at)}</b><span>${x.p.enc ? '🔒 зашифровано' : msgPreview({ ...x.p, from: S.me.id }) || 'сообщение'}</span></div><button class="ib sm" title="Отменить" onClick=${async () => { await call('msg.unschedule', { id: x.id }); load(); }}><${Icon} n="trash-2" s=${17} /></button></div>`)}<//>`;
 }
 function SendFiles({ id, chat, thread, files, reply, asFile: af }) {
-  const [caption, setCaption] = useState(''), [asFile, setAsFile] = useState(!!af), [spoiler, setSpoiler] = useState(false), [list, setList] = useState(files);
+  const [caption, setCaption] = useState(''), [asFile, setAsFile] = useState(!!af), [spoiler, setSpoiler] = useState(false), [once, setOnce] = useState(false), [list, setList] = useState(files);
+  const canOnce = chat.type === 'dm' && !thread && !asFile && list.length > 0 && list.every(f => /^(image|video)\//.test(f.type) && f.type !== 'image/gif');
   const urls = useMemo(() => list.map(f => (f.type.startsWith('image/') ? URL.createObjectURL(f) : null)), [list]);
-  const go = () => { closeModal(id); sendFiles(chat.id, list, { asFile, caption: caption.trim(), spoiler, reply, thread }); };
+  const go = () => { closeModal(id); sendFiles(chat.id, list, { asFile, caption: caption.trim(), spoiler, reply, thread, once: canOnce && once }); };
   return html`<${Modal} id=${id} title=${`Отправить ${list.length} ${plural(list.length, ['файл', 'файла', 'файлов'])}`} icon="paperclip" footer=${html`<button class="btn" disabled=${!list.length} onClick=${go}><${Icon} n="send" s=${16} /> Отправить</button>`}>
     <div class="files-prev">${list.map((f, i) => html`<div class="fp">${urls[i] ? html`<img src=${urls[i]} alt="" />` : html`<span class="fp-i"><${Icon} n=${f.type.startsWith('video/') ? 'film' : f.type.startsWith('audio/') ? 'music' : 'file'} s=${26} /></span>`}<small title=${f.name}>${f.name}</small><small class="dim">${fmtSize(f.size)}</small><button title="Убрать" onClick=${() => setList(list.filter((_, k) => k !== i))}>×</button></div>`)}</div>
     <label class="fld"><span>Подпись</span><textarea rows="2" maxlength="1024" value=${caption} autofocus onInput=${e => setCaption(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } }}></textarea></label>
     <${Toggle} label="Отправить как файлы" hint="Без сжатия и предпросмотра" on=${asFile} onChange=${setAsFile} />
     <${Toggle} label="Прикрыть листком" hint="Фото и видео откроются по нажатию" on=${spoiler} onChange=${setSpoiler} />
+    ${canOnce && html`<${Toggle} label="Одноразовое" hint="Откроется один раз, потом сотрётся с сервера. Без подписи и пересылки" on=${once} onChange=${setOnce} />`}
     ${chat.type === 'secret' && html`<p class="hint">🔒 Файлы будут зашифрованы в браузере до загрузки.</p>`}<//>`;
 }
 

@@ -6,6 +6,13 @@ const { db, save, now, id, token, fail, need, str, USERNAME_RE } = C;
 
 // ───── пароли
 function hashPass(p) { const salt = crypto.randomBytes(16); return salt.toString('hex') + ':' + crypto.scryptSync(p, salt, 32).toString('hex'); }
+const scryptA = (p, salt) => new Promise((res, rej) => crypto.scrypt(p, salt, 32, (e, k) => (e ? rej(e) : res(k))));
+async function hashPassAsync(p) { const salt = crypto.randomBytes(16); return salt.toString('hex') + ':' + (await scryptA(p, salt)).toString('hex'); }
+async function checkPassAsync(p, h) {
+  if (!h || typeof p !== 'string') return false;
+  const [s, k] = h.split(':'); const a = await scryptA(p, Buffer.from(s, 'hex')), b = Buffer.from(k, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 function checkPass(p, h) {
   if (!h || typeof p !== 'string') return false;
   const [s, k] = h.split(':'); const a = crypto.scryptSync(p, Buffer.from(s, 'hex'), 32), b = Buffer.from(k, 'hex');
@@ -40,13 +47,34 @@ setInterval(() => { const t = now(); for (const [k, a] of buckets) if (!a.length
 
 // ───── пользователи и сессии
 const AVA_COLORS = 8;
+// Приглашения: новичок пришёл по ссылке друга — обоим листики, сразу в контактах друг у друга и готовый чат.
+const REF_BONUS = 50, REF_DAILY = 20;
+function invitedBy(u, ref) {
+  const inv = db.users[C.byName.get(String(ref).replace(/^@/, '').toLowerCase())];
+  if (!inv || inv.bot || inv.deleted || inv.banned || inv.id === u.id) return;
+  u.ref = inv.id; inv.invited = (inv.invited || 0) + 1;
+  const d = C.today(); if (inv.refDay !== d) { inv.refDay = d; inv.refToday = 0; }
+  const paid = ++inv.refToday <= REF_DAILY;      // потолок на день, чтобы листики не печатали регистрацией пустышек
+  if (paid) inv.stars = (inv.stars || 0) + REF_BONUS;
+  u.stars = (u.stars || 0) + REF_BONUS;
+  for (const [a, b] of [[u, inv], [inv, u]]) { a.contacts = a.contacts || []; if (!a.contacts.includes(b.id)) a.contacts.push(b.id); }
+  setTimeout(() => {
+    if (!db.users[u.id] || !db.users[inv.id]) return;
+    const ch = C.openDm(inv.id, u.id);
+    C.service(ch, u.id, 'пришёл(ла) по приглашению. ' + (paid ? `Обоим по ${REF_BONUS} 🍃` : `Новичку ${REF_BONUS} 🍃`));
+    C.emit(inv.id, 'me', C.selfUser(inv)); C.emit(u.id, 'me', C.selfUser(u));
+  }, 2500);
+}
+let humans = false;
+function hasHuman() { if (humans) return true; for (const k in db.users) if (!db.users[k].bot) { humans = true; break; } return humans; }
 function createUser(f) {
   const u = { id: id(), name: f.name || 'Нудист', last: f.last || '', username: f.username, phone: f.phone, color: Math.floor(Math.random() * AVA_COLORS), created: now(), seen: now(), stars: 100, chats: [], servers: [], contacts: [], blocked: [], privacy: {}, ...f.extra };
-  if (f.password) u.pass = hashPass(f.password);
-  if (!f.bot && !Object.values(db.users).some(x => !x.bot)) { u.admin = 'superadmin'; u.badges = ['staff']; }
+  if (f.hash) u.pass = f.hash; else if (f.password) u.pass = hashPass(f.password);
+  if (!f.bot && !hasHuman()) { u.admin = 'superadmin'; u.badges = ['staff']; }
+  if (!f.bot) humans = true;
   db.users[u.id] = u;
   if (u.username) C.byName.set(u.username.toLowerCase(), u.id);
-  if (!f.bot) { C.day().regs++; hooks.onRegister.forEach(h => h(u)); }
+  if (!f.bot) { C.day().regs++; hooks.onRegister.forEach(h => h(u)); if (f.ref) invitedBy(u, f.ref); }
   save();
   return u;
 }
@@ -61,7 +89,8 @@ function createSession(u, meta) {
   const t = token(32);
   const s = { id: id(), user: u.id, ua: deviceName(meta.ua), ip: meta.ip, at: now(), seen: now() };
   db.sessions[t] = s;
-  const others = Object.values(db.sessions).filter(x => x.user === u.id).length - 1;
+  let others = 0;
+  if (now() - u.created > 15000) for (const k in db.sessions) if (k !== t && db.sessions[k].user === u.id) { others = 1; break; }      // у только что созданного аккаунта других сеансов нет
   if (others > 0) hooks.onLogin.forEach(h => h(u, s));
   save();
   return { token: t };
@@ -104,22 +133,24 @@ function second(u, b) { // вторая ступень: пароль (для в�
   return null;
 }
 const api = {
-  register(b, meta) {
+  async register(b, meta) {
     need(db.flags.registration, 'Регистрация временно закрыта. Пляж переполнен.');
     limit('reg:' + meta.ip, 120, 3600e3);
     const username = str(b.username, 32), password = typeof b.password === 'string' ? b.password : '';
     need(USERNAME_RE.test(username), 'Username: латиница, цифры и _, от 3 до 32 символов, начинается с буквы');
     need(!C.usernameTaken(username), 'Этот username уже занят. Кто-то разделся раньше вас.');
     need(password.length >= 6 && password.length <= 200, 'Пароль — минимум 6 символов');
-    const u = createUser({ username, password, name: str(b.name, 64) || username });
+    const hash = await hashPassAsync(password);
+    need(!C.usernameTaken(username), 'Этот username уже занят. Кто-то разделся раньше вас.');      // пока считался хеш, имя могли занять
+    const u = createUser({ username, hash, name: str(b.name, 64) || username, ref: str(b.ref, 32) });
     return createSession(u, meta);
   },
-  login(b, meta) {
+  async login(b, meta) {
     // Лимиты на подбор пароля: строгий на пару «адрес + аккаунт», мягкие на адрес (за одним адресом оператора сидят сотни людей) и на аккаунт.
     const lname = str(b.username, 32).replace(/^@/, '').toLowerCase();
     limit('login:' + meta.ip + ':' + lname, 10, 600e3); limit('loginu:' + lname, 40, 600e3); limit('login:' + meta.ip, 300, 600e3);
     const u = db.users[C.byName.get(lname)];
-    if (!u || u.bot || !checkPass(b.password, u.pass)) fail('Неверный username или пароль');
+    if (!u || u.bot || !(await checkPassAsync(b.password, u.pass))) fail('Неверный username или пароль');
     return second(u, b) || createSession(u, meta);
   },
   'phone/start'(b, meta) {
@@ -178,4 +209,4 @@ function approveQr(user, qid) {
 }
 setInterval(() => { const t = now(); for (const [k, q] of qr) if (q.exp < t - 60e3) qr.delete(k); for (const [k, p] of phoneCodes) if (p.exp < t) phoneCodes.delete(k); }, 60e3).unref();
 
-module.exports = { api, hashPass, checkPass, totp, totpOk, b32enc, newRecovery, useRecovery, createUser, createSession, killSession, deleteUser, approveQr, limit, hooks, normPhone, findByPhone, phoneCodes };
+module.exports = { REF_BONUS, api, hashPass, checkPass, totp, totpOk, b32enc, newRecovery, useRecovery, createUser, createSession, killSession, deleteUser, approveQr, limit, hooks, normPhone, findByPhone, phoneCodes };

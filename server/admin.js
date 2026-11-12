@@ -132,8 +132,8 @@ H['admin.report.resolve'] = (c, p) => {
 };
 H['admin.chats'] = (c, p) => {
   guard(c, 'viewer'); const q = str(p.q, 64).toLowerCase();
-  const chats = Object.values(db.chats).filter(ch => (ch.type === 'group' || ch.type === 'channel') && (!q || (ch.title || '').toLowerCase().includes(q) || (ch.username || '').toLowerCase().includes(q))).map(ch => ({ kind: ch.type, id: ch.id, title: ch.title, username: ch.username, pub: !!ch.pub, members: Object.keys(ch.members).length, msgs: (db.msgs[ch.id] || []).length, verified: !!ch.verified, created: ch.created }));
-  const servers = Object.values(db.servers).filter(s => !q || s.name.toLowerCase().includes(q)).map(s => ({ kind: 'server', id: s.id, title: s.name, pub: !!s.pub, members: Object.keys(s.members).length, msgs: s.channels.reduce((a, x) => a + (db.msgs[x] || []).length, 0), verified: !!s.verified, created: s.created, boosts: s.boosts || 0 }));
+  const chats = Object.values(db.chats).filter(ch => (ch.type === 'group' || ch.type === 'channel') && (!q || (ch.title || '').toLowerCase().includes(q) || (ch.username || '').toLowerCase().includes(q))).map(ch => ({ kind: ch.type, id: ch.id, title: ch.title, username: ch.username, pub: !!ch.pub, members: C.size(ch.members), msgs: (db.msgs[ch.id] || []).length, verified: !!ch.verified, created: ch.created }));
+  const servers = Object.values(db.servers).filter(s => !q || s.name.toLowerCase().includes(q)).map(s => ({ kind: 'server', id: s.id, title: s.name, pub: !!s.pub, members: C.size(s.members), msgs: s.channels.reduce((a, x) => a + (db.msgs[x] || []).length, 0), verified: !!s.verified, created: s.created, boosts: s.boosts || 0 }));
   return [...servers, ...chats].sort((a, b) => b.members - a.members).slice(0, 200);
 };
 H['admin.chat.set'] = (c, p) => {

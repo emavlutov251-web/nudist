@@ -34,16 +34,45 @@ function serveStatic(req, res, rel) {
   fs.stat(file, (err, stt) => {
     if (err || !stt.isFile()) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('404 — тут ничего нет. Совсем голо.'); }
     const ext = path.extname(file).slice(1).toLowerCase(), etag = `"${stt.size}-${Math.round(stt.mtimeMs)}"`;
-    const h = { 'content-type': MIME[ext] || 'application/octet-stream', etag, 'cache-control': ext === 'woff2' ? 'public, max-age=31536000, immutable' : 'no-cache', 'x-content-type-options': 'nosniff' };
+    const h = { 'content-type': MIME[ext] || 'application/octet-stream', etag, 'cache-control': ext === 'woff2' ? 'public, max-age=31536000, immutable' : /^(png|jpg|ico)$/.test(ext) ? 'public, max-age=86400' : 'no-cache', 'x-content-type-options': 'nosniff' };
     if (ext === 'html') { h['content-security-policy'] = CSP; h['referrer-policy'] = 'no-referrer'; }
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, h); return res.end(); }
-    if (/^(html|js|css|json|svg|webmanifest)$/.test(ext) && /gzip/.test(req.headers['accept-encoding'] || '')) {
-      const k = file + etag; let gz = gzCache.get(k);
-      if (!gz) { gz = zlib.gzipSync(fs.readFileSync(file)); gzCache.set(k, gz); }
-      h['content-encoding'] = 'gzip'; h['content-length'] = gz.length; res.writeHead(200, h); return res.end(gz);
+    const ae = req.headers['accept-encoding'] || '';
+    if (/^(html|js|css|json|svg|webmanifest)$/.test(ext) && /\b(br|gzip)\b/.test(ae)) {      // текст отдаём сжатым: brotli на треть меньше gzip
+      const enc = /\bbr\b/.test(ae) ? 'br' : 'gzip', k = enc + file + etag; let z = gzCache.get(k);
+      if (!z) {
+        const raw = fs.readFileSync(file);
+        z = enc === 'br' ? zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length } }) : zlib.gzipSync(raw, { level: 9 });
+        gzCache.set(k, z);
+      }
+      h['content-encoding'] = enc; h.vary = 'accept-encoding'; h['content-length'] = z.length; res.writeHead(200, h); return res.end(z);
     }
     h['content-length'] = stt.size; res.writeHead(200, h); fs.createReadStream(file).pipe(res);
   });
+}
+// ───── офлайн-кеш оболочки (service worker)
+// Браузер один раз скачивает все файлы интерфейса и дальше открывает приложение с диска, без единого запроса за кодом.
+// Версия — хеш содержимого: после выкладки новой версии браузер сам докачает её в фоне и предложит обновиться.
+const SW_SKIP = /^\/(admin\.html|css\/admin\.css|js\/admin\.js|nudist\.apk|og\.png|sw\.js)$/;
+let swBody = null;
+function buildSw() {
+  const files = [], hash = crypto.createHash('sha1');
+  const walk = dir => { for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) { const f = path.join(dir, e.name); if (e.isDirectory()) walk(f); else { const rel = '/' + path.relative(PUBLIC, f).split(path.sep).join('/'); if (!SW_SKIP.test(rel)) { files.push(rel); hash.update(rel).update(fs.readFileSync(f)); } } } };
+  walk(PUBLIC);
+  const v = hash.digest('hex').slice(0, 12);
+  if (process.env.NO_SW) return `self.addEventListener('install',function(){self.skipWaiting()});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}).then(function(){return self.registration.unregister()}))});`;
+  return `// Нудист: кеш оболочки, версия ${v}
+var V='nudist-${v}',FILES=${JSON.stringify(files)},SET={};FILES.forEach(function(f){SET[f]=1});
+self.addEventListener('install',function(e){e.waitUntil(caches.open(V).then(function(c){return Promise.all(FILES.map(function(f){return fetch(f,{cache:'no-cache',credentials:'same-origin'}).then(function(r){if(!r.ok)throw new Error(f+' '+r.status);return c.put(f,r)})}))}))});
+self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k.indexOf('nudist-')===0&&k!==V}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});
+self.addEventListener('message',function(e){if(e.data==='skip')self.skipWaiting()});
+self.addEventListener('fetch',function(e){var q=e.request;if(q.method!=='GET')return;var u=new URL(q.url);if(u.origin!==location.origin)return;var p=u.pathname==='/'?'/index.html':u.pathname;if(!SET[p])return;
+e.respondWith(caches.open(V).then(function(c){return c.match(p)}).then(function(r){return r||fetch(q)}))});
+`;
+}
+function serveSw(req, res) {
+  if (!swBody) swBody = buildSw();
+  res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache, max-age=0', 'service-worker-allowed': '/', 'x-content-type-options': 'nosniff' }); res.end(swBody);
 }
 // ───── загрузки
 function serveUpload(req, res, name) {
@@ -110,13 +139,14 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/api/')) {
       const fn = A.api[p.slice(5)]; if (!fn || req.method !== 'POST') return json(res, 404, { error: 'not found' });
       const body = await readJson(req);
-      return json(res, 200, fn(body, { ip: ipOf(req), ua: req.headers['user-agent'] || '' }));
+      return json(res, 200, await fn(body, { ip: ipOf(req), ua: req.headers['user-agent'] || '' }));
     }
     const bm = /^\/bot([^/]+)\/(\w+)$/.exec(p);
     if (bm) { const q = { ...Object.fromEntries(url.searchParams), ...(req.method === 'POST' ? await readJson(req) : {}) }; const r = await B.botApi(decodeURIComponent(bm[1]), bm[2], q); return json(res, r.code, r.body); }
     const hm = /^\/hook\/([\w-]+)\/([\w-]+)$/.exec(p);
     if (hm && req.method === 'POST') { A.limit('hook:' + hm[1], 30, 10000); const m = G.runHook(hm[1], hm[2], await readJson(req)); return json(res, 200, { ok: true, id: m.id }); }
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'method not allowed' });
+    if (p === '/sw.js') return serveSw(req, res);
     if (p === '/' || p === '/index.html') return serveStatic(req, res, 'index.html');
     if (p === '/admin' || p === '/admin/') return serveStatic(req, res, 'admin.html');
     return serveStatic(req, res, p);
@@ -137,7 +167,7 @@ server.on('upgrade', (req, socket, head) => {
     onConnect(ws, t, s, u, ipOf(req));
   });
 });
-function presence(u, online) { for (const uid of C.conns.keys()) if (uid !== u.id && C.canSee(u, uid, 'lastSeen')) emit(uid, 'presence', { user: u.id, online, seen: u.seen }); }
+function presence(u, online) { for (const uid of C.audience(u)) if (C.canSee(u, uid, 'lastSeen')) emit(uid, 'presence', { user: u.id, online, seen: u.seen }); }
 function initData(c) {
   const u = db.users[c.uid], chats = C.userChats(u), users = {};
   const add = i => { if (i && !users[i] && db.users[i]) users[i] = C.pubUser(db.users[i], u.id); };

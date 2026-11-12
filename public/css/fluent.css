@@ -1,0 +1,146 @@
+/* Стиль «Fluent» — по мотивам Windows 10 версий 1709–1809.
+   Материал «акрил» (размытие 30px + оттенок + шум), подсветка Reveal под указателем,
+   вдавливание кнопок с наклоном, тонкие линейные иконки, прямые углы, акцентная полоска выбора.
+   Включается атрибутом data-style="fluent" на <html>; data-acrylic="0" отключает прозрачность. */
+
+[data-style='fluent'] {
+  --font: 'Segoe UI', 'Segoe UI Variable Text', 'Selawik', 'Golos Text', Roboto, system-ui, sans-serif;
+  --display: 'Segoe UI', 'Segoe UI Variable Display', 'Selawik', 'Golos Text', Roboto, system-ui, sans-serif;
+  --win: #0078D7; --accent: var(--win); --accent-ink: #fff;
+  --r-s: 0px; --r: 0px; --r-l: 0px;
+  --ease: cubic-bezier(.1, .9, .2, 1);
+  --bg: #F2F2F2; --panel: #F2F2F2; --card: #FFFFFF; --rail: #1F1F1F; --rail-ink: #F2F2F2;
+  --ink: #000000; --ink2: #5A5A5A; --ink3: #767676; --line: rgba(0, 0, 0, .14); --hover: rgba(0, 0, 0, .07); --press: rgba(0, 0, 0, .16);
+  --in: #FFFFFF; --out: #CCE4F7; --out-ink: #00213D; --code: #E9E9E9;
+  --shadow: 0 0 0 1px rgba(0, 0, 0, .1), 0 8px 24px rgba(0, 0, 0, .22);
+  --overlay: rgba(255, 255, 255, .58);
+  /* акрил */
+  --acr: rgba(242, 242, 242, .68); --acr-strong: rgba(246, 246, 246, .8); --acr-rail: rgba(31, 31, 31, .62); --acr-chat: rgba(243, 243, 243, .76);
+  --acr-f: blur(30px) saturate(125%); --acr-f2: blur(20px) saturate(125%);
+  --rv: rgba(0, 0, 0, .1); --rv-line: rgba(0, 0, 0, .34);
+  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --wall: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 1000' preserveAspectRatio='xMidYMid slice'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23C9E4FA'/%3E%3Cstop offset='.55' stop-color='%23E8F1FB'/%3E%3Cstop offset='1' stop-color='%23F4E1F3'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='1600' height='1000' fill='url(%23g)'/%3E%3Cpolygon points='1000,-50 1400,-50 700,1050 300,1050' fill='%230078D7' fill-opacity='0.5'/%3E%3Cpolygon points='1420,-50 1650,-50 1650,260 1080,1050 760,1050' fill='%2300B7C3' fill-opacity='0.42'/%3E%3Cpolygon points='640,-50 800,-50 100,1050 -60,1050' fill='%238764B8' fill-opacity='0.4'/%3E%3Ccircle cx='210' cy='190' r='170' fill='%23FFB900' fill-opacity='0.45'/%3E%3Ccircle cx='1380' cy='860' r='230' fill='%23E3008C' fill-opacity='0.28'/%3E%3C/svg%3E");
+  color-scheme: light;
+}
+[data-style='fluent'][data-theme='dark'] {
+  --win: #0078D7; --accent: #4CA6EE; --accent-ink: #00101F;
+  --bg: #1B1B1B; --panel: #1F1F1F; --card: #2B2B2B; --rail: #000000; --rail-ink: #FFFFFF;
+  --ink: #FFFFFF; --ink2: #C2C2C2; --ink3: #8E8E8E; --line: rgba(255, 255, 255, .14); --hover: rgba(255, 255, 255, .08); --press: rgba(255, 255, 255, .17);
+  --in: #2D2D2D; --out: #0B4A7C; --out-ink: #FFFFFF; --code: #141414; --leaf: #2FB56B;
+  --shadow: 0 0 0 1px rgba(255, 255, 255, .1), 0 10px 30px rgba(0, 0, 0, .6);
+  --overlay: rgba(0, 0, 0, .56);
+  --acr: rgba(31, 31, 31, .64); --acr-strong: rgba(36, 36, 36, .78); --acr-rail: rgba(0, 0, 0, .55); --acr-chat: rgba(20, 20, 20, .7);
+  --rv: rgba(255, 255, 255, .13); --rv-line: rgba(255, 255, 255, .42);
+  --wall: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 1000' preserveAspectRatio='xMidYMid slice'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2300101F'/%3E%3Cstop offset='.6' stop-color='%2300264A'/%3E%3Cstop offset='1' stop-color='%231A0B30'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='1600' height='1000' fill='url(%23g)'/%3E%3Cpolygon points='1000,-50 1400,-50 700,1050 300,1050' fill='%231E90FF' fill-opacity='0.6'/%3E%3Cpolygon points='1420,-50 1650,-50 1650,260 1080,1050 760,1050' fill='%2300B7C3' fill-opacity='0.5'/%3E%3Cpolygon points='640,-50 800,-50 100,1050 -60,1050' fill='%238764B8' fill-opacity='0.55'/%3E%3Ccircle cx='210' cy='190' r='170' fill='%23FFB900' fill-opacity='0.3'/%3E%3Ccircle cx='1380' cy='860' r='230' fill='%23E3008C' fill-opacity='0.34'/%3E%3C/svg%3E");
+  color-scheme: dark;
+}
+[data-style='fluent'][data-theme='tan'] {
+  --accent: #CA5010; --bg: #F3E9DF; --panel: #F3E9DF; --card: #FFFAF5; --rail: #2B1A12; --ink: #2B160C; --ink2: #6B4A3A; --ink3: #94735F;
+  --out: #F7D3BC; --out-ink: #3A1D10; --acr: rgba(243, 233, 223, .68); --acr-strong: rgba(246, 238, 230, .8); --acr-rail: rgba(43, 26, 18, .62); --acr-chat: rgba(244, 235, 226, .72);
+}
+[data-style='fluent'][data-contrast='1'] { --line: var(--ink3); --ink2: var(--ink); }
+/* без прозрачности: слабый телефон, экономия заряда или просто так спокойнее */
+[data-style='fluent'][data-acrylic='0'] { --acr: var(--panel); --acr-strong: var(--panel); --acr-rail: var(--rail); --acr-chat: var(--bg); --acr-f: none; --acr-f2: none; --noise: none; --wall: none; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-style='fluent'] { --acr: var(--panel); --acr-strong: var(--panel); --acr-rail: var(--rail); --noise: none; }
+}
+
+/* ───── полотно и акриловые поверхности */
+[data-style='fluent'] body { background: var(--bg) var(--wall) center / cover no-repeat fixed; }
+[data-style='fluent'] .shell, [data-style='fluent'] .main { background: none; }
+[data-style='fluent'] .msgs-wrap, [data-style='fluent'] .welcome { background-color: var(--acr-chat); }
+[data-style='fluent'] .rail { background: var(--noise), var(--acr-rail); -webkit-backdrop-filter: var(--acr-f); backdrop-filter: var(--acr-f); }
+[data-style='fluent'] .side, [data-style='fluent'] .panel { background: var(--noise), var(--acr); -webkit-backdrop-filter: var(--acr-f); backdrop-filter: var(--acr-f); border-color: var(--line); }
+[data-style='fluent'] .chat-h, [data-style='fluent'] .srv-h, [data-style='fluent'] .pinbar, [data-style='fluent'] .selbar {
+  background: var(--noise), var(--acr-strong); -webkit-backdrop-filter: var(--acr-f2); backdrop-filter: var(--acr-f2); }
+/* У поля ввода акрил лежит на псевдоэлементе: иначе всплывающие над ним панели (эмодзи, подсказки) не смогли бы размывать переписку. */
+[data-style='fluent'] .composer { background: none; isolation: isolate; }
+[data-style='fluent'] .composer::before { content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: -1; background: var(--noise), var(--acr-strong); -webkit-backdrop-filter: var(--acr-f2); backdrop-filter: var(--acr-f2); }
+[data-style='fluent'] .mebar { background: rgba(127, 127, 127, .1); }
+[data-style='fluent'] .modal, [data-style='fluent'] .menu, [data-style='fluent'] .picker-pop, [data-style='fluent'] .sug, [data-style='fluent'] .auth-form .card, [data-style='fluent'] .tip {
+  background: var(--noise), var(--acr-strong); -webkit-backdrop-filter: var(--acr-f); backdrop-filter: var(--acr-f); border-radius: 0; }
+[data-style='fluent'] .modal { border: 1px solid var(--accent); box-shadow: 0 16px 44px rgba(0, 0, 0, .34); animation: fl-dialog .22s var(--ease); }
+[data-style='fluent'] .menu { border: 1px solid var(--line); box-shadow: 0 8px 22px rgba(0, 0, 0, .26); padding: 4px 0; animation: fl-flyout .18s var(--ease); }
+[data-style='fluent'] .overlay { background: var(--overlay); }
+[data-style='fluent'] .toast { border-radius: 0; background: var(--noise), rgba(31, 31, 31, .86); color: #fff; -webkit-backdrop-filter: var(--acr-f2); backdrop-filter: var(--acr-f2); border: 1px solid rgba(255, 255, 255, .16); }
+[data-style='fluent'] .auth { background: none; } [data-style='fluent'] .auth-brand { background: var(--noise), var(--acr-rail); -webkit-backdrop-filter: var(--acr-f); backdrop-filter: var(--acr-f); }
+[data-style='fluent'] .auth-brand::after { display: none; }
+@keyframes fl-dialog { from { opacity: 0; transform: scale(1.06); } }
+@keyframes fl-flyout { from { opacity: 0; transform: translateY(-10px); } }
+@keyframes fl-enter { from { opacity: 0; transform: translateY(26px); } }
+[data-style='fluent'] .side-b > *, [data-style='fluent'] .panel-b > *, [data-style='fluent'] .set-body > * { animation: fl-enter .3s var(--ease) backwards; }
+[data-style='fluent'] .msgs { animation: fl-enter .28s var(--ease) backwards; }
+
+/* ───── типографика и иконки из тонких линий */
+[data-style='fluent'] body { -webkit-font-smoothing: auto; }
+[data-style='fluent'] h2, [data-style='fluent'] h3 { font-weight: 600; letter-spacing: 0; }
+[data-style='fluent'] .modal-h h2 { font-size: 1.22em; font-weight: 400; }
+[data-style='fluent'] .ava { font-family: var(--font); font-weight: 400; letter-spacing: 0; }
+[data-style='fluent'] h4, [data-style='fluent'] h5 { letter-spacing: .02em; text-transform: none; font-size: .86em; font-weight: 600; color: var(--ink2); }
+[data-style='fluent'] svg.ic { stroke-width: 1.3; }
+[data-style='fluent'] .ticks svg.ic, [data-style='fluent'] .badge svg.ic { stroke-width: 1.7; }
+[data-style='fluent'] :focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; border-radius: 0; }
+
+/* ───── элементы управления: прямые углы, рамка 2px, вдавливание */
+[data-style='fluent'] .btn { border-radius: 0; min-height: 34px; padding: 0 18px; font-weight: 400; border: 2px solid transparent; transition: transform .25s var(--ease), background .1s, border-color .1s; }
+[data-style='fluent'] .btn:hover:not(:disabled) { filter: none; border-color: rgba(127, 127, 127, .55); } [data-style='fluent'] .btn:not(.ghost):not(.danger):hover:not(:disabled) { border-color: rgba(255, 255, 255, .5); }
+[data-style='fluent'] .btn.ghost { background: rgba(127, 127, 127, .2); } [data-style='fluent'] .btn.ghost:hover:not(:disabled) { background: rgba(127, 127, 127, .2); }
+[data-style='fluent'] .btn.sm { border-radius: 0; min-height: 28px; } [data-style='fluent'] .btn.big { min-height: 42px; }
+[data-style='fluent'] .ib, [data-style='fluent'] .ib.sm, [data-style='fluent'] .send, [data-style='fluent'] .mi, [data-style='fluent'] .chip, [data-style='fluent'] .seg, [data-style='fluent'] .seg button,
+[data-style='fluent'] .set-nav button, [data-style='fluent'] .ci, [data-style='fluent'] .search, [data-style='fluent'] kbd, [data-style='fluent'] .tagx, [data-style='fluent'] .hint code { border-radius: 0; }
+[data-style='fluent'] .btn:active:not(:disabled), [data-style='fluent'] .ib:active:not(:disabled), [data-style='fluent'] .send:active, [data-style='fluent'] .chip:active, [data-style='fluent'] .mi:active:not(:disabled),
+[data-style='fluent'] .ci:active, [data-style='fluent'] .rail-b:active, [data-style='fluent'] .set-nav button:active, [data-style='fluent'] .folders button:active, [data-style='fluent'] .tabs button:active { transform: scale(.96); }
+[data-style='fluent'] .ib, [data-style='fluent'] .send, [data-style='fluent'] .chip, [data-style='fluent'] .mi, [data-style='fluent'] .ci, [data-style='fluent'] .rail-b, [data-style='fluent'] .set-nav button,
+[data-style='fluent'] .folders button, [data-style='fluent'] .tabs button { transition: transform .28s var(--ease), background .1s, color .1s; }
+/* наклон в сторону нажатия: переменные ставит js/fluent.js */
+[data-style='fluent'] .fx-press { transform: perspective(520px) rotateX(var(--px, 0deg)) rotateY(var(--py, 0deg)) scale(var(--ps, .96)) !important; transition: transform .06s linear !important; }
+/* Reveal: пятно света под указателем и проявляющаяся рамка */
+[data-style='fluent'] .fx-rv { background-image: radial-gradient(circle 96px at var(--rx, 50%) var(--ry, 50%), var(--rv), transparent 100%); box-shadow: inset 0 0 0 1px var(--rv-line); }
+[data-style='fluent'] .btn.fx-rv:not(.ghost):not(.danger) { background-image: radial-gradient(circle 96px at var(--rx, 50%) var(--ry, 50%), rgba(255, 255, 255, .28), transparent 100%); box-shadow: none; }
+[data-style='fluent'] .ib:hover:not(:disabled), [data-style='fluent'] .mi:hover:not(:disabled), [data-style='fluent'] .ci:hover, [data-style='fluent'] .set-nav button:hover { background-color: var(--hover); }
+[data-style='fluent'] .ib.act, [data-style='fluent'] .ib.on { background: none; color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+
+[data-style='fluent'] input[type='text'], [data-style='fluent'] input[type='password'], [data-style='fluent'] input[type='tel'], [data-style='fluent'] input[type='email'], [data-style='fluent'] input[type='date'],
+[data-style='fluent'] input[type='time'], [data-style='fluent'] input[type='datetime-local'], [data-style='fluent'] input[type='number'], [data-style='fluent'] input:not([type]), [data-style='fluent'] select, [data-style='fluent'] textarea {
+  border-radius: 0; border: 2px solid rgba(127, 127, 127, .6); min-height: 34px; padding: 5px 10px; background: var(--card); }
+[data-style='fluent'] input:hover, [data-style='fluent'] select:hover, [data-style='fluent'] textarea:hover { border-color: var(--ink2); }
+[data-style='fluent'] input:focus, [data-style='fluent'] select:focus, [data-style='fluent'] textarea:focus { border-color: var(--accent); box-shadow: none; }
+[data-style='fluent'] input[type='color'] { border-radius: 0; }
+/* переключатель Windows 10: рамка и точка, включённый залит акцентом */
+[data-style='fluent'] .toggle i { width: 44px; height: 20px; border-radius: 10px; background: none; border: 2px solid var(--ink2); transition: background .15s, border-color .15s; }
+[data-style='fluent'] .toggle i::after { top: 3px; left: 3px; width: 10px; height: 10px; background: var(--ink2); box-shadow: none; transition: transform .2s var(--ease), background .15s; }
+[data-style='fluent'] .toggle input:checked + i { background: var(--accent); border-color: var(--accent); }
+[data-style='fluent'] .toggle input:checked + i::after { transform: translateX(24px); background: var(--accent-ink); }
+[data-style='fluent'] .seg { padding: 0; background: rgba(127, 127, 127, .2); }
+[data-style='fluent'] .chip { background: rgba(127, 127, 127, .18); }
+[data-style='fluent'] .search { background: var(--card); border: 2px solid rgba(127, 127, 127, .45); height: 34px; } [data-style='fluent'] .search:focus-within { border-color: var(--accent); }
+[data-style='fluent'] .search input { border: 0 !important; }
+
+/* ───── навигация: акцентная полоска выбора (1809) */
+[data-style='fluent'] .ci.on, [data-style='fluent'] .set-nav button.on { background: var(--hover); box-shadow: inset 3px 0 0 var(--accent); }
+[data-style='fluent'] .ci.pinned:not(.on) { background: none; }
+[data-style='fluent'] .side-b { padding: 4px 0 10px; } [data-style='fluent'] .side .ci { padding: 9px 12px; }
+[data-style='fluent'] .folders button, [data-style='fluent'] .tabs button { font-weight: 400; border-bottom-width: 2px; color: var(--ink2); }
+[data-style='fluent'] .folders button.on, [data-style='fluent'] .tabs button.on { color: var(--ink); font-weight: 600; border-color: var(--accent); }
+[data-style='fluent'] .folders button b, [data-style='fluent'] .tabs button b { border-radius: 0; }
+[data-style='fluent'] .mi { padding: 8px 14px; } [data-style='fluent'] .menu hr { margin: 4px 0; }
+[data-style='fluent'] .rail-b, [data-style='fluent'] .rail-b:hover, [data-style='fluent'] .rail-b.on, [data-style='fluent'] .rail-b .ava { border-radius: 0; }
+[data-style='fluent'] .rail-b.home.on { background: rgba(255, 255, 255, .16); } [data-style='fluent'] .rail-b.add:hover { background: rgba(255, 255, 255, .18); }
+[data-style='fluent'] .rail-b .pill { left: -11px; width: 3px; border-radius: 0; background: var(--accent); }
+
+/* ───── сообщения */
+[data-style='fluent'] .bubble, [data-style='fluent'] .msg.out .bubble, [data-style='fluent'] .msg.grp .bubble { border-radius: 2px; box-shadow: 0 1px 2px rgba(0, 0, 0, .14); }
+[data-style='fluent'] .day span, [data-style='fluent'] .svc span { border-radius: 0; background: var(--acr-strong); -webkit-backdrop-filter: var(--acr-f2); backdrop-filter: var(--acr-f2); }
+[data-style='fluent'] .unread-div span { border-radius: 0; }
+[data-style='fluent'] .c-row { border-radius: 0; border: 2px solid rgba(127, 127, 127, .5); padding: 2px; } [data-style='fluent'] .c-row:focus-within { border-color: var(--accent); }
+[data-style='fluent'] .c-row textarea, [data-style='fluent'] .c-row textarea:hover, [data-style='fluent'] .c-row textarea:focus { border: 0; background: none; min-height: 38px; padding: 9px 6px; }
+[data-style='fluent'] .badge, [data-style='fluent'] .rb { border-radius: 0; }
+[data-style='fluent'] [class*='card'], [data-style='fluent'] .poll-o, [data-style='fluent'] .lp, [data-style='fluent'] .rq, [data-style='fluent'] .form.boxed, [data-style='fluent'] .th, [data-style='fluent'] .wall, [data-style='fluent'] .wall i { border-radius: 0; }
+[data-style='fluent'] .splash { color: var(--ink); }
+
+@media (max-width: 800px) {
+  [data-style='fluent'] .modal, [data-style='fluent'] .modal.wide, [data-style='fluent'] .modal.small { border-radius: 0; border-width: 1px 0 0; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  [data-style='fluent'] { --acr: var(--panel); --acr-strong: var(--panel); --acr-rail: var(--rail); --acr-chat: var(--bg); --acr-f: none; --acr-f2: none; --noise: none; }
+}

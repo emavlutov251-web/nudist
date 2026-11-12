@@ -159,7 +159,15 @@
       : 'Приложение не загрузилось целиком. Обычно помогает повторить. Если нет — обновите «Android System WebView» и Chrome.';
     var b = document.createElement('button'); b.type = 'button'; b.textContent = 'Повторить';
     b.style.cssText = 'font:inherit;font-weight:600;padding:10px 22px;border:0;border-radius:12px;background:#1F7A4D;color:#fff';
-    b.onclick = function () { location.reload(); };
+    b.onclick = function () {      // заодно сбрасываем офлайн-кеш: если сломалась именно сохранённая копия, обычная перезагрузка не поможет
+      var go = function () { location.reload(); }, t = setTimeout(go, 2500);
+      try {
+        var jobs = [];
+        if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) jobs.push(navigator.serviceWorker.getRegistrations().then(function (l) { return Promise.all(l.map(function (r) { return r.unregister(); })); }));
+        if (window.caches && caches.keys) jobs.push(caches.keys().then(function (k) { return Promise.all(k.map(function (x) { return caches.delete(x); })); }));
+        Promise.all(jobs).then(function () { clearTimeout(t); go(); }, function () { clearTimeout(t); go(); });
+      } catch (e) { clearTimeout(t); go(); }
+    };
     var s = document.createElement('p'); s.style.cssText = 'margin:14px 0 0;font-size:11px;opacity:.6;word-break:break-word';
     s.textContent = (B.chrome ? 'Движок: Chrome ' + B.chrome + '. ' : '') + (B.errors[0] || '');
     d.appendChild(h); d.appendChild(t); d.appendChild(b); d.appendChild(s); box.appendChild(d);

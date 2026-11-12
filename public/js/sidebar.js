@@ -6,6 +6,7 @@ import { CreateServer, Discover, openServerSettings, ChannelDlg, EventsModal, In
 import { RTC, joinVoice, leaveVoice, toggleMute, toggleDeaf } from './rtc.js';
 import { StoryEditor } from './media.js';
 import { openSettings } from './settings.js';
+import { Streak, openInvite, installApp, isStandalone } from './growth.js';
 
 // ═════ Рейка ═════
 export function Rail() {
@@ -72,7 +73,7 @@ function ChatItem({ chat }) {
   return html`<button class=${cx('ci', on && 'on', chat.pin && 'pinned')} data-chat=${chat.id} onClick=${() => openChat(chat.id)} onContextMenu=${e => showMenu(e, chatActions(chat, true))}>
     <${ChatAvatar} chat=${chat} s=${48} />
     <span class="ci-m">
-      <span class="ci-t">${i.secret && html`<${Icon} n="lock" s=${13} cls="lock" />`}<b>${i.title}</b>${i.verified && html`<${Badges} list=${['verified']} s=${14} />`}${i.user && html`<${Badges} list=${(i.user.badges || []).filter(b => b !== 'verified')} s=${13} />`}${isMuted(chat) && html`<${Icon} n="bell-off" s=${13} cls="muted-i" />`}
+      <span class="ci-t">${i.secret && html`<${Icon} n="lock" s=${13} cls="lock" />`}<b>${i.title}</b>${i.verified && html`<${Badges} list=${['verified']} s=${14} />`}${i.user && html`<${Badges} list=${(i.user.badges || []).filter(b => b !== 'verified')} s=${13} />`}${isMuted(chat) && html`<${Icon} n="bell-off" s=${13} cls="muted-i" />`}<${Streak} chat=${chat} />
         <time>${m ? fmtShort(m.ts) : ''}</time></span>
       <span class="ci-p">${typing ? html`<em class="typing">${typing}…</em>` : chat.draft && !on ? html`<span><i class="draft">Черновик:</i> ${chat.draft.slice(0, 80)}</span>` : html`<span>${m ? html`<${Ticks} chat=${chat} m=${m} />` : ''}${who && html`<i class="who">${who}</i>`}${m ? msgPreview(m, chat) : i.sub || (chat.type === 'secret' ? 'секретный чат' : 'Пока пусто')}</span>`}
         ${chat.mentions > 0 && html`<b class="cnt at">@</b>`}${chat.unread > 0 ? html`<b class=${cx('cnt', isMuted(chat) && 'mute')}>${fmtNum(chat.unread)}</b>` : chat.pin ? html`<${Icon} n="pin" s=${14} cls="pin-i" />` : ''}</span>
@@ -127,6 +128,9 @@ function HomeSidebar() {
   const list = sort((S.ui.archive ? archived : live).filter(c => S.ui.archive || inFolder(c, fid)));
   const count = f => live.filter(c => inFolder(c, f) && c.unread > 0 && !isMuted(c)).length;
   const menu = e => showMenu(e, [
+    { icon: 'user-plus', label: 'Позвать друзей', hint: '+50 🍃', run: openInvite },
+    !isStandalone() && { icon: 'smartphone', label: 'Установить как приложение', run: installApp },
+    '-',
     { icon: 'users', label: 'Новая группа', run: () => openModal(CreateChat, { type: 'group' }) },
     { icon: 'megaphone', label: 'Новый канал', run: () => openModal(CreateChat, { type: 'channel' }) },
     { icon: 'lock', label: 'Секретный чат', run: () => openModal(ContactsModal, { secret: true }) },

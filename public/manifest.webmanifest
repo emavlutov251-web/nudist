@@ -1,1 +1,8 @@
-{ "name": "Нудист", "short_name": "Нудист", "description": "Мессенджер, которому нечего скрывать", "start_url": "/", "display": "standalone", "background_color": "#14251C", "theme_color": "#14251C", "lang": "ru", "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }] }
+{ "name": "Нудист", "short_name": "Нудист", "description": "Мессенджер, которому нечего скрывать", "id": "/", "start_url": "/", "scope": "/", "display": "standalone", "orientation": "any", "background_color": "#0B1B2B", "theme_color": "#0B1B2B", "lang": "ru", "categories": ["social", "communication"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [{ "name": "Позвать друзей", "url": "/#invite", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }] }

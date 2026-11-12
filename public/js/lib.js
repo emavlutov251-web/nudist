@@ -5,7 +5,7 @@ export { html, render, Component, useState, useEffect, useRef, useMemo, useCallb
 
 // ───── состояние
 export const DEFAULT_SETTINGS = {
-  theme: 'system', accent: '', fontSize: 15, wallpaper: 'leaves', anim: true, contrast: false, flat: 'auto', enterSend: true, timeFmt: 24,
+  theme: 'system', style: 'fluent', acrylic: 'auto', accent: '', fontSize: 15, wallpaper: 'leaves', anim: true, contrast: false, flat: 'auto', enterSend: true, timeFmt: 24,
   sound: true, notif: true, preview: true, notifSound: 'ding', notifDm: true, notifGroup: true, notifChannel: false, notifServer: false, dnd: { on: false, from: '23:00', to: '08:00' },
   emojiAuto: true, stickerSize: 160, compress: 'high', autoDl: { photo: true, video: true, gif: true }, nakedTyping: false,
   noise: true, echo: true, ptt: false, scale: 1, transcribe: false, folders: [], recentEmoji: ['👍', '❤️', '😂', '🔥', '🍃', '😮', '😢', '🙏'], gifs: [], stickers: [], hiddenPacks: [], searchHistory: [], autoArchive: false, beta: false, bossTitle: 'Отчёт_Q3_финал_v7.xlsx',
@@ -72,7 +72,7 @@ export function svcText(m) {
 export function msgPreview(m, chat) {
   if (!m) return '';
   if (m.enc && !m.text) return '🔒 зашифрованное сообщение';
-  const t = { photo: '🖼 Фото', video: '🎬 Видео', file: '📎 ' + ((m.media || {}).name || 'Файл'), audio: '🎵 ' + ((m.media || {}).name || 'Аудио'), voice: '🎤 Голосовое', round: '⭕ Кружочек', gif: 'GIF', sticker: (m.sticker || {}).e + ' Стикер', loc: '📍 Геопозиция', contact: '👤 Контакт', poll: '📊 ' + ((m.poll || {}).q || 'Опрос'), call: (m.call || {}).missed ? '📵 Пропущенный звонок' : '📞 Звонок' }[m.type];
+  const t = { once: '🔥 Одноразовое ' + (m.kind === 'video' ? 'видео' : 'фото'), photo: '🖼 Фото', video: '🎬 Видео', file: '📎 ' + ((m.media || {}).name || 'Файл'), audio: '🎵 ' + ((m.media || {}).name || 'Аудио'), voice: '🎤 Голосовое', round: '⭕ Кружочек', gif: 'GIF', sticker: (m.sticker || {}).e + ' Стикер', loc: '📍 Геопозиция', contact: '👤 Контакт', poll: '📊 ' + ((m.poll || {}).q || 'Опрос'), call: (m.call || {}).missed ? '📵 Пропущенный звонок' : '📞 Звонок' }[m.type];
   if (m.type === 'service') return svcText(m);
   const txt = (m.text || '').replace(/\s+/g, ' ').replace(/[*_~`|]{2}|`/g, '').slice(0, 120);
   return (m.title ? m.title + ': ' : '') + (t ? t + (txt ? ', ' + txt : '') : txt);
@@ -193,6 +193,10 @@ export function applyTheme() {
   const s = S.settings, r = document.documentElement;
   const sys = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   r.dataset.theme = s.theme === 'system' ? sys : s.theme;
+  r.dataset.style = s.style === 'classic' ? 'classic' : 'fluent';
+  // «Авто»: на телефонах с малым объёмом памяти размытие выключаем, оно дорого обходится видеочипу
+  const weak = (navigator.deviceMemory && navigator.deviceMemory < 4) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4);
+  r.dataset.acrylic = s.acrylic === false || (s.acrylic !== true && weak) ? '0' : '1';
   r.dataset.wall = s.wallpaper; r.dataset.anim = s.anim ? '1' : '0'; r.dataset.contrast = s.contrast ? '1' : '0';
   r.style.setProperty('--fs', (s.fontSize || 15) + 'px');
   if (s.accent) r.style.setProperty('--accent', s.accent); else r.style.removeProperty('--accent');

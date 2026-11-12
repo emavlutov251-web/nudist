@@ -236,8 +236,8 @@ function resolveTarget(q) {
   if (C.byName.has(n)) return { user: db.users[C.byName.get(n)] };
   return {};
 }
-const chatPreview = ch => ({ id: ch.id, type: ch.type, title: ch.title, about: ch.about, avatar: ch.avatar, username: ch.username, count: Object.keys(ch.members).length, approval: ch.approval, price: ch.price, verified: ch.verified, color: ch.color });
-const serverPreview = s => ({ id: s.id, name: s.name, icon: s.icon, banner: s.banner, about: s.about, count: Object.keys(s.members).length, verified: s.verified, boosts: s.boosts || 0, online: Object.keys(s.members).filter(C.isOnline).length });
+const chatPreview = ch => ({ id: ch.id, type: ch.type, title: ch.title, about: ch.about, avatar: ch.avatar, username: ch.username, count: C.size(ch.members), approval: ch.approval, price: ch.price, verified: ch.verified, color: ch.color });
+const serverPreview = s => ({ id: s.id, name: s.name, icon: s.icon, banner: s.banner, about: s.about, count: C.size(s.members), verified: s.verified, boosts: s.boosts || 0, online: Object.keys(s.members).filter(C.isOnline).length });
 H['resolve'] = (c, p) => {
   const t = resolveTarget(p.q);
   if (t.user) return { user: pubUser(t.user, c.uid) };
@@ -300,7 +300,7 @@ H['chat.leave'] = (c, p) => {
   const role = ch.members[c.uid].role;
   if (ch.type === 'group') service(ch, c.uid, 'покинул(а) группу');
   C.removeFromChat(ch, c.uid);
-  if (!Object.keys(ch.members).length) return C.destroyChat(ch);
+  if (!C.size(ch.members)) return C.destroyChat(ch);
   if (role === 'owner') { const next = Object.keys(ch.members).find(u => ch.members[u].role === 'admin') || Object.keys(ch.members)[0]; ch.members[next].role = 'owner'; C.emitChat(ch, [next]); }
   audit(ch, c.uid, 'leave'); save();
 };
@@ -397,7 +397,7 @@ H['chat.read'] = (c, p) => {
   if (seq <= s.read && !s.mentions) return;
   s.read = Math.max(s.read, seq); s.mentions = 0; save();
   emit(c.uid, 'chat', chatView(ch, c.uid));
-  if (ch.type === 'dm' || ch.type === 'secret' || (ch.type === 'group' && Object.keys(ch.members).length <= 200))
+  if (ch.type === 'dm' || ch.type === 'secret' || (ch.type === 'group' && C.size(ch.members) <= 200))
     for (const u in ch.members) if (u !== c.uid) emit(u, 'read', { chat: ch.id, user: c.uid, seq: s.read });
 };
 H['chat.typing'] = (c, p) => {
@@ -433,7 +433,7 @@ H['chat.stats'] = (c, p) => {
   const arr = (db.msgs[ch.id] || []).filter(m => !m.thread && m.type !== 'service'); const last = arr.slice(-30);
   const views = last.reduce((a, m) => a + (m.views || []).length, 0), rx = last.reduce((a, m) => a + Object.values(m.rx || {}).reduce((x, y) => x + y.length, 0) + (m.tcount || 0), 0);
   const days = []; for (let i = 13; i >= 0; i--) { const d = today(now() - i * 864e5); days.push({ d, joins: (ch.joins || {})[d] || 0, posts: arr.filter(m => today(m.ts) === d).length }); }
-  return { members: Object.keys(ch.members).length, posts: arr.length, avgViews: last.length ? Math.round(views / last.length) : 0, er: views ? Math.round(rx / views * 1000) / 10 : 0, clicks: arr.reduce((a, m) => a + (m.clicks || 0), 0), days, top: [...last].sort((a, b) => (b.views || []).length - (a.views || []).length).slice(0, 5).map(m => ({ id: m.id, text: (m.text || m.type).slice(0, 80), views: (m.views || []).length, rx: Object.values(m.rx || {}).reduce((x, y) => x + y.length, 0), comments: m.tcount || 0 })) };
+  return { members: C.size(ch.members), posts: arr.length, avgViews: last.length ? Math.round(views / last.length) : 0, er: views ? Math.round(rx / views * 1000) / 10 : 0, clicks: arr.reduce((a, m) => a + (m.clicks || 0), 0), days, top: [...last].sort((a, b) => (b.views || []).length - (a.views || []).length).slice(0, 5).map(m => ({ id: m.id, text: (m.text || m.type).slice(0, 80), views: (m.views || []).length, rx: Object.values(m.rx || {}).reduce((x, y) => x + y.length, 0), comments: m.tcount || 0 })) };
 };
 H['chat.export'] = (c, p) => {
   const ch = getChat(c, p.id), s = st(ch, c.uid);
@@ -470,6 +470,7 @@ function buildPayload(c, chat, p) {
     out.enc = { iv: p.enc.iv.slice(0, 64), ct: p.enc.ct };
   } else if (['photo', 'video', 'file', 'audio', 'voice', 'round', 'gif'].includes(type)) {
     out.type = type; out.media = mediaOf(p); out.text = str(p.text, 1024);
+    if (p.once) { need(type === 'photo' || type === 'video', 'Одноразовыми бывают только фото и видео'); need(chat.type === 'dm', 'Одноразовые фото и видео — только в личных чатах'); out.once = true; out.text = ''; }
   } else if (type === 'sticker') {
     const s = p.sticker || {}; out.type = 'sticker';
     out.sticker = { pack: str(s.pack, 32), id: str(s.id, 32), e: str(s.e, 16), t: str(s.t, 64), bg: str(s.bg, 32), anim: str(s.anim, 16), snd: str(s.snd, 16), url: isUpload(s.url) ? s.url : undefined };
@@ -556,6 +557,27 @@ H['msg.send'] = (c, p) => {
   const m = postMessage(chat, c.uid, payload);
   return { msg: msgView(m, c.uid), tmp: p.tmp };
 };
+// Одноразовое фото или видео: получатель открывает один раз, после этого файл стирается с сервера.
+H['msg.once.open'] = (c, p) => {
+  const chat = getChat(c, p.chat), m = C.findMsg(chat.id, p.id);
+  need(m && m.once, 'Сообщение не найдено'); need(m.from !== c.uid, 'Своё одноразовое сообщение пересмотреть нельзя. Таковы правила стриптиза.');
+  need(!m.onceAt && m.media, 'Уже просмотрено. Второго раза не будет.');
+  const media = m.media; m.onceAt = now(); delete m.media;
+  C.updateMsg(chat, m);
+  setTimeout(() => C.dropUpload(media.url), 180e3);      // три минуты на то, чтобы файл успел загрузиться у смотрящего
+  return { media, type: m.type };
+};
+// Приглашения: личная ссылка, счётчик и доска почёта.
+let refTop = { at: 0, list: [] };
+H['ref.info'] = c => {
+  const u = user(c);
+  if (now() - refTop.at > 60e3) {
+    const all = []; for (const k in db.users) { const x = db.users[k]; if (x.invited && !x.deleted && !x.banned) all.push(x); }
+    refTop = { at: now(), list: all.sort((a, b) => b.invited - a.invited).slice(0, 10).map(x => ({ id: x.id, n: x.invited })) };
+  }
+  return { username: u.username, invited: u.invited || 0, earned: (u.invited || 0) * A.REF_BONUS, bonus: A.REF_BONUS, by: u.ref && db.users[u.ref] ? pubUser(db.users[u.ref], c.uid) : undefined,
+    top: refTop.list.map(t => ({ user: pubUser(db.users[t.id], c.uid), n: t.n })) };
+};
 H['msg.scheduled'] = (c, p) => db.scheduled.filter(x => x.from === c.uid && (!p.chat || x.chat === p.chat)).sort((a, b) => a.at - b.at);
 H['msg.unschedule'] = (c, p) => { const i = db.scheduled.findIndex(x => x.id === p.id && x.from === c.uid); if (i >= 0) { db.scheduled.splice(i, 1); save(); } };
 H['msg.history'] = (c, p) => {
@@ -640,7 +662,7 @@ H['msg.pollclose'] = (c, p) => { const chat = getChat(c, p.chat), m = C.findMsg(
 H['msg.forward'] = (c, p) => {
   const src = getChat(c, p.from); need(src.type !== 'secret', 'Из секретного чата пересылать нельзя. На то он и секретный.');
   const ids = new Set((Array.isArray(p.ids) ? p.ids : []).slice(0, 100));
-  const msgs = (db.msgs[src.id] || []).filter(m => ids.has(m.id) && m.type !== 'service' && m.type !== 'call');
+  const msgs = (db.msgs[src.id] || []).filter(m => ids.has(m.id) && m.type !== 'service' && m.type !== 'call' && !m.once);
   need(msgs.length, 'Нечего пересылать');
   const out = [];
   for (const tid of (Array.isArray(p.to) ? p.to : []).slice(0, 20)) {

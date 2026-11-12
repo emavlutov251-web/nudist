@@ -160,7 +160,7 @@ export async function sendFiles(chatId, files, o = {}) {
       let extra = {};
       if (chat.type === 'secret') { const enc = await encryptFile(blob); extra = { ek: enc.k, eiv: enc.iv, mime: f.type }; blob = enc.blob; }
       const up = await upload(blob, { name: chat.type === 'secret' ? 'secret.bin' : meta.name, signal: u.ctl.signal, onProgress: p => { u.p = p; bump(); } });
-      await sendPayload(chatId, { type, text: o.caption || undefined, media: { url: up.url, size: f.size, mime: f.type || up.mime, ...meta, ...extra, spoiler: o.spoiler || undefined }, reply: o.reply, silent: o.silent }, { thread: o.thread });
+      await sendPayload(chatId, { type, once: (o.once && (type === 'photo' || type === 'video')) || undefined, text: (!o.once && o.caption) || undefined, media: { url: up.url, size: f.size, mime: f.type || up.mime, ...meta, ...extra, spoiler: o.spoiler || undefined }, reply: o.reply, silent: o.silent }, { thread: o.thread });
       o.caption = undefined;
     } catch (e) { toast(e.message, 'err'); }
     uploads.splice(uploads.indexOf(u), 1); bump();

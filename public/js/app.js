@@ -9,11 +9,27 @@ import { CallLayer } from './rtc.js';
 import { MediaViewer, StoryViewer, AudioBar } from './media.js';
 import { openSettings } from './settings.js';
 import { hashFromHistory } from './back.js';
+import './fluent.js';
+import { takeRef, pendingRef, clearRef } from './growth.js';
+takeRef();
+// Офлайн-кеш оболочки: со второго захода приложение открывается с диска. Вышла новая версия — докачается в фоне и предложит обновиться.
+function swSetup() {
+  if (!('serviceWorker' in navigator) || !/^https:|^http:\/\/(localhost|127\.)/.test(location.href)) return;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (reloading) location.reload(); });
+  const offer = w => { S.ui.update = () => { reloading = true; w.postMessage('skip'); }; bump(); };
+  navigator.serviceWorker.register('/sw.js').then(reg => {
+    if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
+    reg.addEventListener('updatefound', () => { const w = reg.installing; if (w) w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w); }); });
+    setInterval(() => reg.update().catch(() => {}), 30 * 60e3);
+  }).catch(() => { /* без кеша тоже работает */ });
+}
+if (document.readyState === 'complete') swSetup(); else addEventListener('load', swSetup);
 
 // ═════ Вход ═════
 const SLOGANS = ['Мессенджер, которому нечего скрывать.', 'Скрывать нечего. Но шифруем на совесть.', 'Голая правда и немного стикеров.', 'Одежда — по желанию. Двухфакторка — обязательно.'];
 function Auth() {
-  const [mode, setMode] = useState('login');
+  const ref = pendingRef(); const [mode, setMode] = useState(ref ? 'register' : 'login');
   const [f, setF] = useState({ username: '', password: '', name: '', phone: '', code: '', totp: '', rec: '' });
   const [step, setStep] = useState(null); // totp | code | name | password
   const [demo, setDemo] = useState(null);
@@ -25,7 +41,7 @@ function Auth() {
   const submit = e => {
     e.preventDefault();
     go(async () => {
-      if (mode === 'register') done(await http('register', { username: f.username, password: f.password, name: f.name }));
+      if (mode === 'register') { if (done(await http('register', { username: f.username, password: f.password, name: f.name, ref: pendingRef() || undefined }))) clearRef(); }
       else if (mode === 'login') { const r = await http('login', { username: f.username, password: f.password, code: f.totp || undefined }); if (!done(r) && r.need === 'totp') setStep('totp'); }
       else if (mode === 'recover') done(await http('recover', { username: f.username, code: f.rec, password: f.password }));
       else if (mode === 'phone') {
@@ -46,6 +62,7 @@ function Auth() {
     <section class="auth-form">
       <form class="card" onSubmit=${submit}>
         <div class="tabs auth-tabs"><button type="button" class=${cx((mode === 'login' || mode === 'register' || mode === 'recover') && 'on')} onClick=${() => sw('login')}>Username</button><button type="button" class=${cx(mode === 'phone' && 'on')} onClick=${() => sw('phone')}>Телефон</button><button type="button" class=${cx(mode === 'qr' && 'on')} onClick=${() => sw('qr')}>QR-код</button></div>
+        ${ref && html`<div class="ref-note"><${Icon} n="gift" s=${18} /><span>Вас зовёт <b>@${ref}</b>. Зарегистрируйтесь — и вы сразу окажетесь у него в контактах, а обоим дадут по 50 🍃.</span></div>`}
         ${mode === 'qr' ? html`<${QrLogin} onToken=${t => done({ token: t })} />` : html`
           <h2>${mode === 'register' ? 'Регистрация' : mode === 'recover' ? 'Восстановление доступа' : mode === 'phone' ? 'Вход по номеру' : 'С возвращением'}</h2>
           ${(mode === 'login' || mode === 'register' || mode === 'recover') && html`
@@ -91,7 +108,7 @@ function Welcome() {
     <div class="tip"><b>Подсказка дня</b><span>${fact}</span></div>
     <div class="row"><button class="btn ghost" onClick=${() => { const c = Object.values(S.chats).find(x => x.type === 'saved'); c ? openChat(c.id) : openUser(S.me.id); }}><${Icon} n="bookmark" s=${16} /> Избранное</button><button class="btn ghost" onClick=${() => { S.ui.boss = true; bump(); }}><${Icon} n="table" s=${16} /> Прикрыться</button></div></div>`;
 }
-function Toasts() { return html`<div class="toasts" aria-live="polite">${S.toasts.map(t => html`<div key=${t.id} class=${cx('toast', t.kind)}>${t.text}</div>`)}</div>`; }
+function Toasts() { return html`<div class="toasts" aria-live="polite">${S.toasts.map(t => html`<div key=${t.id} class=${cx('toast', t.kind)}>${t.text}</div>`)}</div>${S.ui.update && html`<div class="upd-bar" role="status"><span>Вышла новая версия «Нудиста»</span><button class="btn sm" onClick=${S.ui.update}>Обновить</button></div>`}`; }
 function Menu() {
   const m = S.menu, ref = useRef(); const [sub, setSub] = useState(null);
   useEffect(() => { setSub(null); }, [m]);
@@ -142,6 +159,8 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('click', () => { try { if ('Notification' in window && Notification.permission === 'default' && S.ready && S.settings.notif && !local.get('askedNotif')) { local.set('askedNotif', 1); Notification.requestPermission(); } } catch (e) { /* игнор */ } }, { passive: true });
 async function handleHash(first) {
+  if (location.hash === '#invite') { history.replaceState(history.state, '', location.pathname); import('./growth.js').then(g => g.openInvite()); return; }
+  if (first && pendingRef()) { const r = pendingRef(); clearRef(); if (S.me && r.toLowerCase() !== (S.me.username || '').toLowerCase()) { showProfile(null, r); return; } }      // уже вошедший открыл чужую ссылку-приглашение — покажем, кто звал
   const h = location.hash.slice(1); if (!h) { if (first && innerWidth > 800) { const l = local.get('lastChat'); if (l && S.chats[l]) openChat(l); } return; }
   const p = new URLSearchParams(h);
   if (p.get('c') && S.chats[p.get('c')]) { if (S.ui.chat !== p.get('c')) openChat(p.get('c')); }

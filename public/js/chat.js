@@ -2,6 +2,7 @@
 import { svcText, html, useState, useEffect, useRef, useLayoutEffect, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, Badges, cx, showMenu, closeMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtTime, fmtDay, fmtFull, fmtShort, sameDay, userName, lastSeen, kindIcon, md, copyText, confirmDlg, promptDlg, addUsers, Empty, Spinner, plural, fmtNum, fmtDur, ttlLabel, isMuted, setSetting, debounce } from './lib.js';
 import { msgKey, loadHistory, openChat, closeChat, openUser, markRead, retryMsg } from './store.js';
 import { Sticker, sfx } from './fun.js';
+import { OnceMsg, Streak } from './growth.js';
 import { Photo, Gif, VideoMsg, RoundMsg, VoiceMsg, AudioMsg, FileMsg, LocMsg } from './media.js';
 import { showProfile, chatActions, openMiniApp, JoinPreview } from './panels.js';
 import { Composer, EmojiPicker, ForwardModal } from './composer.js';
@@ -35,7 +36,7 @@ function Header({ chat, thread, onSearch }) {
     <button class=${cx('ib back', thread && 'show')} onClick=${back} aria-label="Назад"><${Icon} n="arrow-left" /></button>
     <button class="ch-main" onClick=${() => { S.ui.panel = !S.ui.panel; bump(); }} title="Информация о чате">
       ${!thread && html`<${ChatAvatar} chat=${chat} s=${40} />`}
-      <span class="ch-t"><b>${thread ? (chat.type === 'channel' ? 'Комментарии' : 'Тред') : html`${chat.server && html`<${Icon} n=${kindIcon(chat.kind)} s=${17} /> `}${i.title}`}${!thread && u && html`<${Badges} list=${u.badges} />`}${!thread && i.verified && !u && html`<${Badges} list=${['verified']} />`}${isMuted(chat) && html`<${Icon} n="bell-off" s=${14} cls="dim" />`}${chat.ttl ? html`<span class="ttl-chip" title="Автоудаление сообщений"><${Icon} n="timer" s=${12} /> ${ttlLabel(chat.ttl)}</span>` : ''}</b>
+      <span class="ch-t"><b>${thread ? (chat.type === 'channel' ? 'Комментарии' : 'Тред') : html`${chat.server && html`<${Icon} n=${kindIcon(chat.kind)} s=${17} /> `}${i.title}`}${!thread && u && html`<${Badges} list=${u.badges} />`}${!thread && i.verified && !u && html`<${Badges} list=${['verified']} />`}${isMuted(chat) && html`<${Icon} n="bell-off" s=${14} cls="dim" />`}${!thread && html`<${Streak} chat=${chat} big />`}${chat.ttl ? html`<span class="ttl-chip" title="Автоудаление сообщений"><${Icon} n="timer" s=${12} /> ${ttlLabel(chat.ttl)}</span>` : ''}</b>
         <small class=${cx(typing && 'typing')}>${typing ? typing + '…' : sub}</small></span>
     </button>
     ${live && !thread && RTC.chat !== chat.id && html`<button class="btn sm pulse" onClick=${() => joinVoice(chat.id)}><${Icon} n="phone-incoming" s=${15} /> Идёт звонок · войти</button>`}
@@ -97,9 +98,10 @@ function Buttons({ m, chat }) {
 }
 function Body({ m, chat, list }) {
   switch (m.type) {
-    case 'photo': return html`<${Photo} m=${m} list=${list} />`;
+    case 'once': return html`<${OnceMsg} m=${m} />`;
+    case 'photo': return m.once ? html`<${OnceMsg} m=${{ ...m, kind: 'photo', once: 'new' }} />` : html`<${Photo} m=${m} list=${list} />`;
     case 'gif': return html`<${Gif} m=${m} />`;
-    case 'video': return html`<${VideoMsg} m=${m} />`;
+    case 'video': return m.once ? html`<${OnceMsg} m=${{ ...m, kind: 'video', once: 'new' }} />` : html`<${VideoMsg} m=${m} />`;
     case 'round': return html`<${RoundMsg} m=${m} />`;
     case 'voice': return html`<${VoiceMsg} m=${m} list=${list} />`;
     case 'audio': return html`<${AudioMsg} m=${m} list=${list} />`;

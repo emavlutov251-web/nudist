@@ -24,14 +24,18 @@ if (fs.existsSync(DB_FILE) || fs.existsSync(BAK_FILE)) {
 const DEFAULT_FLAGS = { registration: true, phoneAuth: true, stories: true, calls: true, bots: true, stars: true, linkPreview: true, discovery: true, uploads: true };
 db.flags = { ...DEFAULT_FLAGS, ...db.flags };
 
-let saveTimer = null, saving = false, dirty = false;
-function save() { dirty = true; if (!saveTimer) saveTimer = setTimeout(flush, 500); }
+// Сохранение — это сериализация всей базы. Пока она маленькая, пишем раз в полсекунды; когда растёт — реже,
+// чтобы запись занимала не больше ~5% времени процесса и не тормозила переписку.
+let saveTimer = null, saving = false, dirty = false, saveCost = 0;
+const saveDelay = () => Math.min(60000, Math.max(500, Math.round(saveCost * 20)));
+function save() { dirty = true; if (!saveTimer) saveTimer = setTimeout(flush, saveDelay()); }
 function flush() {
   saveTimer = null;
   if (saving) { saveTimer = setTimeout(flush, 200); return; }
   if (!dirty) return;
   dirty = false; saving = true;
-  const text = JSON.stringify(db);
+  const t0 = Date.now(), text = JSON.stringify(db);
+  saveCost = Date.now() - t0; metrics.dbBytes = text.length; metrics.saveMs = saveCost;
   Cloud.queue(text);
   fs.writeFile(DB_FILE + '.tmp', text, err => {
     if (err) { console.error('[db] ошибка записи', err.message); saving = false; dirty = true; if (!saveTimer) saveTimer = setTimeout(flush, 5000); return; }
@@ -68,10 +72,22 @@ function emit(uid, ev, d) {
 }
 function emitAll(ev, d) { const s = JSON.stringify({ ev, d }); for (const set of conns.values()) for (const c of set) c.raw(s); }
 const isOnline = uid => conns.has(uid);
+// Число ключей в большом объекте (участники сообщества). Object.keys(…).length на 100 тысячах участников — это миллисекунды,
+// а считается оно на каждое сообщение каждому получателю. Большие объекты пересчитываем не чаще раза в 3 секунды.
+const sizeCache = new WeakMap();
+function size(o) {
+  if (!o) return 0;
+  const c = sizeCache.get(o), t = Date.now();
+  if (c && t - c.at < 3000) return c.n;
+  const n = Object.keys(o).length;
+  if (n > 500) sizeCache.set(o, { n, at: t }); else if (c) sizeCache.delete(o);
+  return n;
+}
 
 // ───── статистика по дням
 function day() { const k = today(); return (db.daily[k] = db.daily[k] || { msgs: 0, regs: 0, dau: [] }); }
-function touchDau(uid) { const d = day(); if (!d.dau.includes(uid)) d.dau.push(uid); }
+let dauKey = '', dauSet = null;
+function touchDau(uid) { const d = day(), k = today(); if (dauKey !== k) { dauKey = k; dauSet = new Set(d.dau); } if (!dauSet.has(uid)) { dauSet.add(uid); d.dau.push(uid); } }
 
 // ───── пользователи
 const byName = new Map(); // username(lower) -> userId
@@ -110,7 +126,20 @@ const isOwner = u => !!u && OWNERS.has(u.id);
 function selfUser(u) {
   return { ...pubUser(u, u.id), phone: u.phone, email: u.email, stars: u.stars || 0, premiumUntil: u.premiumUntil, privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, owner: isOwner(u) || undefined, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, private: !!u.private, lastDaily: u.lastDaily, taps: u.tapDay === today() ? u.taps : 0 };
 }
-function broadcastUser(u) { for (const uid of conns.keys()) emit(uid, 'user', pubUser(u, uid)); }
+// Кому рассылать «в сети / изменил профиль»: только тем, кто этого человека действительно видит — собеседникам, контактам
+// и участникам небольших общих чатов и серверов. Рассылка «всем подключённым» на каждое подключение — это N² и смерть при первом же наплыве.
+const AUDIENCE_GROUP = 300, AUDIENCE_MAX = 3000;
+function audience(u) {
+  const out = new Set();
+  const add = ids => { for (const x of ids) { if (out.size >= AUDIENCE_MAX) return; if (x !== u.id && conns.has(x)) out.add(x); } };
+  if (conns.size <= AUDIENCE_GROUP) { add(conns.keys()); return out; }          // маленькая тусовка — видят все, как раньше
+  const small = o => { let n = 0; for (const k in o) if (++n > AUDIENCE_GROUP) return null; return Object.keys(o); };      // большие сообщества не перебираем вовсе
+  for (const cid of u.chats || []) { const c = db.chats[cid], ids = c && c.members && small(c.members); if (ids) add(ids); }
+  for (const sid of u.servers || []) { const s = db.servers[sid], ids = s && small(s.members); if (ids) add(ids); }
+  add(u.contacts || []);
+  return out;
+}
+function broadcastUser(u) { for (const uid of audience(u)) emit(uid, 'user', pubUser(u, uid)); }
 
 // ───── чаты и права
 const dmId = (a, b) => 'dm_' + [a, b].sort().join('_');
@@ -180,6 +209,7 @@ function msgView(m, uid) {
   delete v.hid; delete v.hist; delete v.clicks;
   if (m.views) v.views = m.views.length;
   if (m.poll) v.poll = pollView(m.poll, uid);
+  if (m.once) { delete v.media; v.kind = m.type; v.type = 'once'; v.once = m.onceAt ? 'seen' : 'new'; }      // одноразовое: адрес файла не уходит никому, пока получатель не откроет
   return v;
 }
 function lastVisible(chat, uid) {
@@ -202,6 +232,28 @@ function unreadCount(chat, uid) {
   }
   return n;
 }
+// «Огонёк»: сколько дней подряд оба собеседника писали друг другу. День считаем по Москве.
+const dayMsk = (shift = 0) => today(now() + 3 * 3600e3 + shift * 864e5);
+function touchStreak(chat, from) {
+  const d = dayMsk(), k = chat.sk || (chat.sk = { n: 0, last: '', by: {} });
+  if (k.by[from] === d) return false;
+  k.by[from] = d;
+  const ids = Object.keys(chat.members);
+  if (ids.length !== 2 || k.last === d || !ids.every(u => k.by[u] === d)) return false;
+  k.n = k.last === dayMsk(-1) ? k.n + 1 : 1; k.last = d;
+  return true;
+}
+function streakOf(chat) {      // { n, hot }: hot — сегодня серия уже продлена; иначе она сгорит в полночь
+  const k = chat.sk; if (!k || k.n < 2) return null;
+  if (k.last === dayMsk()) return { n: k.n, hot: true };
+  if (k.last === dayMsk(-1)) return { n: k.n, hot: false };
+  return null;
+}
+// Стереть загруженный файл совсем: с диска и из облака (одноразовые фото и видео).
+function dropUpload(url) {
+  const name = isUpload(url) ? String(url).slice(3) : ''; if (!/^[\w-]+\.[a-z0-9]{1,8}$/.test(name)) return;
+  fs.unlink(path.join(UPLOADS, name), () => {}); Cloud.dropUpload(name);
+}
 function chatView(chat, uid) {
   const s = st(chat, uid);
   const v = { id: chat.id, type: chat.type, title: chat.title, about: chat.about, avatar: chat.avatar, username: chat.username, pub: chat.pub, created: chat.created, seq: chat.seq,
@@ -212,10 +264,11 @@ function chatView(chat, uid) {
     const srv = db.servers[chat.server];
     v.can = { send: sCan(srv, uid, 'send', chat), del: sCan(srv, uid, 'del'), pin: sCan(srv, uid, 'pin'), info: sCan(srv, uid, 'info'), voice: sCan(srv, uid, 'voice'), mention: sCan(srv, uid, 'mention') };
   } else {
-    v.count = Object.keys(chat.members).length;
+    v.count = size(chat.members);
     v.role = (chat.members[uid] || {}).role;
     v.pending = (chat.members[uid] || {}).pending;
     if (chat.type === 'dm' || chat.type === 'secret') v.peer = Object.keys(chat.members).find(u => u !== uid) || uid;
+    if (chat.sk) { const k = streakOf(chat); if (k) v.streak = k; }
     if (chat.type === 'secret') { v.keys = chat.keys; v.by = chat.by; }
     if (chat.type === 'group' || chat.type === 'channel') {
       Object.assign(v, { perms: chat.perms, sign: chat.sign, approval: chat.approval, captcha: chat.captcha, price: chat.price, rules: chat.rules, color: chat.color });
@@ -233,7 +286,7 @@ function chatView(chat, uid) {
 function emitChat(chat, uids) { for (const u of uids || membersOf(chat)) if (isOnline(u)) emit(u, 'chat', chatView(chat, u)); }
 
 // ───── сообщения
-const MSG_FIELDS = ['text', 'media', 'reply', 'quote', 'fwd', 'poll', 'thread', 'btn', 'silent', 'sticker', 'loc', 'contact', 'enc', 'title', 'as', 'via', 'hook', 'call', 'act', 'dice', 'album', 'fx', 'gift', 'tags', 'rq', 'sig', 'link'];
+const MSG_FIELDS = ['text', 'media', 'reply', 'quote', 'fwd', 'poll', 'thread', 'btn', 'silent', 'sticker', 'loc', 'contact', 'enc', 'title', 'as', 'via', 'hook', 'call', 'act', 'dice', 'album', 'fx', 'gift', 'tags', 'rq', 'sig', 'link', 'once'];
 const expiring = [];
 for (const cid in db.msgs) for (const m of db.msgs[cid]) if (m.exp) expiring.push({ c: cid, i: m.id, at: m.exp });
 const hooks = { afterPost: [] };
@@ -244,7 +297,7 @@ function mentionedUsers(chat, from, text) {
   if (!text) return { out, all };
   for (const m of text.matchAll(/@([a-zA-Z0-9_]{3,32})/g)) {
     const n = m[1].toLowerCase();
-    if (n === 'all' || n === 'everyone' || n === 'here') { if (from && (can(chat, from, 'mention') || (chat.type === 'group' && Object.keys(chat.members).length <= 50))) all = n; continue; }
+    if (n === 'all' || n === 'everyone' || n === 'here') { if (from && (can(chat, from, 'mention') || (chat.type === 'group' && size(chat.members) <= 50))) all = n; continue; }
     const uid = byName.get(n); if (uid) out.add(uid);
   }
   return { out, all };
@@ -256,6 +309,7 @@ function postMessage(chat, from, p, o = {}) {
   const ttl = p.ttl || chat.ttl;
   if (ttl && m.type !== 'service') { m.exp = m.ts + ttl * 1000; expiring.push({ c: chat.id, i: m.id, at: m.exp }); }
   arr.push(m);
+  if (chat.type === 'dm' && m.type !== 'service' && from && !o.quiet) { const fu = db.users[from]; if (fu && !fu.bot) touchStreak(chat, from); }
   let root = null;
   if (m.thread) { root = findMsg(chat.id, m.thread); if (root) { root.tcount = (root.tcount || 0) + 1; root.tlast = m.ts; } }
   const { out: ment, all } = m.enc ? { out: new Set() } : mentionedUsers(chat, from, m.text);
@@ -343,4 +397,4 @@ function usernameTaken(n, exceptId) {
   return false;
 }
 
-module.exports = { OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { audience, size, dropUpload, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

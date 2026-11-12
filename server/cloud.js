@@ -18,6 +18,9 @@ const enabled = !!(BASE && KEY);
 const DATA = process.env.DATA_DIR || path.join(path.resolve(__dirname, '..'), 'data');
 const DB_FILE = path.join(DATA, 'db.json');
 const PUSH_EVERY = 4000;
+// Чем тяжелее снимок, тем реже его отправляем: отправка не должна занимать больше ~1/8 времени.
+let pushCost = 0;
+const pushGap = () => Math.min(120000, Math.max(PUSH_EVERY, pushCost * 8));
 
 let ready = false;            // снимок прочитан (или его ещё нет) — только после этого можно писать в облако
 let pending = null, pushing = false, timer = null, lastPush = 0, failures = 0;
@@ -38,6 +41,7 @@ async function writeRow(id, data) {
   if (!r.ok) throw new Error(`запись базы: HTTP ${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}`);
 }
 const pack = text => zlib.gzipSync(text).toString('base64');
+const packAsync = text => new Promise((res, rej) => zlib.gzip(text, (e, b) => (e ? rej(e) : res(b.toString('base64')))));
 function api(method, p, opt = {}) {
   return fetch(BASE + '/storage/v1' + p, { method, body: opt.body, headers: { apikey: KEY, authorization: 'Bearer ' + KEY, ...(opt.headers || {}) }, signal: AbortSignal.timeout(opt.timeout || 30000) });
 }
@@ -92,21 +96,22 @@ async function drain() {
   timer = null;
   if (pushing || pending === null || !ready) return;
   pushing = true;
-  const text = pending; pending = null;
+  const text = pending; pending = null; const t0 = Date.now();
   try {
-    await writeRow(ROW, pack(text));
-    lastPush = Date.now(); failures = 0; status.lastOk = lastPush; status.lastError = ''; status.pushes++;
+    const body = await packAsync(text); status.bytes = body.length;
+    await writeRow(ROW, body);
+    lastPush = Date.now(); pushCost = lastPush - t0; failures = 0; status.lastOk = lastPush; status.lastError = ''; status.pushes++;
   } catch (e) {
     failures++; status.lastError = e.message; if (pending === null) pending = text;
     console.error('[cloud] снимок не записан:', e.message);
   }
   pushing = false;
-  if (pending !== null && !timer) timer = setTimeout(drain, failures ? Math.min(60000, 3000 * failures) : PUSH_EVERY);
+  if (pending !== null && !timer) timer = setTimeout(drain, failures ? Math.min(60000, 3000 * failures) : pushGap());
 }
 function queue(text) {
   if (!enabled || !ready) return;
   pending = text;
-  if (!timer && !pushing) timer = setTimeout(drain, Math.max(0, PUSH_EVERY - (Date.now() - lastPush)));
+  if (!timer && !pushing) timer = setTimeout(drain, Math.max(0, pushGap() - (Date.now() - lastPush)));
 }
 // При остановке: дождаться записи последнего состояния (хостинг даёт на это несколько секунд).
 async function final(text, maxMs = 20000) {
@@ -143,4 +148,6 @@ function getUpload(name, file) {          // true — файл скачан в �
   return p;
 }
 
-module.exports = { enabled, status, restore, queue, final, putUpload, getUpload };
+async function dropUpload(name) { if (!enabled) return; try { await api('DELETE', obj('uploads/' + name)); } catch (e) { console.error('[cloud] файл не удалён:', name, e.message); } }
+
+module.exports = { enabled, status, restore, queue, final, putUpload, getUpload, dropUpload };

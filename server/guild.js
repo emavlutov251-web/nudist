@@ -14,7 +14,7 @@ const TEMPLATES = {
 };
 const getServer = (c, sid, act) => { const s = db.servers[typeof sid === 'string' ? sid : '']; need(s && s.members[c.uid], 'Сервер не найден'); if (act) need(sCan(s, c.uid, act), 'Недостаточно прав на сервере'); return s; };
 function serverView(s, uid) {
-  return { id: s.id, name: s.name, icon: s.icon, banner: s.banner, about: s.about, owner: s.owner, pub: s.pub, roles: s.roles, cats: s.cats, emojis: s.emojis || [], boosts: s.boosts || 0, events: s.events || [], count: Object.keys(s.members).length, verified: s.verified, color: s.color, automod: sCan(s, uid, 'channels') ? s.automod : undefined, afk: s.afk,
+  return { id: s.id, name: s.name, icon: s.icon, banner: s.banner, about: s.about, owner: s.owner, pub: s.pub, roles: s.roles, cats: s.cats, emojis: s.emojis || [], boosts: s.boosts || 0, events: s.events || [], count: C.size(s.members), verified: s.verified, color: s.color, automod: sCan(s, uid, 'channels') ? s.automod : undefined, afk: s.afk,
     me: { roles: s.members[uid].roles, nick: s.members[uid].nick, perms: C.sPerms(s, uid) } };
 }
 const emitServer = s => { for (const u in s.members) if (C.isOnline(u)) emit(u, 'server', serverView(s, u)); };
@@ -38,11 +38,21 @@ function joinServer(s, uid, quiet, role) {
   const u = db.users[uid]; u.servers = u.servers || []; if (!u.servers.includes(s.id)) u.servers.push(s.id);
   for (const cid of s.channels) { const ch = db.chats[cid]; if (ch) C.st(ch, uid).read = ch.seq || 0; }
   audit(s, uid, 'join');
-  if (!quiet) { const first = s.channels.map(x => db.chats[x]).find(ch => ch && ch.kind === 'text'); if (first) service(first, uid, 'запрыгнул(а) на сервер. Все прикрылись!'); }
+  if (!quiet && C.size(s.members) <= 200) { const first = s.channels.map(x => db.chats[x]).find(ch => ch && ch.kind === 'text'); if (first) service(first, uid, 'запрыгнул(а) на сервер. Все прикрылись!'); }
   save();
   emit(uid, 'server', serverView(s, uid));
   emit(uid, 'server.channels', { server: s.id, chats: s.channels.map(x => db.chats[x]).filter(ch => ch && sCan(s, uid, 'view', ch)).map(ch => chatView(ch, uid)) });
-  for (const m in s.members) if (m !== uid) emit(m, 'server.count', { id: s.id, count: Object.keys(s.members).length });
+  countSoon(s);
+}
+const countTimers = new Map();
+function countSoon(s) {
+  if (countTimers.has(s.id)) return;
+  countTimers.set(s.id, setTimeout(() => {
+    countTimers.delete(s.id); const cur = db.servers[s.id]; if (!cur) return;
+    const count = C.size(cur.members);
+    if (count <= C.conns.size) { for (const m in cur.members) if (C.isOnline(m)) emit(m, 'server.count', { id: cur.id, count }); }
+    else for (const m of C.conns.keys()) if (cur.members[m]) emit(m, 'server.count', { id: cur.id, count });
+  }, 2000));
 }
 function leaveServer(s, uid) {
   delete s.members[uid];
@@ -76,8 +86,8 @@ H['server.update'] = (c, p) => {
 };
 H['server.delete'] = (c, p) => { const s = getServer(c, p.id); need(s.owner === c.uid, 'Удалить сервер может только владелец'); destroyServer(s); };
 H['server.leave'] = (c, p) => {
-  const s = getServer(c, p.id); need(s.owner !== c.uid || Object.keys(s.members).length === 1, 'Владелец не может уйти: передайте владение или удалите сервер');
-  if (Object.keys(s.members).length === 1) return destroyServer(s);
+  const s = getServer(c, p.id); need(s.owner !== c.uid || C.size(s.members) === 1, 'Владелец не может уйти: передайте владение или удалите сервер');
+  if (C.size(s.members) === 1) return destroyServer(s);
   audit(s, c.uid, 'leave'); leaveServer(s, c.uid);
 };
 H['server.transfer'] = (c, p) => { const s = getServer(c, p.id); need(s.owner === c.uid && s.members[p.user], 'Недоступно'); s.owner = p.user; audit(s, c.uid, 'transfer', R.uname(db.users[p.user])); save(); emitServer(s); };
@@ -91,7 +101,7 @@ H['server.join'] = (c, p) => {
 H['server.discover'] = (c, p) => {
   need(db.flags.discovery, 'Каталог отключён администратором');
   const q = str(p.q, 64).toLowerCase();
-  return Object.values(db.servers).filter(s => s.pub && (!q || s.name.toLowerCase().includes(q) || (s.about || '').toLowerCase().includes(q))).sort((a, b) => Object.keys(b.members).length - Object.keys(a.members).length).slice(0, 50).map(s => ({ ...R.serverPreview(s), member: !!s.members[c.uid] }));
+  return Object.values(db.servers).filter(s => s.pub && (!q || s.name.toLowerCase().includes(q) || (s.about || '').toLowerCase().includes(q))).sort((a, b) => C.size(b.members) - C.size(a.members)).slice(0, 50).map(s => ({ ...R.serverPreview(s), member: !!s.members[c.uid] }));
 };
 H['server.members'] = (c, p) => {
   const s = getServer(c, p.id); const q = str(p.q, 64).toLowerCase();
@@ -176,7 +186,7 @@ H['server.kick'] = (c, p) => {
     audit(s, c.uid, p.ban ? 'ban' : 'kick', R.uname(db.users[uid]) + (p.reason ? ': ' + str(p.reason, 100) : '')); n++;
   }
   save();
-  for (const m in s.members) emit(m, 'server.count', { id: s.id, count: Object.keys(s.members).length });
+  for (const m in s.members) emit(m, 'server.count', { id: s.id, count: C.size(s.members) });
   return { n };
 };
 H['server.unban'] = (c, p) => { const s = getServer(c, p.server, 'ban'); s.banned = (s.banned || []).filter(u => u !== p.user); audit(s, c.uid, 'unban', R.uname(db.users[p.user])); save(); };
