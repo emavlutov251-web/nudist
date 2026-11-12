@@ -70,7 +70,7 @@ function Dash() {
     <div class="acols"><section class="apanel"><h3>Активные пользователи, 14 дней</h3><${Bars} days=${s.days} k="dau" /></section>
       <section class="apanel"><h3>Сообщения, 14 дней</h3><${Bars} days=${s.days} k="msgs" cls="b2" /></section>
       <section class="apanel"><h3>Регистрации, 14 дней</h3><${Bars} days=${s.days} k="regs" cls="b3" /></section></div>
-    <div class="akpis small">${K(num(s.groups), 'групп', 'users-round')}${K(num(s.channels), 'каналов', 'megaphone')}${K(num(s.servers), 'серверов', 'server')}${K(num(s.dms), 'личных чатов', 'user')}${K(num(s.secrets), 'секретных', 'lock')}${K(num(s.stories), 'историй за сутки', 'circle-dashed')}${K(num(s.premium), 'с премиумом', 'crown')}${K(num(s.starsTotal) + ' 🍃', 'листиков в обороте', 'leaf')}${K(num(s.banned), 'забанено', 'ban')}${K(num(s.reportsOpen), 'жалоб в очереди', 'flag')}${K(fmtSize(s.uploads), num(s.uploadFiles) + ' файлов', 'hard-drive')}</div></div>`;
+    <div class="akpis small">${K(num(s.groups), 'групп', 'users-round')}${K(num(s.channels), 'каналов', 'megaphone')}${K(num(s.servers), 'серверов', 'server')}${K(num(s.dms), 'личных чатов', 'user')}${K(num(s.secrets), 'секретных', 'lock')}${K(num(s.stories), 'историй за сутки', 'circle-dashed')}${K(num(s.premium), 'с премиумом', 'crown')}${K(num(s.starsTotal) + ' 🍃', 'листиков в обороте', 'leaf')}${K(num(s.banned), 'забанено', 'ban')}${K(num(s.reportsOpen), 'жалоб в очереди', 'flag')}${K(fmtSize(s.uploads) + (s.uploadsMax ? ' из ' + fmtSize(s.uploadsMax) : ''), num(s.uploadFiles) + ' файлов', 'hard-drive')}</div></div>`;
 }
 
 function Users({ role }) {

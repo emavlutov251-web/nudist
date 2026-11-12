@@ -5,9 +5,11 @@
 // Снимок нельзя держать файлом в Storage: его чтение идёт через CDN, и после перезапуска можно получить устаревшую версию.
 // Файлы: бакет Storage, uploads/<файл>; имена не повторяются, так что кеш CDN им не вредит. Локальный диск служит кешем.
 // Таблицу нужно создать один раз (SQL есть в README), бакет сервер создаёт сам.
+// Если заданы переменные S3_* (см. s3.js), файлы хранятся в S3, а Supabase держит только базу.
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const S3 = require('./s3');
 
 const BASE = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 const KEY = process.env.SUPABASE_KEY || '';
@@ -127,27 +129,87 @@ async function final(text, maxMs = 20000) {
   }
 }
 
-// Файлы
+// Файлы. Если задано S3-хранилище (server/s3.js), файлы живут там, а Supabase остаётся только для базы
+// и для старых файлов: их отдаём оттуда и при первом обращении переносим в S3.
+const files = enabled || S3.enabled;
 async function putUpload(name, file) {
+  if (S3.enabled) { await S3.put(name, file); trim(); return; }
   if (!enabled) return;
   await put('uploads/' + name, await fs.promises.readFile(file), 'application/octet-stream');
+  trim();
 }
 const fetching = new Map();
 function getUpload(name, file) {          // true — файл скачан в локальный кеш, false — в облаке его нет
-  if (!enabled) return Promise.resolve(false);
+  if (!files) return Promise.resolve(false);
   if (fetching.has(name)) return fetching.get(name);
   const p = (async () => {
+    if (S3.enabled) {
+      try { if (await S3.get(name, file)) { trim(); return true; } }
+      catch (e) { console.error('[s3] файл', name, e.message); if (!enabled) return false; }
+    }
+    if (!enabled) return false;
     const r = await api('GET', obj('uploads/' + name), { timeout: 120000 });
     if (!r.ok) { if (!(await missing(r))) console.error('[cloud] файл', name, 'HTTP', r.status); return false; }
     const tmp = file + '.part';
     await fs.promises.writeFile(tmp, Buffer.from(await r.arrayBuffer()));
     await fs.promises.rename(tmp, file);
+    if (S3.enabled) S3.put(name, file).then(() => console.log('[s3] перенесён старый файл', name)).catch(e => console.error('[s3] перенос', name, e.message));
+    trim();
     return true;
   })().catch(e => { console.error('[cloud] файл', name, e.message); return false; }).finally(() => fetching.delete(name));
   fetching.set(name, p);
   return p;
 }
 
-async function dropUpload(name) { if (!enabled) return; try { await api('DELETE', obj('uploads/' + name)); } catch (e) { console.error('[cloud] файл не удалён:', name, e.message); } }
+async function dropUpload(name) {
+  if (S3.enabled) { try { await S3.drop(name); } catch (e) { console.error('[s3] файл не удалён:', name, e.message); } }
+  if (enabled) { try { await api('DELETE', obj('uploads/' + name)); } catch (e) { console.error('[cloud] файл не удалён:', name, e.message); } }
+}
 
-module.exports = { enabled, status, restore, queue, final, putUpload, getUpload, dropUpload };
+// Локальный диск при облачном хранилище — только кеш. Держим его в пределах CACHE_MB: давно не открывавшиеся файлы удаляем,
+// при следующем обращении они снова скачаются из облака. Без облака ничего не трогаем — там диск и есть хранилище.
+const CACHE_BYTES = (Number(process.env.CACHE_MB) || 700) * 1024 * 1024;
+const UP_DIR = path.join(DATA, 'uploads');
+let trimTimer = null;
+function trim() {
+  if (!files || trimTimer) return;
+  trimTimer = setTimeout(async () => {
+    trimTimer = null;
+    try {
+      const list = [];
+      let total = 0;
+      for (const f of await fs.promises.readdir(UP_DIR)) {
+        if (f.endsWith('.part') || fetching.has(f)) continue;
+        const st = await fs.promises.stat(path.join(UP_DIR, f)).catch(() => null);
+        if (!st || !st.isFile()) continue;
+        list.push({ f, size: st.size, at: Math.max(st.atimeMs, st.mtimeMs) }); total += st.size;
+      }
+      if (total <= CACHE_BYTES) return;
+      list.sort((a, b) => a.at - b.at);
+      const fresh = Date.now() - 120000;          // только что загруженный файл может ещё отправляться в облако
+      for (const x of list) {
+        if (total <= CACHE_BYTES * 0.8) break;
+        if (x.at > fresh) continue;
+        if (S3.enabled && S3.usage.known && !S3.has(x.f) && !enabled) continue;   // в облаке его нет — единственная копия
+        await fs.promises.unlink(path.join(UP_DIR, x.f)).catch(() => {});
+        total -= x.size;
+      }
+    } catch (e) { console.error('[cloud] чистка кеша:', e.message); }
+  }, 5000);
+  trimTimer.unref();
+}
+
+// Занятое место в хранилище файлов (для /api/health и админки). null — облака для файлов нет.
+function usage() {
+  if (S3.enabled) return { kind: 's3', bytes: S3.usage.bytes, files: S3.usage.files, max: S3.usage.max, known: S3.usage.known };
+  return null;
+}
+const hasRoom = bytes => S3.hasRoom(bytes);
+let initTries = 0;
+async function initFiles() {              // подсчёт занятого места; при неудаче повторяем, сервер при этом работает
+  if (!S3.enabled) return;
+  try { await S3.init(); trim(); }
+  catch (e) { const wait = Math.min(300, 15 * 2 ** initTries++); console.error('[s3]', e.message, `— повтор через ${wait} с`); setTimeout(initFiles, wait * 1000).unref(); }
+}
+
+module.exports = { enabled, files, status, restore, queue, final, putUpload, getUpload, dropUpload, usage, hasRoom, initFiles };

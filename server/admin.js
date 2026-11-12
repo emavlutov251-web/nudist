@@ -2,6 +2,7 @@
 // Админ-панель владельца сервиса: RBAC, пользователи, жалобы, флаги, статистика, мониторинг, аудит.
 const fs = require('fs'), os = require('os'), path = require('path'), crypto = require('crypto');
 const C = require('./core');
+const Cloud = require('./cloud');
 const A = require('./auth');
 const R = require('./rpc');
 const G = require('./guild');
@@ -15,6 +16,7 @@ function log(c, act, d) { db.audit.push({ ts: now(), by: c.uid, act, d }); if (d
 
 let dirCache = { at: 0, size: 0, files: 0 };
 function uploadsSize() {
+  const cu = Cloud.usage(); if (cu && cu.known) return { at: now(), size: cu.bytes, files: cu.files, max: cu.max };   // файлы в облаке: локальный диск — только кеш
   if (now() - dirCache.at < 60000) return dirCache;
   let size = 0, files = 0;
   try { for (const f of fs.readdirSync(C.UPLOADS)) { size += fs.statSync(path.join(C.UPLOADS, f)).size; files++; } } catch (e) { /* пусто */ }
@@ -27,7 +29,7 @@ function stats() {
   return { users: people.length, bots: users.length - people.length, online: [...C.conns.keys()].length, dau: (db.daily[today()] || { dau: [] }).dau.length, wau: people.filter(u => u.seen > t - 7 * 864e5).length, mau: people.filter(u => u.seen > t - 30 * 864e5).length,
     premium: people.filter(C.isPremium).length, banned: people.filter(u => u.banned).length, msgs: Object.values(db.msgs).reduce((a, m) => a + m.length, 0), msgsToday: (db.daily[today()] || {}).msgs || 0,
     groups: chats.filter(c => c.type === 'group').length, channels: chats.filter(c => c.type === 'channel').length, dms: chats.filter(c => c.type === 'dm').length, secrets: chats.filter(c => c.type === 'secret').length, servers: Object.keys(db.servers).length,
-    stories: Object.values(db.stories).filter(s => s.ts > t - 864e5).length, reportsOpen: db.reports.filter(r => r.status === 'open').length, uploads: up.size, uploadFiles: up.files, starsTotal: people.reduce((a, u) => a + (u.stars || 0), 0), days };
+    stories: Object.values(db.stories).filter(s => s.ts > t - 864e5).length, reportsOpen: db.reports.filter(r => r.status === 'open').length, uploads: up.size, uploadFiles: up.files, uploadsMax: up.max || 0, starsTotal: people.reduce((a, u) => a + (u.stars || 0), 0), days };
 }
 function monitor() {
   const m = process.memoryUsage(); let conn = 0; for (const s of C.conns.values()) conn += s.size;

@@ -80,8 +80,9 @@ function serveUpload(req, res, name) {
   if (!/^[\w-]+\.[a-z0-9]{1,8}$/.test(name)) return json(res, 404, { error: 'not found' });
   const file = path.join(C.UPLOADS, name);
   fs.stat(file, async (err, stt) => {
-    if (err && Cloud.enabled && await Cloud.getUpload(name, file)) return serveUpload(req, res, name);   // диск хостинга стёрт — берём из облака
+    if (err && Cloud.files && await Cloud.getUpload(name, file)) return serveUpload(req, res, name);   // диск хостинга стёрт — берём из облака
     if (err) return json(res, 404, { error: 'not found' });
+    if (Cloud.files && Date.now() - stt.mtimeMs > 3600e3) fs.utimes(file, new Date(), new Date(), () => {});   // отметка «недавно открывали» для чистки кеша
     const ext = name.split('.').pop(), inline = INLINE_UPLOAD.has(ext);
     const q = new URL(req.url, 'http://x').searchParams.get('n');
     const h = { 'content-type': inline ? MIME[ext] : 'application/octet-stream', 'accept-ranges': 'bytes', 'cache-control': 'private, max-age=31536000, immutable', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox", 'cross-origin-resource-policy': 'same-origin' };
@@ -104,6 +105,7 @@ function handleUpload(req, res) {
   if (!db.flags.uploads) return json(res, 403, { error: 'Загрузка файлов отключена администратором' });
   const maxMb = Number(process.env.MAX_UPLOAD_MB) || (C.isPremium(a.u) ? 400 : 100), max = maxMb * 1024 * 1024;
   const len = Number(req.headers['content-length']) || 0;
+  if (!Cloud.hasRoom(len)) { req.resume(); return json(res, 507, { error: 'Хранилище файлов заполнено. Удалите ненужные треки и клипы или напишите в поддержку.' }); }
   if (len > max) { req.resume(); return json(res, 413, { error: `Файл больше ${maxMb} МБ. ${C.isPremium(a.u) ? '' : 'С Премиумом лимит выше.'}` }); }
   let name = ''; try { name = decodeURIComponent(req.headers['x-name'] || ''); } catch (e) { /* игнор */ }
   name = name.replace(/[\\/\u0000-\u001f]/g, '_').slice(0, 200) || 'file';
@@ -118,7 +120,7 @@ function handleUpload(req, res) {
   out.on('finish', async () => {
     if (dead) return;
     try { await Cloud.putUpload(fname, tmp); }
-    catch (e) { console.error('[cloud] файл не сохранён:', e.message); fs.unlink(tmp, () => {}); return json(res, 502, { error: 'Не удалось сохранить файл в хранилище. Попробуйте ещё раз.' }); }
+    catch (e) { console.error('[cloud] файл не сохранён:', e.message); fs.unlink(tmp, () => {}); return json(res, e.full ? 507 : 502, { error: e.full ? 'Хранилище файлов заполнено. Удалите ненужные треки и клипы или напишите в поддержку.' : 'Не удалось сохранить файл в хранилище. Попробуйте ещё раз.' }); }
     json(res, 200, { url: '/u/' + fname, name, size, mime: (req.headers['content-type'] || 'application/octet-stream').slice(0, 100) });
   });
   out.on('error', () => { if (!dead) { dead = true; json(res, 500, { error: 'Не удалось сохранить файл' }); } });
@@ -130,7 +132,7 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x'), p = url.pathname;
     if (p.startsWith('/u/')) return serveUpload(req, res, p.slice(3));
     if (p === '/api/upload' && req.method === 'POST') return handleUpload(req, res);
-    if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined });
+    if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined, files: (u => u ? { mb: Math.round(u.bytes / 1048576), maxMb: Math.round(u.max / 1048576), count: u.files } : undefined)(Cloud.usage()) });
     if (p === '/api/config') return json(res, 200, { flags: db.flags, name: 'Нудист', version: '1.0.0' });
     if (p === '/api/clientlog' && req.method === 'POST') {      // телефон сообщает, почему приложение не запустилось
       try { A.limit('clog:' + ipOf(req), 20, 600e3); const b = (await readBody(req, 6000)).toString('utf8').replace(/[\r\n]+/g, ' ').slice(0, 1500); console.log('[client]', (req.headers['user-agent'] || '').slice(0, 200), '|', b); } catch (e) { /* лимит или мусор */ }
