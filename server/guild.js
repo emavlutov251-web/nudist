@@ -345,4 +345,22 @@ H['call.decline'] = (c, p) => {
 };
 const roomsFor = uid => { const out = []; for (const [cid, r] of rooms) { const ch = db.chats[cid]; if (ch && C.isMember(ch, uid)) out.push(roomView(cid, r)); } return out; };
 
-module.exports = { serverView, createServer, joinServer, leaveServer, destroyServer, addChannel, emitServer, emitChannels, runHook, roleButton, eventReminders, rooms, roomsFor, dropConn, leaveRoom, TEMPLATES };
+// Звук «через сервер». Когда прямое соединение между двумя участниками не устанавливается (нет TURN, строгий NAT оператора, VPN),
+// клиент шлёт сжатый звук двоичными кадрами, а сервер пересылает их адресатам из той же комнаты. Видео так не передаётся.
+// Кадр от клиента: [0xA1][длина id чата][id чата][число адресатов]([длина id][id])…[звук]. Кадр клиенту: [0xA2][длина id][id отправителя][звук].
+function audio(c, buf) {
+  if (Array.isArray(buf)) buf = Buffer.concat(buf); else if (!Buffer.isBuffer(buf)) buf = Buffer.from(buf);
+  if (buf.length < 6 || buf.length > 6000 || buf[0] !== 0xA1) return;
+  const t = Date.now(); if (t - (c.at || 0) >= 1000) { c.at = t; c.an = 0; } if (++c.an > 60) return;
+  let o = 1; const l = buf[o++], chat = buf.toString('latin1', o, o + l); o += l;
+  const r = rooms.get(chat), s = r && r.peers.get(c.id); if (!s || s.speak === false || s.smute) return;
+  const n = buf[o++]; if (!n || n > 16) return; const ids = [];
+  for (let i = 0; i < n && o < buf.length; i++) { const k = buf[o++]; ids.push(buf.toString('latin1', o, o + k)); o += k; }
+  if (o >= buf.length) return;
+  const out = Buffer.concat([Buffer.from([0xA2, c.id.length]), Buffer.from(c.id, 'latin1'), buf.subarray(o)]);
+  for (const id of ids) {
+    if (id === c.id || !r.peers.has(id)) continue;
+    const to = C.connById.get(id); if (to && to.ws.readyState === 1 && to.ws.bufferedAmount < 300000) to.ws.send(out, { binary: true });
+  }
+}
+module.exports = { audio, serverView, createServer, joinServer, leaveServer, destroyServer, addChannel, emitServer, emitChannels, runHook, roleButton, eventReminders, rooms, roomsFor, dropConn, leaveRoom, TEMPLATES };

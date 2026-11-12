@@ -196,7 +196,8 @@ function onConnect(ws, tok, sess, u, ip) {
   if (first) presence(u, true);
   save();
   ws.on('pong', () => { c.alive = true; });
-  ws.on('message', async data => {
+  ws.on('message', async (data, isBinary) => {
+    if (isBinary) return G.audio(c, data); // звук звонка, идущий через сервер
     let q; try { q = JSON.parse(data.toString()); } catch (e) { return; }
     if (!q || typeof q.m !== 'string') return;
     if (++c.n > 80) return c.raw(JSON.stringify({ id: q.id, e: 'Слишком много запросов. Помедленнее, мы записываем.' }));

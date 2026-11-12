@@ -130,9 +130,10 @@ export const on = (ev, fn) => { (handlers[ev] = handlers[ev] || []).push(fn); };
 export function connect() {
   if (!S.token) return; closing = false;
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?token=' + encodeURIComponent(S.token));
-  const my = ws;
+  const my = ws; ws.binaryType = 'arraybuffer';
   ws.onopen = () => { backoff = 500; };
   ws.onmessage = e => {
+    if (typeof e.data !== 'string') { for (const f of handlers['#bin'] || []) { try { f(e.data); } catch (err) { console.error('[bin]', err); } } return; } // двоичные кадры: звук звонка через сервер
     const q = JSON.parse(e.data);
     if (q.id) { const p = pending.get(q.id); if (p) { pending.delete(q.id); q.e ? p.no(new Error(q.e)) : p.ok(q.r === undefined ? true : q.r); } return; }
     for (const f of handlers[q.ev] || []) { try { f(q.d); } catch (err) { console.error('[event ' + q.ev + ']', err); } }
@@ -146,6 +147,7 @@ export function connect() {
   };
 }
 export function disconnect() { closing = true; if (ws) ws.close(); ws = null; }
+export function sendBin(buf) { if (!ws || ws.readyState !== 1 || ws.bufferedAmount > 200000) return false; ws.send(buf); return true; }
 export function rpc(m, p) {
   return new Promise((ok, no) => {
     if (!ws || ws.readyState !== 1) return no(new Error('Нет соединения с сервером'));

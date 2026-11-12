@@ -1,6 +1,6 @@
 // Звонки и голосовые каналы: WebRTC mesh (до 12 человек), сигналинг через сервер.
 // Новичок в комнате шлёт offer каждому, остальные отвечают; дальше дорожки меняются через replaceTrack без пересогласования.
-import { html, useState, useEffect, useRef, S, bump, on, rpc, toast, Icon, Avatar, cx, showMenu, userName, fmtDur, chatInfo, confirmDlg, download, setSetting } from './lib.js';
+import { html, useState, useEffect, useRef, S, bump, on, rpc, sendBin, toast, Icon, Avatar, cx, showMenu, userName, fmtDur, chatInfo, confirmDlg, download, setSetting } from './lib.js';
 import { sfx, SOUNDBOARD } from './fun.js';
 import { openChat, sendPayload } from './store.js';
 
@@ -41,7 +41,7 @@ function tick() {
 
 // ───── соединения
 function mkPeer(id, offerer) {
-  const pc = new RTCPeerConnection({ iceServers: ice }), p = RTC.peers[id] = { id, pc, offerer, stream: new MediaStream(), audio: new Audio(), q: [], chain: Promise.resolve(), atx: null, vtx: null };
+  const pc = new RTCPeerConnection({ iceServers: ice }), p = RTC.peers[id] = { id, pc, offerer, stream: new MediaStream(), audio: new Audio(), q: [], chain: Promise.resolve(), atx: null, vtx: null, bad: Date.now(), relay: false, rg: null, rt: 0, spT: null };
   p.audio.autoplay = true; p.audio.srcObject = p.stream; p.audio.muted = RTC.deaf; if (sink && p.audio.setSinkId) p.audio.setSinkId(sink).catch(() => {});
   pc.onicecandidate = e => { if (e.candidate) sig(id, { ice: e.candidate }); };
   pc.ontrack = e => { if (!p.stream.getTracks().includes(e.track)) p.stream.addTrack(e.track); if (e.track.kind === 'audio') { p.audio.play().catch(() => {}); watch(id, p.stream); setVol(id); } e.track.onunmute = bump; e.track.onmute = bump; bump(); };
@@ -53,7 +53,7 @@ function mkPeer(id, offerer) {
   }
   return p;
 }
-function dropPeer(id) { const p = RTC.peers[id]; if (!p) return; try { p.pc.close(); } catch (e) { /* закрыт */ } p.audio.srcObject = null; unwatch(id); delete RTC.peers[id]; if (RTC.pin === id) RTC.pin = null; }
+function dropPeer(id) { const p = RTC.peers[id]; if (!p) return; try { p.pc.close(); } catch (e) { /* закрыт */ } p.audio.srcObject = null; clearTimeout(p.spT); if (p.rg) { try { p.rg.disconnect(); } catch (e) { /* уже отключён */ } } unwatch(id); delete RTC.peers[id]; if (RTC.pin === id) RTC.pin = null; }
 function setVol(id) { const p = RTC.peers[id], pr = room().peers.find(x => x.id === id); if (p && pr) p.audio.volume = RTC.vol[pr.user] == null ? 1 : RTC.vol[pr.user]; }
 on('rtc.signal', d => {
   if (d.chat !== RTC.chat || !RTC.me) return; const data = d.data || {};
@@ -71,6 +71,66 @@ on('rtc.signal', d => {
   }).catch(e => console.warn('[rtc signal]', e));
 });
 
+// ───── звук через сервер: запасной путь, когда прямое соединение не устанавливается (нет TURN, строгий NAT оператора, VPN)
+// Микрофон → 16 кГц моно → сжатие μ-law (8 бит на отсчёт, около 16 КБ/с) → двоичные кадры по веб-сокету → сервер → собеседник. Видео так не передаётся.
+const MU = (() => { const t = new Float32Array(256); for (let i = 0; i < 256; i++) { const u = ~i & 255, e = (u >> 4) & 7; let v = (((u & 15) << 3) + 132) << e; v -= 132; t[i] = ((u & 128) ? -v : v) / 32768; } return t; })();
+function muEnc(x) { let v = Math.max(-32635, Math.min(32635, Math.round(x * 32768))), sign = 0; if (v < 0) { v = -v; sign = 128; } v += 132; let e = 7; for (let m = 0x4000; (v & m) === 0 && e > 0; m >>= 1) e--; return ~(sign | (e << 4) | ((v >> (e + 3)) & 15)) & 255; }
+let cap = null, relayT = null, relayTold = false;
+const audioCtx = () => { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume().catch(() => {}); return actx; };
+function capStop() { if (!cap) return; cap.node.onaudioprocess = null; for (const n of [cap.src, cap.node, cap.mute]) { try { n.disconnect(); } catch (e) { /* уже отключён */ } } cap = null; }
+function capStart() {
+  if (cap && cap.mic === mic) return; capStop(); if (!mic || !micTrack()) return;
+  try {
+    const ctx = audioCtx(), src = ctx.createMediaStreamSource(mic), node = ctx.createScriptProcessor(2048, 1, 1), mute = ctx.createGain(); mute.gain.value = 0;
+    const step = ctx.sampleRate / 16000; let pos = 0, quiet = 99;
+    node.onaudioprocess = e => {
+      const inp = e.inputBuffer.getChannelData(0), to = Object.keys(RTC.peers).filter(id => RTC.peers[id].relay);
+      if (!to.length || !RTC.chat || RTC.muted || !RTC.canSpeak) { pos = 0; return; }
+      const out = new Uint8Array(Math.ceil(inp.length / step) + 2); let n = 0, peak = 0;
+      for (; pos < inp.length; pos += step) { const a = pos | 0, b = Math.min(inp.length, Math.max(a + 1, Math.round(pos + step))); let v = 0; for (let k = a; k < b; k++) v += inp[k]; v /= b - a; const m = v < 0 ? -v : v; if (m > peak) peak = m; out[n++] = muEnc(v); }
+      pos -= inp.length;
+      quiet = peak < 0.004 ? quiet + 1 : 0; if (quiet > 6) return; // тишину не шлём
+      const head = [0xA1, RTC.chat.length]; for (let i = 0; i < RTC.chat.length; i++) head.push(RTC.chat.charCodeAt(i) & 255);
+      head.push(to.length); for (const id of to) { head.push(id.length); for (let i = 0; i < id.length; i++) head.push(id.charCodeAt(i) & 255); }
+      const f = new Uint8Array(head.length + n); f.set(head, 0); f.set(out.subarray(0, n), head.length);
+      if (sendBin(f.buffer)) RTC.rout++;
+    };
+    src.connect(node); node.connect(mute); mute.connect(ctx.destination); cap = { mic, src, node, mute };
+  } catch (e) { console.warn('[relay mic]', e); }
+}
+function playRelay(p, data) {
+  try {
+    const ctx = audioCtx(); if (!p.rg) { p.rg = ctx.createGain(); p.rg.connect(ctx.destination); }
+    const pr = room().peers.find(x => x.id === p.id); p.rg.gain.value = RTC.deaf ? 0 : pr && RTC.vol[pr.user] != null ? RTC.vol[pr.user] : 1;
+    const now = ctx.currentTime; if (p.rt > now + 0.6) return; // накопилось больше полсекунды — лишнее выбрасываем, чтобы не росла задержка
+    const ratio = ctx.sampleRate / 16000, n = Math.floor(data.length * ratio), ab = ctx.createBuffer(1, n, ctx.sampleRate), ch = ab.getChannelData(0), last = data.length - 1; let sq = 0;
+    for (let i = 0; i < n; i++) { const x = i / ratio, a = x | 0, v0 = MU[data[a]], v = v0 + (MU[data[a < last ? a + 1 : last]] - v0) * (x - a); ch[i] = v; sq += v * v; }
+    if (p.rt < now + 0.02) p.rt = now + 0.12; // запас на неровную доставку
+    const src = ctx.createBufferSource(); src.buffer = ab; src.connect(p.rg); src.start(p.rt); p.rt += ab.duration;
+    const rms = Math.sqrt(sq / n); if (rms > RTC.rlvl) RTC.rlvl = rms;
+    if (rms > 0.03) { if (!RTC.speaking[p.id]) { RTC.speaking[p.id] = true; bump(); } clearTimeout(p.spT); p.spT = setTimeout(() => { delete RTC.speaking[p.id]; bump(); }, 400); }
+  } catch (e) { console.warn('[relay play]', e); }
+}
+on('#bin', buf => {
+  const b = new Uint8Array(buf); if (b[0] !== 0xA2 || !RTC.chat || b.length < 4) return;
+  const l = b[1], p = RTC.peers[String.fromCharCode.apply(null, b.subarray(2, 2 + l))];
+  if (!p || p.pc.connectionState === 'connected') return;
+  RTC.rin++; if (!p.relay) { p.relay = true; relayNote(); bump(); } // собеседник уже перешёл на запасной путь — отвечаем тем же
+  playRelay(p, b.subarray(2 + l));
+});
+function relayNote() { capStart(); if (!relayTold) { relayTold = true; toast('Напрямую соединиться не вышло. Звук идёт через сервер, видео в таком режиме не передаётся.'); } }
+function relayCheck() {
+  if (!RTC.chat) return; const now = Date.now(); let ch = false;
+  for (const p of Object.values(RTC.peers)) {
+    const st = p.pc.connectionState;
+    if (st === 'connected') { p.bad = 0; if (p.relay) { p.relay = false; ch = true; } continue; }
+    if (!p.bad) p.bad = now;
+    if (!p.relay && (st === 'failed' || now - p.bad > 5000)) { p.relay = true; ch = true; relayNote(); }
+  }
+  if (Object.values(RTC.peers).some(p => p.relay)) capStart(); else capStop();
+  if (ch) bump();
+}
+
 // ───── вход и выход
 async function join(chatId, { video, ring } = {}) {
   if (joining) return; if (RTC.chat === chatId) { RTC.min = false; bump(); return; }
@@ -81,7 +141,8 @@ async function join(chatId, { video, ring } = {}) {
     mic = await getMic(); if (!mic) toast('Микрофон недоступен — вы только слушаете. Разрешите доступ и включите микрофон кнопкой.', 'err');
     const ch = S.chats[chatId], muted = !mic;
     const r = await rpc(ring ? 'call.start' : 'rtc.join', { chat: chatId, video: !!video, muted });
-    Object.assign(RTC, { chat: chatId, me: r.you, connected: true, muted, deaf: false, cam: false, screen: false, hand: false, canSpeak: true, pin: null, min: false, since: Date.now(), ring: RTC.ring && RTC.ring.chat === chatId ? null : RTC.ring });
+    Object.assign(RTC, { chat: chatId, me: r.you, connected: true, muted, deaf: false, cam: false, screen: false, hand: false, canSpeak: true, pin: null, min: false, since: Date.now(), ring: RTC.ring && RTC.ring.chat === chatId ? null : RTC.ring, rin: 0, rout: 0, rlvl: 0 });
+    relayTold = false; clearInterval(relayT); relayT = setInterval(relayCheck, 1000);
     ice = r.ice || []; S.rooms[chatId] = r.room; lastTalk = Date.now(); stopRing();
     const self = r.room.peers.find(x => x.id === r.you); if (self) { RTC.canSpeak = self.speak !== false; if (!RTC.canSpeak) RTC.muted = true; }
     applyMic(); if (mic) watch(r.you, mic);
@@ -100,7 +161,7 @@ function stopMedia() { stopVideo(); if (mic) mic.getTracks().forEach(t => t.stop
 function cleanup(quiet) {
   if (!RTC.chat) return; stopRing(); stopRec();
   for (const id of Object.keys(RTC.peers)) dropPeer(id); for (const id of Object.keys(meters)) unwatch(id);
-  clearInterval(meterT); meterT = null; stopMedia();
+  clearInterval(meterT); meterT = null; clearInterval(relayT); relayT = null; capStop(); stopMedia();
   Object.assign(RTC, { chat: null, me: null, connected: false, muted: false, deaf: false, hand: false, speaking: {}, pin: null, min: false, fx: [], pttDown: false, since: 0 });
   if (!quiet) sfx('leave'); bump();
 }
@@ -234,7 +295,7 @@ function peerMenu(e, chat, pr) {
 }
 function Tile({ chat, pr, big }) {
   const u = S.users[pr.user], me = pr.id === RTC.me, p = RTC.peers[pr.id], stream = me ? RTC.localVideo : p && p.stream, hasVid = (pr.cam || pr.screen) && stream && stream.getVideoTracks().length > 0;
-  const st = me ? '' : !p ? '' : p.pc.connectionState === 'connected' ? '' : p.pc.connectionState === 'failed' ? 'нет связи' : 'соединение…';
+  const st = me ? '' : !p ? '' : p.pc.connectionState === 'connected' ? '' : p.relay ? 'через сервер' : p.pc.connectionState === 'failed' ? 'нет связи' : 'соединение…';
   return html`<div class=${cx('tile', RTC.speaking[pr.id] && !pr.muted && 'talk', big && 'big', hasVid && 'vid')} onClick=${() => { RTC.pin = RTC.pin === pr.id ? null : pr.id; bump(); }} onContextMenu=${e => peerMenu(e, chat, pr)}>
     ${hasVid ? html`<${Vid} stream=${stream} mirror=${me && pr.cam && !RTC.vfx} contain=${pr.screen} />` : html`<${Avatar} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${big ? 120 : 72} />`}
     <span class="tile-n">${pr.muted && html`<${Icon} n="mic-off" s=${13} />`}${pr.deaf && html`<${Icon} n="headphone-off" s=${13} />`}${pr.screen && html`<${Icon} n="monitor-up" s=${13} />`}<b>${userName(u)}${me ? ' (вы)' : ''}</b>${st && html`<i>${st}</i>`}</span>
