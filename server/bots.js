@@ -62,6 +62,7 @@ const BUILTIN = {
   nudist: { name: 'Нудист', bio: 'Служебные уведомления. Скрывать нам нечего, но пароль мы всё равно не спросим.', badges: ['verified'], cmds: [{ c: 'start', d: 'приветствие' }, { c: 'help', d: 'что тут вообще можно' }] },
   botbatya: { name: 'БотБатя', bio: 'Отец всех ботов. Создаю ботов и выдаю токены. Спросите /help.', badges: ['verified'], cmds: [{ c: 'newbot', d: 'создать бота' }, { c: 'mybots', d: 'мои боты' }, { c: 'token', d: 'показать токен' }, { c: 'revoke', d: 'перевыпустить токен' }, { c: 'setapp', d: 'привязать Mini App' }, { c: 'delbot', d: 'удалить бота' }, { c: 'help', d: 'справка по Bot API' }] },
   membot: { name: 'МемБот', bio: 'Мемы, анекдоты, голые факты и гороскоп сомнительной точности. В любом чате: @membot запрос', badges: [], cmds: [{ c: 'mem', d: 'случайный мем' }, { c: 'anekdot', d: 'анекдот' }, { c: 'fact', d: 'голый факт' }, { c: 'compliment', d: 'комплимент' }, { c: 'horoscope', d: 'гороскоп' }, { c: 'help', d: 'справка' }], inline: true },
+  support: { name: 'Поддержка', bio: 'Техподдержка «Нудиста». Опишите проблему — на частые вопросы отвечу сразу, остальное передам человеку.', badges: ['verified'], cmds: [{ c: 'help', d: 'частые вопросы' }, { c: 'operator', d: 'позвать оператора' }] },
   listopad: { name: 'Листопад', bio: 'Мини-игра: тапайте по листку и зарабатывайте листики 🍃', badges: [], cmds: [{ c: 'start', d: 'играть' }], app: '/miniapps/listopad.html' },
 };
 function ensureBuiltin() {
@@ -100,6 +101,7 @@ const HELP = `**Шпаргалка**
 
 const batyaState = new Map();
 const builtinHandlers = {
+  support(bot, chat, m) { require('./hub').onSupport(bot, chat, m); },
   nudist(bot, chat, m) {
     const t = (m.text || '').trim();
     if (/^\/start/.test(t)) botSay(bot, chat, WELCOME);

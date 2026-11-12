@@ -10,6 +10,7 @@ import { MediaViewer, StoryViewer, AudioBar } from './media.js';
 import { openSettings } from './settings.js';
 import { hashFromHistory } from './back.js';
 import './fluent.js';
+import { Hub, openHub, openApps } from './hub.js';
 import { takeRef, pendingRef, clearRef } from './growth.js';
 takeRef();
 // Офлайн-кеш оболочки: со второго захода приложение открывается с диска. Вышла новая версия — докачается в фоне и предложит обновиться.
@@ -133,6 +134,7 @@ function App() {
     <${Rail} /><${Sidebar} />
     <main class="main">${S.offline && html`<div class="offline"><${Icon} n="refresh-cw" s=${15} /> Нет связи с сервером. Переподключаемся…</div>`}<${AudioBar} />${chat ? html`<${Main} key=${chat.id + (S.ui.thread || '')} chat=${chat} />` : html`<${Welcome} />`}</main>
     ${S.ui.panel && chat && html`<${InfoPanel} chat=${chat} />`}
+    <${Hub} />
   </div>
   <${CallLayer} /><${Modals} />${S.viewer && html`<${MediaViewer} />`}${S.storyView && html`<${StoryViewer} />`}<${Menu} /><${Toasts} />${S.ui.boss && html`<${BossScreen} />`}`;
 }
@@ -159,6 +161,7 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('click', () => { try { if ('Notification' in window && Notification.permission === 'default' && S.ready && S.settings.notif && !local.get('askedNotif')) { local.set('askedNotif', 1); Notification.requestPermission(); } } catch (e) { /* игнор */ } }, { passive: true });
 async function handleHash(first) {
+  if (/^#hub(=\w+)?$/.test(location.hash)) { const t = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); openHub(['music', 'clips', 'live', 'apps', 'help'].includes(t) ? t : 'music'); return; }
   if (location.hash === '#invite') { history.replaceState(history.state, '', location.pathname); import('./growth.js').then(g => g.openInvite()); return; }
   if (first && pendingRef()) { const r = pendingRef(); clearRef(); if (S.me && r.toLowerCase() !== (S.me.username || '').toLowerCase()) { showProfile(null, r); return; } }      // уже вошедший открыл чужую ссылку-приглашение — покажем, кто звал
   const h = location.hash.slice(1); if (!h) { if (first && innerWidth > 800) { const l = local.get('lastChat'); if (l && S.chats[l]) openChat(l); } return; }

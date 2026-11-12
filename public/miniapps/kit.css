@@ -1,0 +1,19 @@
+/* Общий набор мини-приложений «Нудиста»: плоско, квадратно, как в Windows 10. */
+@font-face { font-family: 'Golos Text'; src: url(/fonts/golos-text-cyrillic-wght-normal.woff2) format('woff2'); font-weight: 400 900; unicode-range: U+0400-045F, U+0490-0491, U+2116; }
+@font-face { font-family: 'Golos Text'; src: url(/fonts/golos-text-latin-wght-normal.woff2) format('woff2'); font-weight: 400 900; unicode-range: U+0000-00FF, U+2000-206F, U+20AC, U+2122; }
+* { box-sizing: border-box; margin: 0; }
+:root { --bg: #F3F3F3; --card: #FFFFFF; --ink: #111; --ink2: #555; --line: #CFCFCF; --hover: #E5E5E5; --accent: #0078D7; --on: #fff; }
+[data-theme='dark'] { --bg: #1B1B1B; --card: #2B2B2B; --ink: #F2F2F2; --ink2: #A8A8A8; --line: #444; --hover: #383838; --accent: #4CA6EE; --on: #000; }
+html, body { height: 100%; }
+body { font: 15px/1.4 'Golos Text', 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--ink); -webkit-tap-highlight-color: transparent; touch-action: manipulation; overflow: hidden; }
+main { height: 100%; max-width: 460px; margin: 0 auto; padding: 14px 16px 16px; display: flex; flex-direction: column; overflow-y: auto; }
+main > * + * { margin-top: 12px; }
+h1 { font-size: 20px; font-weight: 600; } .dim { color: var(--ink2); } .row { display: flex; align-items: center; } .row > * + * { margin-left: 8px; } .grow { flex: 1; min-width: 0; } .center { text-align: center; }
+button { font: inherit; color: inherit; border: 0; background: var(--hover); padding: 9px 16px; cursor: pointer; transition: transform .08s, background .12s; }
+button:hover { background: var(--line); } button:active { transform: scale(.96); } button.pri { background: var(--accent); color: var(--on); } button.pri:hover { filter: brightness(1.1); } button:disabled { opacity: .5; cursor: default; }
+input, textarea, select { font: inherit; color: inherit; width: 100%; padding: 8px 10px; background: var(--card); border: 2px solid var(--line); outline: none; } input:focus, textarea:focus { border-color: var(--accent); }
+label { display: block; font-size: 13px; color: var(--ink2); } label > * { margin-top: 4px; }
+.card { background: var(--card); border: 1px solid var(--line); padding: 14px; }
+.tabs { display: flex; border-bottom: 1px solid var(--line); } .tabs button { flex: 1; background: none; padding: 9px 4px; border-bottom: 2px solid transparent; color: var(--ink2); } .tabs button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.big { font-size: 44px; font-weight: 700; line-height: 1.1; } .stat { flex: 1; background: var(--card); border: 1px solid var(--line); padding: 8px 12px; } .stat small { display: block; color: var(--ink2); font-size: 12px; } .stat b { font-size: 20px; }
+#toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; } #toast.on { opacity: .94; }

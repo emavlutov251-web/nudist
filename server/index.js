@@ -5,6 +5,7 @@ const { WebSocketServer } = require('./vendor/ws');
 const C = require('./core');
 const Cloud = require('./cloud');
 const A = require('./auth');
+const Hub = require('./hub');
 const R = require('./rpc');
 const G = require('./guild');
 const B = require('./bots');
@@ -203,7 +204,7 @@ function onConnect(ws, tok, sess, u, ip) {
     }
   });
   ws.on('close', () => {
-    G.dropConn(c); C.connById.delete(c.id);
+    G.dropConn(c); Hub.dropConn(c); C.connById.delete(c.id);
     const set = C.conns.get(u.id); if (set) { set.delete(c); if (!set.size) { C.conns.delete(u.id); const cur = db.users[u.id]; if (cur && !cur.deleted) { cur.seen = now(); presence(cur, false); save(); } } }
   });
   ws.on('error', () => {});

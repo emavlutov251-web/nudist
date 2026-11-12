@@ -28,6 +28,7 @@ function layers() {
     if (u.reply || u.edit) L.push(() => { u.reply = null; u.edit = null; });
     if (u.sel) L.push(() => { u.sel = null; });
   }
+  if (u.hub) L.push(() => { import('./hub.js').then(h => h.closeHub()); });
   for (const m of S.modals) {
     L.push(() => { if (m.props && typeof m.props.res === 'function') m.props.res(null); closeModal(m.id); });
     const h = backHooks.get(m.id); if (h && h.depth()) L.push(() => { h(); });          // внутри окна есть свой шаг назад

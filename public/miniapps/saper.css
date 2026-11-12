@@ -1,0 +1,6 @@
+#field { display: grid; grid-template-columns: repeat(9, 1fr); width: 100%; max-width: 380px; margin-left: auto; margin-right: auto; background: var(--line); padding: 2px; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+#field button { margin: 1px; padding: 0; padding-top: calc(100% - 2px); position: relative; background: var(--card); border: 1px solid var(--line); }
+#field button span { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; }
+#field button.open { background: var(--hover); border-color: transparent; } #field button.boom { background: #E81123; }
+.n1 { color: #0078D7; } .n2 { color: #107C10; } .n3 { color: #E81123; } .n4 { color: #5C2D91; } .n5 { color: #A4262C; } .n6 { color: #008272; } .n7 { color: var(--ink); } .n8 { color: var(--ink2); }
+#new { font-size: 20px; padding: 6px 12px; }

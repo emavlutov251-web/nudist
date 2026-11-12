@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Жребий</title>
+<link rel="stylesheet" href="/miniapps/kit.css">
+<link rel="stylesheet" href="/miniapps/lot.css">
+<script type="module" src="/miniapps/lot.js"></script>
+</head>
+<body>
+<main>
+  <div class="tabs" id="tabs"><button type="button" data-t="coin" class="on">Монетка</button><button type="button" data-t="dice">Кубик</button><button type="button" data-t="list">Из списка</button></div>
+  <div class="card center" id="stage"><div class="big" id="res">🪙</div><p class="dim" id="sub">Нажмите «Бросить»</p></div>
+  <label id="listbox" hidden>Кто участвует (по одному в строке или через запятую)<textarea id="names" rows="4" placeholder="Вася&#10;Петя&#10;Маша"></textarea></label>
+  <div class="row"><button id="go" class="pri grow" type="button">Бросить</button><button id="share" type="button" disabled>В чат</button></div>
+  <p class="dim center">Жребий честный: случайность берётся у браузера, а не у того, кто кидает.</p>
+</main>
+</body>
+</html>

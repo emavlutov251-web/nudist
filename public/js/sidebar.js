@@ -6,6 +6,7 @@ import { CreateServer, Discover, openServerSettings, ChannelDlg, EventsModal, In
 import { RTC, joinVoice, leaveVoice, toggleMute, toggleDeaf } from './rtc.js';
 import { StoryEditor } from './media.js';
 import { openSettings } from './settings.js';
+import { openHub, openApps, openSupport } from './hub.js';
 import { Streak, openInvite, installApp, isStandalone } from './growth.js';
 
 // ═════ Рейка ═════
@@ -14,7 +15,7 @@ export function Rail() {
   const stat = sid => { let n = 0, m = 0; for (const c of Object.values(S.chats)) if (c.server === sid) { if (!isMuted(c)) n += c.unread || 0; m += c.mentions || 0; } return { n, m }; };
   const home = totalUnread();
   return html`<nav class="rail" aria-label="Серверы">
-    <button class=${cx('rail-b home', !S.ui.server && 'on')} onClick=${() => { S.ui.server = null; S.ui.list = true; bump(); }} title="Чаты" aria-label="Чаты"><${Logo} s=${30} />${home > 0 && html`<b class="rb">${home > 99 ? '99+' : home}</b>`}</button>
+    <button class=${cx('rail-b home', !S.ui.server && !S.ui.hub && 'on')} onClick=${() => { S.ui.server = null; S.ui.list = true; S.ui.hub = null; bump(); }} title="Чаты" aria-label="Чаты"><${Logo} s=${30} />${home > 0 && html`<b class="rb">${home > 99 ? '99+' : home}</b>`}</button>
     <hr />
     <div class="rail-list">${servers.map(s => { const st = stat(s.id); return html`<button key=${s.id} class=${cx('rail-b', S.ui.server === s.id && 'on', st.n > 0 && 'unread')} title=${s.name} onClick=${() => { S.ui.server = s.id; S.ui.list = true; const cur = S.chats[S.ui.chat]; if (!cur || cur.server !== s.id) { const last = local.get('srv.' + s.id); const c = S.chats[last] || Object.values(S.chats).filter(x => x.server === s.id && x.kind === 'text').sort((a, b) => a.pos - b.pos)[0]; if (c && innerWidth > 800) openChat(c.id); else { S.ui.chat = null; } } bump(); }}
         onContextMenu=${e => showMenu(e, serverMenu(s))}>
@@ -22,6 +23,9 @@ export function Rail() {
       <button class="rail-b add" title="Создать сервер или войти по приглашению" onClick=${() => openModal(CreateServer)}><${Icon} n="plus" /></button>
       <button class="rail-b add" title="Каталог серверов" onClick=${() => openModal(Discover)}><${Icon} n="compass" /></button>
     </div>
+    <i class="rail-sep"></i>
+    ${[['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['apps', 'layout-grid', 'Приложения']].map(([k, ic, name]) => html`<button class=${cx('rail-b add hubb', S.ui.hub === k && 'on')} title=${name} aria-label=${name} onClick=${() => openHub(k)}><${Icon} n=${ic} /></button>`)}
+    <i class="rail-sep"></i>
     <button class="rail-b add" title="Прикрыться (Esc Esc)" onClick=${() => { S.ui.boss = true; bump(); }}><${Icon} n="table" /></button>
     <button class="rail-b add" title="Настройки (Ctrl+,)" onClick=${() => openSettings()}><${Icon} n="settings" /></button>
   </nav>`;
@@ -130,6 +134,10 @@ function HomeSidebar() {
   const menu = e => showMenu(e, [
     { icon: 'user-plus', label: 'Позвать друзей', hint: '+50 🍃', run: openInvite },
     !isStandalone() && { icon: 'smartphone', label: 'Установить как приложение', run: installApp },
+    '-',
+    { icon: 'music', label: 'Музыка, клипы и эфиры', run: () => openHub() },
+    { icon: 'layout-grid', label: 'Приложения', run: () => openApps(S.ui.chat) },
+    { icon: 'life-buoy', label: 'Помощь и поддержка', run: () => openHub('help') },
     '-',
     { icon: 'users', label: 'Новая группа', run: () => openModal(CreateChat, { type: 'group' }) },
     { icon: 'megaphone', label: 'Новый канал', run: () => openModal(CreateChat, { type: 'channel' }) },

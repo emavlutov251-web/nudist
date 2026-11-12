@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Скинемся</title>
+<link rel="stylesheet" href="/miniapps/kit.css">
+<link rel="stylesheet" href="/miniapps/split.css">
+<script type="module" src="/miniapps/split.js"></script>
+</head>
+<body>
+<main>
+  <label>Сумма счёта, ₽<input id="sum" type="number" inputmode="decimal" min="0" placeholder="3200"></label>
+  <div class="row"><label class="grow">Сколько человек<input id="ppl" type="number" inputmode="numeric" min="1" value="2"></label><label class="grow">Чаевые, %<input id="tip" type="number" inputmode="numeric" min="0" max="100" value="10"></label></div>
+  <label>Округлять до<select id="round"><option value="1">рубля</option><option value="10" selected>10 ₽</option><option value="50">50 ₽</option><option value="100">100 ₽</option></select></label>
+  <div class="card center"><p class="dim">С каждого</p><div class="big" id="each">0 ₽</div><p class="dim" id="total">Введите сумму</p></div>
+  <button id="share" class="pri" type="button" disabled>Отправить расчёт в чат</button>
+</main>
+</body>
+</html>

@@ -1,0 +1,1 @@
+#stage { padding: 26px 14px; } #res { min-height: 54px; word-break: break-word; } #res.roll { animation: roll .45s; } @keyframes roll { from { transform: rotate(-200deg) scale(.5); opacity: .3; } to { transform: none; opacity: 1; } }

@@ -1,0 +1,8 @@
+#board { position: relative; width: 100%; max-width: 380px; margin-left: auto; margin-right: auto; background: var(--line); padding: 6px; display: grid; grid-template-columns: repeat(4, 1fr); touch-action: none; user-select: none; -webkit-user-select: none; }
+#board i { display: block; margin: 4px; padding-top: calc(100% - 8px); position: relative; background: var(--hover); font-style: normal; }
+#board i b { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; }
+#board i.pop { animation: pop .14s; } @keyframes pop { from { transform: scale(.7); } to { transform: scale(1); } }
+.v2 { background: #E8F1FB !important; color: #111; } .v4 { background: #CFE4F7 !important; color: #111; } .v8 { background: #9CCBF0 !important; color: #111; } .v16 { background: #61ADE6 !important; color: #fff; }
+.v32 { background: #2B8FDB !important; color: #fff; } .v64 { background: #0078D7 !important; color: #fff; } .v128 { background: #00B7C3 !important; color: #fff; } .v256 { background: #8764B8 !important; color: #fff; }
+.v512 { background: #E3008C !important; color: #fff; } .v1024 { background: #FFB900 !important; color: #111; } .v2048 { background: #1F9D57 !important; color: #fff; } .vx { background: #111 !important; color: #fff; }
+.v1024 b, .v2048 b, .vx b { font-size: 20px !important; }
