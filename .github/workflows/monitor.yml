@@ -1,0 +1,29 @@
+# Сторож: раз в 15 минут проверяет, что сайт отвечает. Если нет — запуск падает, и GitHub присылает письмо владельцу репозитория.
+# Ночью (02:00–06:00 по Москве) не проверяет: бесплатный Render в это время спит, чтобы хватило бесплатных часов на месяц.
+# Адрес берётся из переменной репозитория SITE_URL (Settings → Secrets and variables → Actions → Variables).
+name: Сторож
+
+on:
+  schedule:
+    - cron: '7,22,37,52 3-22 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    name: Сайт отвечает
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      SITE_URL: ${{ vars.SITE_URL }}
+    steps:
+      - name: Проверка /api/health
+        run: |
+          [ -n "$SITE_URL" ] || { echo "::warning::Переменная SITE_URL не задана"; exit 0; }
+          # Спящий бесплатный сервер просыпается до минуты, поэтому несколько попыток.
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 45 "$SITE_URL/api/health"; then echo; echo "Сайт жив."; exit 0; fi
+            echo "Попытка $i: нет ответа"; sleep 20
+          done
+          echo "::error::$SITE_URL не отвечает уже несколько минут"; exit 1

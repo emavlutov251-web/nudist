@@ -1,0 +1,87 @@
+# Каждый push в main: проверка кода → сборка Docker-образа → выкладка на Render → проверка, что сайт жив.
+name: Проверка и выкладка
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'public/**'
+      - 'scripts/smoke.js'
+      - 'package.json'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Проверка
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Синтаксис сервера и клиента
+        run: |
+          for f in server/*.js; do node --check "$f"; done
+          for f in public/js/*.js; do cp "$f" /tmp/check.mjs && node --check /tmp/check.mjs || { echo "::error file=$f::синтаксическая ошибка"; exit 1; }; done
+      - name: Главный путь (регистрация, вход, WebSocket, файлы)
+        run: node scripts/smoke.js
+      - name: Docker-образ собирается и запускается
+        run: |
+          docker build -t nudist:ci .
+          docker run -d --name nudist-ci -p 3000:3000 nudist:ci
+          for i in $(seq 1 20); do curl -fsS --max-time 3 http://127.0.0.1:3000/api/health && exit 0; sleep 1; done
+          docker logs nudist-ci; exit 1
+
+  deploy:
+    name: Выкладка на Render
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+      SITE_URL: ${{ vars.SITE_URL }}
+    steps:
+      - name: Запустить выкладку и дождаться результата
+        run: |
+          if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
+            echo "::warning::Секрет RENDER_API_KEY или переменная RENDER_SERVICE_ID не заданы — выкладка пропущена."; exit 0
+          fi
+          api="https://api.render.com/v1/services/$RENDER_SERVICE_ID"
+          auth="Authorization: Bearer $RENDER_API_KEY"
+          id=""
+          for try in 1 2 3 4 5; do
+            id=$(curl -sS --max-time 40 -X POST "$api/deploys" -H "$auth" -H 'Content-Type: application/json' -d "{\"commitId\":\"$GITHUB_SHA\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
+            [ -n "$id" ] && break
+            echo "Render не ответил, попытка $try"; sleep 30
+          done
+          [ -n "$id" ] || { echo "::error::Render не принял запрос на выкладку"; exit 1; }
+          echo "Выкладка $id, коммит $GITHUB_SHA"
+          for i in $(seq 1 100); do
+            st=$(curl -sS --max-time 30 "$api/deploys/$id" -H "$auth" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)
+            echo "  состояние: ${st:-нет ответа}"
+            case "$st" in
+              live) exit 0 ;;
+              build_failed|update_failed|canceled|pre_deploy_failed|deactivated) echo "::error::Выкладка не удалась: $st"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::Выкладка не закончилась за отведённое время"; exit 1
+      - name: Сайт отвечает после выкладки
+        if: env.SITE_URL != ''
+        run: |
+          for i in $(seq 1 12); do curl -fsS --max-time 40 "$SITE_URL/api/health" && exit 0; sleep 10; done
+          echo "::error::$SITE_URL не отвечает после выкладки"; exit 1

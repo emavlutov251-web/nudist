@@ -1,0 +1,10 @@
+.git
+.github
+data
+android
+node_modules
+deploy
+scripts
+README.md
+.env
+*.log
