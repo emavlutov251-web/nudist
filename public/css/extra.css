@@ -128,3 +128,9 @@ span.ava { flex: 0 0 auto !important; display: inline-grid !important; overflow:
 .once-stage { display: grid; place-items: center; min-height: 240px; background: #000; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; } .once-stage img, .once-stage video { max-width: 100%; max-height: 68vh; display: block; pointer-events: auto; }
 .steps { margin: 0 0 12px; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; line-height: 1.4; }
 .upd-bar { position: fixed; left: 50%; bottom: 18px; z-index: 200; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; transform: translateX(-50%); background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: var(--r); font-size: .92em; white-space: nowrap; }
+
+/* «Голая правда»: анонимные вопросы */
+.ask { display: flex; flex-direction: column; gap: 12px; } .ask-lead { margin: 0; line-height: 1.45; }
+.ask-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
+.ask-q { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--hover); border-radius: var(--r-s); } .ask-q > div { flex: 1; min-width: 0; } .ask-q p { margin: 0; overflow-wrap: anywhere; } .ask-q small { color: var(--ink3); }
+.ask-q.off { opacity: .55; } .ask-q .btn { flex: none; }

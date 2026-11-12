@@ -6,6 +6,7 @@ const C = require('./core');
 const Cloud = require('./cloud');
 const A = require('./auth');
 const Hub = require('./hub');
+const Ask = require('./ask');
 const R = require('./rpc');
 const G = require('./guild');
 const B = require('./bots');
@@ -19,7 +20,8 @@ const MIME = { apk: 'application/vnd.android.package-archive', html: 'text/html;
 const INLINE_UPLOAD = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'mp4', 'webm', 'mov', 'mp3', 'ogg', 'oga', 'opus', 'wav', 'm4a', 'aac', 'flac', 'pdf', 'txt']);
 const CSP = "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'self' https:; object-src 'none'; base-uri 'self'";
 
-const ipOf = req => (String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+// Адрес клиента. На Render перед нами Cloudflare: он сам пишет настоящий адрес в cf-connecting-ip, а первый элемент x-forwarded-for клиент может подделать.
+const ipOf = req => { const h = req.headers, cf = process.env.RENDER && (h['cf-connecting-ip'] || h['true-client-ip']); return String(cf || String(h['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '').replace(/^::ffff:/, ''); };
 const json = (res, code, body) => { const s = JSON.stringify(body); res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); res.end(s); };
 function readBody(req, max = 100000) {
   return new Promise((resolve, reject) => { const ch = []; let n = 0; req.on('data', d => { n += d.length; if (n > max) { reject(new C.PubError('Слишком большой запрос')); req.destroy(); } else ch.push(d); }); req.on('end', () => resolve(Buffer.concat(ch))); req.on('error', reject); });
@@ -54,7 +56,7 @@ function serveStatic(req, res, rel) {
 // ───── офлайн-кеш оболочки (service worker)
 // Браузер один раз скачивает все файлы интерфейса и дальше открывает приложение с диска, без единого запроса за кодом.
 // Версия — хеш содержимого: после выкладки новой версии браузер сам докачает её в фоне и предложит обновиться.
-const SW_SKIP = /^\/(admin\.html|css\/admin\.css|js\/admin\.js|nudist\.apk|og\.png|sw\.js)$/;
+const SW_SKIP = /^\/(admin\.html|ask\.html|css\/admin\.css|js\/admin\.js|js\/ask\.js|nudist\.apk|og\.png|sw\.js)$/;
 let swBody = null;
 function buildSw() {
   const files = [], hash = crypto.createHash('sha1');
@@ -138,6 +140,8 @@ const server = http.createServer(async (req, res) => {
       try { A.limit('clog:' + ipOf(req), 20, 600e3); const b = (await readBody(req, 6000)).toString('utf8').replace(/[\r\n]+/g, ' ').slice(0, 1500); console.log('[client]', (req.headers['user-agent'] || '').slice(0, 200), '|', b); } catch (e) { /* лимит или мусор */ }
       return json(res, 200, { ok: true });
     }
+    if (p === '/api/ask/info' && req.method === 'GET') return json(res, 200, Ask.info(url.searchParams.get('u'), ipOf(req)));
+    if (p === '/api/ask' && req.method === 'POST') return json(res, 200, Ask.send(await readJson(req), ipOf(req)));
     if (p.startsWith('/api/admin/')) { const r = Adm.httpApi(p, req.headers.authorization); return json(res, r.code, r.body); }
     if (p.startsWith('/api/')) {
       const fn = A.api[p.slice(5)]; if (!fn || req.method !== 'POST') return json(res, 404, { error: 'not found' });
@@ -152,6 +156,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/sw.js') return serveSw(req, res);
     if (p === '/' || p === '/index.html') return serveStatic(req, res, 'index.html');
     if (p === '/admin' || p === '/admin/') return serveStatic(req, res, 'admin.html');
+    if (/^\/q\/[\w.-]{1,40}\/?$/.test(p)) return serveStatic(req, res, 'ask.html');      // «Голая правда»: страница анонимного вопроса
     return serveStatic(req, res, p);
   } catch (e) {
     if (e instanceof C.PubError) return json(res, 400, { error: e.message });

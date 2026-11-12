@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Задай анонимный вопрос · Нудист</title>
+<meta name="description" content="Спроси что угодно — анонимно. Имя не увидит никто.">
+<meta property="og:title" content="Задай мне анонимный вопрос">
+<meta property="og:description" content="Спроси что угодно. Кто спросил — не узнает никто.">
+<meta property="og:image" content="/og.png">
+<meta name="theme-color" content="#0E191B">
+<link rel="icon" href="/icon.svg">
+<style>
+*{box-sizing:border-box;margin:0}
+html,body{min-height:100%}
+body{font:16px/1.45 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;color:#EAF3EE;background:#0E191B;background-image:radial-gradient(120% 70% at 50% -10%,#1F9D57 0%,rgba(31,157,87,.25) 38%,rgba(14,25,27,0) 70%);background-attachment:fixed;display:flex;flex-direction:column;align-items:center;padding:28px 16px calc(24px + env(safe-area-inset-bottom))}
+main{width:100%;max-width:440px;display:flex;flex-direction:column;gap:14px;flex:1}
+.who{display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0 4px;text-align:center}
+.ava{width:84px;height:84px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:600;color:#fff;background:#1F9D57;background-size:cover;background-position:center;box-shadow:0 0 0 4px rgba(255,255,255,.14)}
+.who b{font-size:20px;font-weight:600}
+.who small{opacity:.7;font-size:14px}
+.card{background:rgba(25,41,44,.86);border:1px solid rgba(255,255,255,.09);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+h1{font-size:22px;line-height:1.2;font-weight:600;text-align:center}
+textarea{width:100%;min-height:128px;resize:vertical;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.28);color:inherit;font:inherit;padding:12px;outline:0}
+textarea:focus{border-color:#35C97A}
+.row{display:flex;gap:10px;align-items:center}
+.cnt{margin-left:auto;font-size:13px;opacity:.6}
+button,.btn{font:inherit;border:0;border-radius:12px;min-height:48px;padding:0 16px;cursor:pointer;color:#fff;background:#1F9D57;font-weight:600;display:flex;align-items:center;justify-content:center;text-decoration:none;transition:transform .08s}
+button:active,.btn:active{transform:scale(.97)}
+button[disabled]{opacity:.55;cursor:default}
+.ghost{background:rgba(255,255,255,.1);font-weight:500}
+.wide{width:100%}
+.hint{font-size:13px;opacity:.68;text-align:center}
+.err{color:#FFB4A2;font-size:14px;text-align:center;min-height:20px}
+.done{text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
+.done .big{font-size:56px;line-height:1}
+.promo{background:linear-gradient(135deg,#1F9D57,#0D7C8C);border:0}
+.promo b{font-size:18px}
+.promo p{font-size:14px;opacity:.92}
+.promo .btn{background:#fff;color:#0E191B}
+footer{margin-top:18px;font-size:13px;opacity:.6;text-align:center}
+footer a{color:inherit}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <div class="who"><div class="ava" id="ava">🍃</div><b id="name">…</b><small id="uname"></small></div>
+
+  <section class="card" id="form">
+    <h1>Задай мне анонимный вопрос</h1>
+    <textarea id="text" maxlength="500" placeholder="Спроси что угодно. Имя не увидит никто."></textarea>
+    <div class="row"><button type="button" class="ghost" id="dice">🎲 Подкинуть вопрос</button><span class="cnt" id="cnt">0 / 500</span></div>
+    <div class="err" id="err"></div>
+    <button type="button" class="wide" id="send">Отправить анонимно</button>
+    <p class="hint">Без регистрации. Мы не показываем получателю ни имя, ни номер, ни адрес.</p>
+  </section>
+
+  <section class="card done" id="done" hidden>
+    <div class="big">🍃</div>
+    <h1>Отправлено!</h1>
+    <p class="hint">Вопрос уже у получателя. Кто спросил — останется тайной.</p>
+    <button type="button" class="ghost wide" id="again">Спросить ещё</button>
+  </section>
+
+  <section class="card done" id="closed" hidden>
+    <div class="big">🙈</div>
+    <h1 id="closedTitle">Вопросы закрыты</h1>
+    <p class="hint" id="closedText">Этот человек сейчас не принимает анонимные вопросы.</p>
+  </section>
+
+  <section class="card promo">
+    <b>Хочешь узнать, что о тебе думают?</b>
+    <p>Заведи свою ссылку за полминуты, выложи в истории — и получай анонимные вопросы от друзей.</p>
+    <a class="btn wide" id="own" href="/">Получить свою ссылку</a>
+  </section>
+</main>
+<footer><a href="/">Нудист</a> — мессенджер, которому нечего скрывать</footer>
+<script src="/js/ask.js"></script>
+</body>
+</html>

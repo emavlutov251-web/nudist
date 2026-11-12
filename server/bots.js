@@ -63,6 +63,7 @@ const BUILTIN = {
   botbatya: { name: 'БотБатя', bio: 'Отец всех ботов. Создаю ботов и выдаю токены. Спросите /help.', badges: ['verified'], cmds: [{ c: 'newbot', d: 'создать бота' }, { c: 'mybots', d: 'мои боты' }, { c: 'token', d: 'показать токен' }, { c: 'revoke', d: 'перевыпустить токен' }, { c: 'setapp', d: 'привязать Mini App' }, { c: 'delbot', d: 'удалить бота' }, { c: 'help', d: 'справка по Bot API' }] },
   membot: { name: 'МемБот', bio: 'Мемы, анекдоты, голые факты и гороскоп сомнительной точности. В любом чате: @membot запрос', badges: [], cmds: [{ c: 'mem', d: 'случайный мем' }, { c: 'anekdot', d: 'анекдот' }, { c: 'fact', d: 'голый факт' }, { c: 'compliment', d: 'комплимент' }, { c: 'horoscope', d: 'гороскоп' }, { c: 'help', d: 'справка' }], inline: true },
   support: { name: 'Поддержка', bio: 'Техподдержка «Нудиста». Опишите проблему — на частые вопросы отвечу сразу, остальное передам человеку.', badges: ['verified'], cmds: [{ c: 'help', d: 'частые вопросы' }, { c: 'operator', d: 'позвать оператора' }] },
+  pravda: { name: 'Голая правда', bio: 'Сюда приходят анонимные вопросы по вашей личной ссылке. Кто спросил — не знает никто, даже мы.', badges: ['verified'], cmds: [{ c: 'start', d: 'как это работает' }] },
   listopad: { name: 'Листопад', bio: 'Мини-игра: тапайте по листку и зарабатывайте листики 🍃', badges: [], cmds: [{ c: 'start', d: 'играть' }], app: '/miniapps/listopad.html' },
 };
 function ensureBuiltin() {
@@ -145,6 +146,7 @@ const builtinHandlers = {
     if (/^\/horoscope/.test(t)) return botSay(bot, chat, `🔮 **${pick(SIGNS)}** (угадал?). ${pick(HORO)}`);
     if (chat.type === 'dm') botSay(bot, chat, pick(SMALLTALK));
   },
+  pravda(bot, chat) { botSay(bot, chat, '🍃 **Голая правда** — анонимные вопросы.\n\nОткройте меню ☰ → **«Голая правда»**: там ваша личная ссылка и картинка для истории. Выложите ссылку в соцсетях — вопросы придут в этот чат. Кто спросил, не узнает никто.\n\nОтвечать сюда бесполезно: я бот и никому не передам. Ответьте в истории — пусть гадают, кто спрашивал.'); },
   listopad(bot, chat) { botSay(bot, chat, `🍃 **Листопад** — тапайте по листку, копите листики, тратьте на Премиум и бусты.\nЛистик падает за каждые ${R.LEAF.per} ${R.LEAF.per % 10 === 1 && R.LEAF.per % 100 !== 11 ? 'тап' : 'тапов'}, в день — не больше ${R.LEAF.limit} 🍃. Лёгких листьев не бывает.`, { btn: [[{ t: '🍃 Играть', app: '/miniapps/listopad.html' }]] }); },
 };
 const builtinCallbacks = {

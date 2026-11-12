@@ -206,7 +206,7 @@ function pollView(p, uid) {
 function msgView(m, uid) {
   if (!m) return null;
   const v = { ...m };
-  delete v.hid; delete v.hist; delete v.clicks;
+  delete v.hid; delete v.hist; delete v.clicks; delete v.src;
   if (m.views) v.views = m.views.length;
   if (m.poll) v.poll = pollView(m.poll, uid);
   if (m.once) { delete v.media; v.kind = m.type; v.type = 'once'; v.once = m.onceAt ? 'seen' : 'new'; }      // одноразовое: адрес файла не уходит никому, пока получатель не откроет
