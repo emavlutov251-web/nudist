@@ -85,8 +85,8 @@ function MiniApp({ id, bot, url, initData, builtin }) {
   useEffect(() => {
     const on = async e => {
       if (!fr.current || e.source !== fr.current.contentWindow || !e.data || !builtin) return; const d = e.data, reply = x => fr.current && fr.current.contentWindow.postMessage(x, location.origin);
-      if (d.nudist === 'ready') reply({ nudist: 'balance', stars: S.me.stars || 0, left: 1500 - (S.me.taps || 0), daily: S.me.lastDaily !== new Date().toISOString().slice(0, 10), name: userName(S.me) });
-      if (d.nudist === 'tap') { try { const r = await rpc('stars.tap', { n: d.n }); reply({ nudist: 'balance', stars: r.stars, left: r.left }); } catch (x) { reply({ nudist: 'error', text: x.message }); } }
+      if (d.nudist === 'ready') { try { const r = await rpc('stars.info'); reply({ nudist: 'balance', ...r, name: userName(S.me) }); } catch (x) { reply({ nudist: 'error', text: x.message }); } }
+      if (d.nudist === 'tap') { try { const r = await rpc('stars.tap', { n: d.n }); reply({ nudist: 'balance', ...r, ack: true }); } catch (x) { reply({ nudist: 'error', text: x.message, ack: true }); } }
       if (d.nudist === 'daily') { try { const r = await rpc('stars.daily'); reply({ nudist: 'bonus', n: r.n, stars: r.stars }); } catch (x) { reply({ nudist: 'error', text: x.message }); } }
     };
     addEventListener('message', on); return () => removeEventListener('message', on);
@@ -96,7 +96,7 @@ function MiniApp({ id, bot, url, initData, builtin }) {
 
 // ═════ Листики и Премиум ═════
 export function StarsModal({ id }) {
-  const u = S.me, prem = (u.premiumUntil || 0) > Date.now(), price = (S.prices || {}).premium || 500, [busy, setBusy] = useState(false);
+  const u = S.me, prem = (u.premiumUntil || 0) > Date.now(), price = (S.prices || {}).premium || 500, [busy, setBusy] = useState(false), lf = (S.prices || {}).leaf || { per: 10, limit: 150, dailyMin: 10, dailyMax: 20 };
   const daily = async () => { setBusy(true); const r = await call('stars.daily'); setBusy(false); if (r) { toast(`+${r.n} 🍃 Ежедневный урожай собран`); confetti(); sfx('coin'); } };
   const game = async () => { try { const r = await rpc('user.get', { username: 'listopad' }); S.users[r.user.id] = r.user; openMiniApp(r.user.id); } catch (e) { toast(e.message, 'err'); } };
   const buy = async () => { if (!(await confirmDlg({ title: 'Нудист Голый Премиум', text: `Спишется ${price} 🍃 за 30 дней. Настоящие деньги не нужны и не принимаются.`, ok: 'Оформить' }))) return; const r = await call('premium.buy'); if (r) { toast('Премиум активирован. Теперь вы голый, но с привилегиями.'); confetti(); sfx('fanfare'); } };
@@ -107,6 +107,7 @@ export function StarsModal({ id }) {
     <div class=${cx('prem', prem && 'on')}><h3><${Icon} n="leaf" /> Нудист Голый Премиум</h3>${prem ? html`<p>Активен до ${new Date(u.premiumUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>` : html`<p>Всё то же самое, только с позолотой. ${price} 🍃 за 30 дней.</p>`}
       <ul>${PERKS.map(([i, t]) => html`<li><${Icon} n=${i} s=${16} /> ${t}</li>`)}</ul>
       <button class="btn warn" onClick=${buy}>${prem ? 'Продлить на 30 дней' : 'Оформить'} · ${price} 🍃</button></div>
+    <p class="hint">Откуда берутся листики: ежедневный бонус ${lf.dailyMin === lf.dailyMax ? lf.dailyMin : lf.dailyMin + '–' + lf.dailyMax} 🍃, «Листопад» — листик за каждые ${lf.per} тапов, не больше ${lf.limit} 🍃 в день, и 50 🍃 за приглашённого друга. Деревья не резиновые.</p>
     <p class="hint">На что ещё тратить: буст сервера (${(S.prices || {}).boost || 200} 🍃), платные каналы, подарки друзьям.</p><//>`;
 }
 

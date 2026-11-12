@@ -16,3 +16,4 @@ header small { display: block; color: #9DC4AE; font-size: .8rem; } header b { fo
 #energy { width: 100%; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, .14); overflow: hidden; } #bar { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #45C97F, #F0A04B); transition: width .2s; }
 footer { width: 100%; display: flex; justify-content: space-between; font-size: .85rem; color: #9DC4AE; } #combo { color: #F0A04B; font-weight: 700; }
 @media (prefers-reduced-motion: reduce) { .fly { animation-duration: .01s; } #leaf span { transition: none; } }
+.fly.dim { font-size: 1rem; opacity: .7; }

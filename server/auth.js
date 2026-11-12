@@ -48,7 +48,7 @@ setInterval(() => { const t = now(); for (const [k, a] of buckets) if (!a.length
 // ───── пользователи и сессии
 const AVA_COLORS = 8;
 // Приглашения: новичок пришёл по ссылке друга — обоим листики, сразу в контактах друг у друга и готовый чат.
-const REF_BONUS = 50, REF_DAILY = 20;
+const REF_BONUS = 50, REF_DAILY = 5;      // бонус за приглашённого и за скольких в день его платят пригласившему
 function invitedBy(u, ref) {
   const inv = db.users[C.byName.get(String(ref).replace(/^@/, '').toLowerCase())];
   if (!inv || inv.bot || inv.deleted || inv.banned || inv.id === u.id) return;

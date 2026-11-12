@@ -175,7 +175,7 @@ function initData(c) {
   const views = chats.map(ch => { const v = C.chatView(ch, u.id); add(v.peer); if (v.last) add(v.last.from); return v; });
   (u.contacts || []).forEach(add); add(db.meta.sys);
   const rooms = G.roomsFor(u.id); rooms.forEach(r => r.peers.forEach(p => add(p.user)));
-  return { me: C.selfUser(u), settings: u.settings || null, chats: views, servers: (u.servers || []).map(sid => db.servers[sid]).filter(Boolean).map(s => G.serverView(s, u.id)), users, flags: db.flags, rooms, conn: c.id, session: db.sessions[c.token].id, sys: db.meta.sys, time: now(), prices: { premium: R.PREMIUM_PRICE, boost: R.BOOST_PRICE } };
+  return { me: C.selfUser(u), settings: u.settings || null, chats: views, servers: (u.servers || []).map(sid => db.servers[sid]).filter(Boolean).map(s => G.serverView(s, u.id)), users, flags: db.flags, rooms, conn: c.id, session: db.sessions[c.token].id, sys: db.meta.sys, time: now(), prices: { premium: R.PREMIUM_PRICE, boost: R.BOOST_PRICE, leaf: R.LEAF } };
 }
 function onConnect(ws, tok, sess, u, ip) {
   const c = { id: C.id(), uid: u.id, token: tok, ip, ws, alive: true, n: 0, raw: s => { if (ws.readyState === 1) ws.send(s); }, send: (ev, d) => c.raw(JSON.stringify({ ev, d })), close: () => ws.close() };

@@ -782,15 +782,32 @@ H['story.viewers'] = (c, p) => { const s = db.stories[p.id]; need(s && s.user ==
 H['story.del'] = (c, p) => { const s = db.stories[p.id]; need(s && s.user === c.uid, 'История не найдена'); delete db.stories[s.id]; save(); C.emitAll('story.del', { id: s.id }); };
 
 // ══════════ ЛИСТИКИ (внутренняя валюта) И ПРЕМИУМ ══════════
-const PREMIUM_PRICE = 500, BOOST_PRICE = 200, TAP_DAY_LIMIT = 1500;
+const PREMIUM_PRICE = 500, BOOST_PRICE = 200;
+// Сколько листиков и как быстро можно добыть. Числа меняются переменными окружения (см. README), применяются после перезапуска.
+const envInt = (k, d, min, max) => { const n = Number(process.env[k]); return process.env[k] !== undefined && Number.isFinite(n) && n >= min && n <= max ? Math.floor(n) : d; };
+const LEAF = {
+  per: envInt('LEAF_TAPS', 10, 1, 1000),                 // тапов в «Листопаде» на один листик
+  limit: envInt('LEAF_DAY_LIMIT', 150, 0, 100000),       // листиков в день за тапы
+  dailyMin: envInt('LEAF_DAILY_MIN', 10, 0, 100000),     // ежедневный бонус, от
+  dailyMax: envInt('LEAF_DAILY_MAX', 20, 0, 100000),     // и до
+};
+if (LEAF.dailyMax < LEAF.dailyMin) LEAF.dailyMax = LEAF.dailyMin;
+// Тапы принимаем не быстрее, чем их может настучать человек: скрипт, который шлёт «300 тапов» раз за разом, получит столько же, сколько живой палец.
+const TAP_RATE = 15, TAP_BURST = 150, tapBucket = new Map();      // тапов в секунду, запас, пользователь → { t, left }
+const tapsToday = u => (u.tapDay === today() ? u.taps || 0 : 0);
+const leafInfo = u => { const t = tapsToday(u); return { stars: u.stars || 0, per: LEAF.per, prog: t % LEAF.per, left: Math.max(0, LEAF.limit - Math.floor(t / LEAF.per)), limit: LEAF.limit, daily: u.lastDaily !== today(), dailyMin: LEAF.dailyMin, dailyMax: LEAF.dailyMax }; };
+H['stars.info'] = c => leafInfo(user(c));
 function spend(u, n, why) { need(db.flags.stars, 'Листики временно отключены'); need((u.stars || 0) >= n, `Не хватает листиков: нужно ${n} 🍃, у вас ${u.stars || 0}. ${why || ''}`); u.stars -= n; }
-H['stars.daily'] = c => { const u = user(c); need(db.flags.stars, 'Листики отключены'); need(u.lastDaily !== today(), 'Сегодняшний бонус уже собран. Листья растут до завтра.'); u.lastDaily = today(); const n = 50 + crypto.randomInt(0, 51); u.stars = (u.stars || 0) + n; save(); selfUpdate(u); return { n, stars: u.stars }; };
+H['stars.daily'] = c => { const u = user(c); need(db.flags.stars, 'Листики отключены'); need(u.lastDaily !== today(), 'Сегодняшний бонус уже собран. Листья растут до завтра.'); u.lastDaily = today(); const n = LEAF.dailyMin + crypto.randomInt(0, LEAF.dailyMax - LEAF.dailyMin + 1); u.stars = (u.stars || 0) + n; save(); selfUpdate(u); return { n, stars: u.stars }; };
 H['stars.tap'] = (c, p) => {
   const u = user(c); need(db.flags.stars, 'Листики отключены');
-  if (u.tapDay !== today()) { u.tapDay = today(); u.taps = 0; }
-  const n = Math.min(int(p.n, 0, 300), TAP_DAY_LIMIT - u.taps);
-  u.taps += n; u.stars = (u.stars || 0) + n; save(); selfUpdate(u);
-  return { n, left: TAP_DAY_LIMIT - u.taps, stars: u.stars };
+  if (u.tapDay !== today()) { u.tapDay = today(); u.taps = 0; }      // u.taps — тапы за сегодня, листик капает за каждые LEAF.per
+  const t = now(); let b = tapBucket.get(u.id); if (!b) { if (tapBucket.size > 100000) tapBucket.clear(); tapBucket.set(u.id, b = { t, left: TAP_BURST }); }
+  b.left = Math.min(TAP_BURST, b.left + (t - b.t) / 1000 * TAP_RATE); b.t = t;
+  const taps = Math.max(0, Math.min(int(p.n, 0, 300), Math.floor(b.left), LEAF.limit * LEAF.per - u.taps)); b.left -= taps;
+  const before = Math.floor(u.taps / LEAF.per); u.taps += taps; const n = Math.floor(u.taps / LEAF.per) - before;
+  if (n) { u.stars = (u.stars || 0) + n; selfUpdate(u); } if (taps) save();
+  return { n, taps, ...leafInfo(u) };
 };
 H['stars.send'] = (c, p) => {
   const u = user(c), o = getUser(p.to), n = int(p.n, 1, 100000); need(o.id !== u.id, 'Себе дарить — это просто перекладывание');
@@ -798,7 +815,7 @@ H['stars.send'] = (c, p) => {
   const ch = C.openDm(u.id, o.id);
   postMessage(ch, u.id, { type: 'service', text: `подарил(а) ${n} 🍃`, gift: n }, { quiet: true });
 };
-H['premium.buy'] = c => { const u = user(c); spend(u, PREMIUM_PRICE, 'Заработайте в мини-игре «Листопад» или заберите ежедневный бонус.'); u.premiumUntil = Math.max(u.premiumUntil || 0, now()) + 30 * 864e5; save(); selfUpdate(u); C.broadcastUser(u); return { until: u.premiumUntil }; };
+H['premium.buy'] = c => { const u = user(c); spend(u, PREMIUM_PRICE, 'Листики копятся в мини-игре «Листопад», ежедневным бонусом и приглашениями друзей.'); u.premiumUntil = Math.max(u.premiumUntil || 0, now()) + 30 * 864e5; save(); selfUpdate(u); C.broadcastUser(u); return { until: u.premiumUntil }; };
 H['fun.buzz'] = (c, p) => { const ch = getChat(c, p.chat); need(ch.type === 'dm' || ch.type === 'group', 'Пинать можно только в личке и группах'); A.limit('buzz:' + c.uid + ch.id, 1, 15000); for (const u of membersOf(ch)) emit(u, 'buzz', { chat: ch.id, user: c.uid }); };
 
-module.exports = { H, getChat, getUser, uname, usersFor, ensureSaved, joinChat, chatPreview, serverPreview, resolveTarget, checkSend, buildPayload, hooksEdit, selfUpdate, spend, BOOST_PRICE, PREMIUM_PRICE };
+module.exports = { H, getChat, getUser, uname, usersFor, ensureSaved, joinChat, chatPreview, serverPreview, resolveTarget, checkSend, buildPayload, hooksEdit, selfUpdate, spend, BOOST_PRICE, PREMIUM_PRICE, LEAF };

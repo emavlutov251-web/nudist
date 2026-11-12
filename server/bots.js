@@ -145,7 +145,7 @@ const builtinHandlers = {
     if (/^\/horoscope/.test(t)) return botSay(bot, chat, `🔮 **${pick(SIGNS)}** (угадал?). ${pick(HORO)}`);
     if (chat.type === 'dm') botSay(bot, chat, pick(SMALLTALK));
   },
-  listopad(bot, chat) { botSay(bot, chat, '🍃 **Листопад** — тапайте по листку, копите листики, тратьте на Премиум и бусты.\nЛимит — 1500 листиков в день, чтобы пальцы не стёрлись.', { btn: [[{ t: '🍃 Играть', app: '/miniapps/listopad.html' }]] }); },
+  listopad(bot, chat) { botSay(bot, chat, `🍃 **Листопад** — тапайте по листку, копите листики, тратьте на Премиум и бусты.\nЛистик падает за каждые ${R.LEAF.per} ${R.LEAF.per % 10 === 1 && R.LEAF.per % 100 !== 11 ? 'тап' : 'тапов'}, в день — не больше ${R.LEAF.limit} 🍃. Лёгких листьев не бывает.`, { btn: [[{ t: '🍃 Играть', app: '/miniapps/listopad.html' }]] }); },
 };
 const builtinCallbacks = {
   membot(bot, chat, m, data) { builtinHandlers.membot(bot, chat, { text: '/' + data, from: m.from }); return {}; },

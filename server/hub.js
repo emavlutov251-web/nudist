@@ -9,7 +9,7 @@ db.tracks = db.tracks || {};      // музыка: id → трек
 db.clips = db.clips || {};        // клипы: id → клип
 db.tickets = db.tickets || {};    // поддержка: id пользователя → обращение
 
-const upMb = u => Number(process.env.MAX_UPLOAD_MB) || (C.isPremium(u) ? 400 : 100);      // тот же предел, что и в загрузке файлов
+const upMb = u => Number(process.env.MAX_UPLOAD_MB) || (u && C.isPremium(u) ? 400 : 100);      // тот же предел, что и в загрузке файлов
 const extOf = url => String(url).split('.').pop().toLowerCase();
 const isMod = u => !!u && ['moderator', 'admin', 'superadmin'].includes(u.admin);
 const me = c => db.users[c.uid];
