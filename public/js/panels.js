@@ -359,7 +359,7 @@ function CsMain({ chat }) {
     ${!ch && html`<label class="fld"><span>Медленный режим</span><select value=${f.slow} onChange=${e => set({ slow: e.target.value })}>${[[0, 'Выключен'], [5, '5 секунд'], [15, '15 секунд'], [60, '1 минута'], [300, '5 минут'], [3600, '1 час']].map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select></label>`}
     ${ch && html`<${Toggle} label="Подписывать посты" hint="Имя автора под каждым постом" on=${f.sign} onChange=${v => set({ sign: v })} />
       <label class="fld"><span>Платная подписка, 🍃 в месяц (0 — бесплатно)</span><input type="number" min="0" max="100000" value=${f.price} onInput=${e => set({ price: e.target.value })} /></label>
-      <label class="fld"><span>Автопостинг: ленты RSS и каналы YouTube (по одной ссылке в строке, до 5)</span><textarea rows="3" value=${f.rss} placeholder=${"https://example.com/feed.xml\nhttps://www.youtube.com/@имя_канала"} onInput=${e => set({ rss: e.target.value })}></textarea></label>`}
+      <label class="fld"><span>Автопостинг: ленты RSS и каналы YouTube (по одной ссылке в строке, до 8)</span><textarea rows="4" value=${f.rss} placeholder=${"https://example.com/feed.xml\nhttps://www.youtube.com/@имя_канала"} onInput=${e => set({ rss: e.target.value })}></textarea></label>`}
     <button class="btn" onClick=${save}>Сохранить</button></div>`;
 }
 function CsPerms({ chat }) {

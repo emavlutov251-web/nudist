@@ -223,7 +223,7 @@ H['chat.update'] = (c, p) => {
       if (p.captcha !== undefined) ch.captcha = !!p.captcha;
       if (p.price !== undefined && ch.type === 'channel') ch.price = int(p.price, 0, 100000) || undefined;
       if (p.automod !== undefined) ch.automod = { words: (Array.isArray(p.automod.words) ? p.automod.words : []).map(w => str(w, 40).toLowerCase()).filter(Boolean).slice(0, 200), flood: !!p.automod.flood, links: !!p.automod.links };
-      if (p.rss !== undefined && ch.type === 'channel') ch.rss = (Array.isArray(p.rss) ? p.rss : []).slice(0, 5).map(r => { const url = str(r.url || r, 300), was = (ch.rss || []).find(x => x.url === url); return was || { url }; }).filter(r => /^https?:\/\//.test(r.url));
+      if (p.rss !== undefined && ch.type === 'channel') ch.rss = (Array.isArray(p.rss) ? p.rss : []).slice(0, 8).map(r => { const url = str(r.url || r, 300), was = (ch.rss || []).find(x => x.url === url); return was || { url }; }).filter(r => /^https?:\/\//.test(r.url));
       audit(ch, c.uid, 'update', Object.keys(p).filter(k => k !== 'id').join(', ') + (before.title !== ch.title ? ` («${before.title}» → «${ch.title}»)` : ''));
     }
   }
