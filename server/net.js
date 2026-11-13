@@ -118,7 +118,9 @@ async function rssItems(url) {
     if (body.toLowerCase().startsWith(title.toLowerCase())) body = body.slice(title.length).replace(/^[\s.:—-]+/, '');
     const raw = ent(b.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1'));
     const img = ((b.match(/<enclosure[^>]+url=["'](https:\/\/[^"']+)["'][^>]*type=["']image\//i) || b.match(/<enclosure[^>]+type=["']image\/[^>]+url=["'](https:\/\/[^"']+)["']/i) || b.match(/<media:(?:content|thumbnail)[^>]+url=["'](https:\/\/[^"']+\.(?:jpe?g|png|webp)[^"']*)["']/i) || raw.match(/<img[^>]+src=["'](https:\/\/[^"']+)["']/i) || [])[1] || '').replace(/&amp;/g, '&');
-    items.push({ title: title.slice(0, 300), link, guid, body, img: img.length < 500 ? img : '' });
+    const when = Date.parse(strip((b.match(/<(?:published|pubDate|dc:date|updated)[^>]*>([\s\S]*?)<\/(?:published|pubDate|dc:date|updated)>/i) || [])[1]));
+    const author = strip((b.match(/<author[^>]*>\s*<name[^>]*>([\s\S]*?)<\/name>/i) || b.match(/<dc:creator[^>]*>([\s\S]*?)<\/dc:creator>/i) || [])[1]).slice(0, 80);
+    items.push({ title: title.slice(0, 300), link, guid, body, img: img.length < 500 ? img : '', ts: when > 0 ? when : 0, author });
   }
   return items;
 }

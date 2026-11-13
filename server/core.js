@@ -367,7 +367,7 @@ function mentionedUsers(chat, from, text) {
 }
 function postMessage(chat, from, p, o = {}) {
   const arr = (db.msgs[chat.id] = db.msgs[chat.id] || []);
-  const m = { id: id(), seq: (chat.seq = (chat.seq || 0) + 1), chat: chat.id, from, ts: now(), type: p.type || 'text' };
+  const m = { id: id(), seq: (chat.seq = (chat.seq || 0) + 1), chat: chat.id, from, ts: o.ts > 0 && o.ts < now() ? o.ts : now(), type: p.type || 'text' };      // o.ts — дата исходной записи (автопостинг старых материалов)
   for (const k of MSG_FIELDS) if (p[k] !== undefined && p[k] !== null && p[k] !== '' && p[k] !== false) m[k] = p[k];
   const ttl = p.ttl || chat.ttl;
   if (ttl && m.type !== 'service') { m.exp = m.ts + ttl * 1000; expiring.push({ c: chat.id, i: m.id, at: m.exp }); }

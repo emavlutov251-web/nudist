@@ -171,7 +171,7 @@ function EditHistory({ id, chat, m }) {
 const clipText = t => { const cut = t.lastIndexOf('\n', 1100); return t.slice(0, cut > 500 ? cut : 1000).replace(/[\s.…,;:]+$/, '') + '…'; };
 const readMin = t => { const n = Math.max(1, Math.round(t.length / 1200)); return n + ' мин чтения'; };
 // Название ролика для окна плеера: первая строка сообщения без разметки и самой ссылки
-const ytTitle = text => String(text || '').split('\n').map(l => l.replace(/https?:\/\/\S+/g, '').replace(/\*\*|__|~~|`|^▶️\s*/g, '').trim()).find(Boolean) || 'Видео с YouTube';
+const ytTitle = text => String(text || '').split('\n').map(l => l.replace(/https?:\/\/\S+/g, '').replace(/\*\*|__|~~|`/g, '').replace(/^(?:▶️|🔴|⚡)\s*/, '').trim()).find(Boolean) || 'Видео с YouTube';
 function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const u = S.users[m.from], mine = m.from === S.me.id, sel = S.ui.sel;
   if (m.type === 'service' && m.present) return html`<${GiftCard} m=${m} />`;
