@@ -65,6 +65,7 @@ export function chatInfo(c) {
 export const kindIcon = k => ({ voice: 'volume-2', stage: 'radio', announce: 'megaphone', forum: 'messages-square', rules: 'scroll-text' }[k] || 'hash');
 export const isMuted = c => !!c && c.mute > Date.now();
 export function svcText(m) {
+  if (!m.from) return m.text || '';      // подпись от самого «Нудиста»: огонёк и подобное
   if (/^(канал создан|создан секретный чат)/.test(m.text || '')) return m.text[0].toUpperCase() + m.text.slice(1);
   if (m.from !== S.me.id) return userName(S.users[m.from]) + ' ' + m.text;
   return 'Вы ' + (m.text || '').replace(/^не нашёл\(ла\)/, 'не нашли').replace(/^не прошёл\(ла\)/, 'не прошли').replace(/^(\S+)л\(а\)/, '$1ли').replace(/^(\S+)[её]н\(а\)/, '$1ены').replace(/покидает/, 'покидаете').replace('Листок изъят.', 'Листок изъят.');

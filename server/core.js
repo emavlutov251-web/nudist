@@ -251,22 +251,40 @@ function unreadCount(chat, uid) {
   }
   return n;
 }
-// «Огонёк»: сколько дней подряд оба собеседника писали друг другу. День считаем по Москве.
+// «Огонёк» (серия переписки), как в TikTok. Считается в личных и секретных чатах и в группах, день — по Москве.
+//   Личный чат: день засчитан, когда написали оба. Группа: когда написали хотя бы двое разных людей.
+//   Огонёк виден с первого же засчитанного дня. Пропустили день — серия сгорает в полночь и начинается заново.
+//   chat.sk = { n — дней подряд, last — последний засчитанный день, by — кто писал сегодня, best — рекорд }
 const dayMsk = (shift = 0) => today(now() + 3 * 3600e3 + shift * 864e5);
+const streakable = chat => !chat.server && (chat.type === 'dm' || chat.type === 'secret' || chat.type === 'group');
+const streakDone = (chat, by) => {      // выполнено ли на сегодня условие; by — { человек: день }
+  const d = dayMsk(), wrote = Object.keys(by).filter(u => by[u] === d && chat.members[u]);
+  if (chat.type === 'group') return wrote.length >= 2;
+  const ids = Object.keys(chat.members); return ids.length === 2 && ids.every(u => by[u] === d);
+};
 function touchStreak(chat, from) {
   const d = dayMsk(), k = chat.sk || (chat.sk = { n: 0, last: '', by: {} });
   if (k.by[from] === d) return false;
+  for (const u of Object.keys(k.by)) if (k.by[u] !== d) delete k.by[u];      // вчерашние отметки больше не нужны
   k.by[from] = d;
-  const ids = Object.keys(chat.members);
-  if (ids.length !== 2 || k.last === d || !ids.every(u => k.by[u] === d)) return false;
-  k.n = k.last === dayMsk(-1) ? k.n + 1 : 1; k.last = d;
+  if (k.last === d || !streakDone(chat, k.by)) return false;
+  k.n = k.last === dayMsk(-1) ? (k.n || 0) + 1 : 1; k.last = d; k.best = Math.max(k.best || 0, k.n);
   return true;
 }
-function streakOf(chat) {      // { n, hot }: hot — сегодня серия уже продлена; иначе она сгорит в полночь
-  const k = chat.sk; if (!k || k.n < 2) return null;
-  if (k.last === dayMsk()) return { n: k.n, hot: true };
-  if (k.last === dayMsk(-1)) return { n: k.n, hot: false };
-  return null;
+// { n, day, hot, me }: hot — сегодня серия уже продлена, иначе она сгорит в полночь; me — этот человек сегодня уже писал.
+// day нужен приложению, чтобы после полуночи самому понять, что огонёк остыл или сгорел, не дожидаясь сервера.
+function streakOf(chat, uid) {
+  const k = chat.sk; if (!k || !k.n || !streakable(chat)) return null;
+  const d = dayMsk(), hot = k.last === d; if (!hot && k.last !== dayMsk(-1)) return null;
+  return { n: k.n, day: k.last, hot, me: !!uid && (k.by || {})[uid] === d };
+}
+const STREAK_MARKS = new Set([3, 7, 10, 30, 50, 100, 150, 200, 300, 365, 500, 1000]);
+function streakNote(chat) {      // подпись в чате: огонёк зажёгся или дошёл до круглого числа
+  const k = chat.sk; if (!k || !db.chats[chat.id]) return;
+  const days = n => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'день' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'дня' : 'дней'}`;
+  if (k.n === 1 && chat.type !== 'group') service(chat, null, '🔥 Огонёк зажжён! Пишите друг другу каждый день, чтобы он не погас');
+  else if (STREAK_MARKS.has(k.n)) service(chat, null, `🔥 Огонёк горит ${days(k.n)} подряд!`);
+  emitChat(chat);
 }
 // ───── Файлы, на которые больше никто не ссылается
 // Удалили сообщение, запись, клип, чат или аккаунт — их файлы нужно стереть, иначе хранилище забьётся мёртвым грузом.
@@ -313,7 +331,7 @@ function chatView(chat, uid) {
     v.pending = (chat.members[uid] || {}).pending;
     if (chatMuted(chat, uid)) v.muted = chatMuted(chat, uid);
     if (chat.type === 'dm' || chat.type === 'secret') v.peer = Object.keys(chat.members).find(u => u !== uid) || uid;
-    if (chat.sk) { const k = streakOf(chat); if (k) v.streak = k; }
+    if (chat.sk) { const k = streakOf(chat, uid); if (k) v.streak = k; }
     if (chat.type === 'secret') { v.keys = chat.keys; v.by = chat.by; }
     if (chat.type === 'group' || chat.type === 'channel') {
       Object.assign(v, { perms: chat.perms, sign: chat.sign, approval: chat.approval, captcha: chat.captcha, price: chat.price, rules: chat.rules, color: chat.color });
@@ -354,7 +372,7 @@ function postMessage(chat, from, p, o = {}) {
   const ttl = p.ttl || chat.ttl;
   if (ttl && m.type !== 'service') { m.exp = m.ts + ttl * 1000; expiring.push({ c: chat.id, i: m.id, at: m.exp }); }
   arr.push(m);
-  if (chat.type === 'dm' && m.type !== 'service' && from && !o.quiet) { const fu = db.users[from]; if (fu && !fu.bot) touchStreak(chat, from); }
+  if (streakable(chat) && m.type !== 'service' && from && !o.quiet) { const fu = db.users[from]; if (fu && !fu.bot && !isRobot(from) && touchStreak(chat, from)) setImmediate(() => { try { streakNote(chat); } catch (e) { console.error('[streak]', e.message); } }); }
   let root = null;
   if (m.thread) { root = findMsg(chat.id, m.thread); if (root) { root.tcount = (root.tcount || 0) + 1; root.tlast = m.ts; } }
   const { out: ment, all } = m.enc ? { out: new Set() } : mentionedUsers(chat, from, m.text);
@@ -461,4 +479,4 @@ function viewersOf(o, viewerId, key = 'seen') {
   for (const v of list) users[v.u] = pubUser(db.users[v.u], viewerId);
   return { list, users };
 }
-module.exports = { POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

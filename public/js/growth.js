@@ -103,10 +103,22 @@ export function AskLink({ id }) {
 }
 export const openAsk = () => openModal(AskLink);
 
-// ───── серия переписки
+// ───── огонёк: серия переписки, как в TikTok
+// Сервер присылает { n, day, hot, me }. День серии — по Москве; после полуночи сами видим, что огонёк остыл (песочные часы) или сгорел.
+const mskDay = shift => new Date(Date.now() + 3 * 3600e3 + (shift || 0) * 864e5).toISOString().slice(0, 10);
+export function streakNow(chat) {
+  const k = chat && chat.streak; if (!k || !k.n) return null;
+  if (!k.day) return { n: k.n, hot: !!k.hot, me: !!k.me };      // ответ старого сервера
+  if (k.day === mskDay()) return { n: k.n, hot: true, me: !!k.me };
+  if (k.day === mskDay(-1)) return { n: k.n, hot: false, me: k.hot ? false : !!k.me };      // k.hot при вчерашнем дне — данные с прошлых суток
+  return null;
+}
 export function Streak({ chat, big }) {
-  const k = chat && chat.streak; if (!k) return null;
-  return html`<span class=${cx('streak', !k.hot && 'cold', big && 'big')} title=${k.hot ? `Серия: ${k.n} ${plural(k.n, ['день', 'дня', 'дней'])} подряд вы пишете друг другу` : `Серия ${k.n} ${plural(k.n, ['день', 'дня', 'дней'])} сгорит в полночь по Москве. Напишите оба, чтобы продлить`}><${Icon} n="flame" s=${big ? 15 : 13} />${k.n}</span>`;
+  const k = streakNow(chat); if (!k) return null;
+  const days = `${k.n} ${plural(k.n, ['день', 'дня', 'дней'])}`, group = chat.type === 'group';
+  const text = k.hot ? `🔥 Огонёк горит ${days} подряд. ${group ? 'Он не гаснет, пока каждый день в группе пишут хотя бы двое.' : 'Пишите друг другу каждый день, чтобы он не погас.'}`
+    : `⏳ Огонёк (${days}) погаснет в полночь по Москве. ${group ? 'Чтобы продлить, сегодня должны написать хотя бы двое.' : k.me ? 'Вы сегодня уже написали — ждём ответа собеседника.' : 'Напишите сегодня, чтобы продлить серию.'}`;
+  return html`<span class=${cx('streak', !k.hot && 'cold', big && 'big')} title=${text} onClick=${big ? e => { e.stopPropagation(); toast(text); } : undefined}><i>${k.hot ? '🔥' : '⏳'}</i>${k.n}</span>`;
 }
 
 // ───── одноразовые фото и видео

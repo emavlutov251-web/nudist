@@ -18,6 +18,7 @@ require('./tgpacks');
 require('./tunes');
 require('./common');
 require('./tv');
+const Streak = require('./streak');
 const Seed = require('./seed');
 const { db, save, now, emit } = C;
 
@@ -286,6 +287,7 @@ setInterval(() => {
 setInterval(() => {
   C.metrics.perMin.push(minuteCount); minuteCount = 0; if (C.metrics.perMin.length > 60) C.metrics.perMin.shift();
   G.eventReminders(); Seed.factJob();
+  try { Streak.remind(); } catch (e) { console.error('[streak]', e.message); }
   const t = now();
   for (const u of Object.values(db.users)) if (u.status && u.status.until && u.status.until < t) { u.status = undefined; C.broadcastUser(u); save(); }
   // истёкшие опросы — разослать финальное состояние
@@ -301,6 +303,7 @@ setInterval(() => { // автоудаление неактивных аккау�
 }, 3600e3).unref();
 
 Seed.seed();
+try { Streak.seedAll(); } catch (e) { console.error('[streak]', e.message); }
 const HOST = process.env.HOST || '0.0.0.0';
 server.on('error', e => { console.error('[fatal] сервер не запустился:', e.message); process.exit(1); });
 server.listen(PORT, HOST, () => console.log(`🍃 «Нудист» запущен: http://${HOST}:${PORT}  (админка: /admin)`));
