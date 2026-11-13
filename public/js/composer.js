@@ -3,6 +3,7 @@ import { html, useState, useEffect, useRef, useLayoutEffect, useMemo, S, bump, r
 import { msgKey, saveDraft, sendPayload, uploads, sendFiles, encryptFor, encryptFile, openChat } from './store.js';
 import { Sticker, PACKS, stickerHints, SLASH, MemeModal } from './fun.js';
 import { pickUsers, openMiniApp, shareLeaves } from './panels.js';
+import { openGiftShop } from './gifts.js';
 
 // ═════ Эмодзи / стикеры / GIF ═════
 // Словарь эмодзи (200 КБ) не нужен, чтобы открыть чат: подгружаем его, когда человек тянется к смайликам.
@@ -221,6 +222,7 @@ export function Composer({ chat, thread }) {
     { icon: 'circle-dot', label: 'Кружочек', run: () => startRec('round') },
     { icon: 'map-pin', label: 'Геопозиция', run: geo },
     { icon: 'contact', label: 'Контакт', run: async () => { const ids = await pickUsers({ title: 'Поделиться контактом', ok: 'Отправить' }); if (ids && ids[0]) post({ type: 'contact', contact: { id: ids[0] } }); } },
+    peer && !peer.bot && S.flags.stars && { emoji: '🎁', label: 'Подарок', hint: 'за листики', run: () => openGiftShop(peer.id) },
     peer && !peer.bot && S.flags.stars && { emoji: '🍃', label: 'Поделиться листиками', run: () => shareLeaves(peer.id) },
     '-', { icon: 'clock', label: 'Отложенные сообщения', run: () => openModal(ScheduledModal, { chat }) },
   ], { anchor: e.currentTarget });

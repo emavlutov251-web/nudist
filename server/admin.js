@@ -55,14 +55,14 @@ H['admin.users'] = (c, p) => {
   const off = int(p.offset, 0, 1e7);
   return { total: list.length, users: list.slice(off, off + 50).map(u => { const ss = Object.values(db.sessions).filter(s => s.user === u.id); return { id: u.id, username: u.username, name: R.uname(u), phone: u.phone, avatar: u.avatar, color: u.color, created: u.created, seen: u.seen, online: C.isOnline(u.id), sessions: ss.length, ip: (ss.sort((a, b) => b.seen - a.seen)[0] || {}).ip, banned: !!u.banned, banReason: u.banReason, muted: u.muted > now() ? u.muted : 0, admin: u.admin, premiumUntil: u.premiumUntil, stars: u.stars || 0, bot: !!u.bot, owner: u.owner, badges: u.badges || [], chats: (u.chats || []).length, servers: (u.servers || []).length, totp: !!u.totpOn }; }) };
 };
-function target(c, uid, min = 'moderator') { const me = guard(c, min); const u = db.users[uid]; need(u && !u.deleted, 'Пользователь не найден'); need(u.id === me.id || rank(u) < rank(me), 'Нельзя управлять администратором своего или более высокого ранга'); return u; }
+function target(c, uid, min = 'moderator') { const me = guard(c, min); const u = db.users[uid]; need(u && !u.deleted, 'Пользователь не найден'); need(u.id === me.id || rank(u) < rank(me) || (C.isOwner(me) && !C.isOwner(u)), C.isOwner(u) ? 'Владельцем сервиса управлять нельзя' : 'Нельзя управлять администратором своего или более высокого ранга'); return u; }
 H['admin.user.ban'] = (c, p) => {
   const u = target(c, p.id); need(u.id !== c.uid, 'Себя банить не надо');
   u.banned = !!p.on || undefined; u.banReason = p.on ? str(p.reason, 200) : undefined;
   if (p.on) for (const t of Object.keys(db.sessions)) if (db.sessions[t].user === u.id) A.killSession(t);
   log(c, p.on ? 'user.ban' : 'user.unban', `${R.uname(u)} (@${u.username || u.id})${p.reason ? ': ' + str(p.reason, 200) : ''}`);
 };
-H['admin.user.mute'] = (c, p) => { const u = target(c, p.id); const h = int(p.hours, 0, 8760); u.muted = h ? now() + h * 3600e3 : undefined; log(c, h ? 'user.mute' : 'user.unmute', `${R.uname(u)}${h ? ' на ' + h + ' ч' : ''}`); };
+H['admin.user.mute'] = (c, p) => { const u = target(c, p.id); const h = int(p.hours, 0, 8760); need(u.id !== c.uid, 'Себя мутить не надо'); u.muted = h ? now() + h * 3600e3 : undefined; log(c, h ? 'user.mute' : 'user.unmute', `${R.uname(u)}${h ? ' на ' + h + ' ч' : ''}`); R.selfUpdate(u); return { muted: u.muted || 0 }; };
 H['admin.user.logout'] = (c, p) => { const u = target(c, p.id); for (const t of Object.keys(db.sessions)) if (db.sessions[t].user === u.id) A.killSession(t); log(c, 'user.logout', R.uname(u)); };
 // Роли администраторов. Назначает главный админ; тех, кто равен ему по рангу, может менять только владелец сервиса.
 function roleBlock(me, u) {

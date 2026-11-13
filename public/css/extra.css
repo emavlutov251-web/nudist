@@ -151,3 +151,22 @@ input.share-n { font: 800 1.9em/1.2 var(--display); text-align: center; letter-s
 .lg-m b { font: 800 1.15em/1.2 var(--display); } .lg-m span { font-size: .84em; color: rgba(255, 255, 255, .86); }
 .lg-m q { margin-top: 4px; font-size: .95em; overflow-wrap: anywhere; quotes: '«' '»'; }
 .lg-card .btn { background: #fff; color: #12733F; flex: none; }
+.tagx.mute { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+/* Подарки: витрина, карточка в чате, полка в профиле */
+.gift-to { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; } .gift-to span { flex: 1; min-width: 0; } .gift-to em { font-style: normal; color: var(--ink3); font-size: .86em; white-space: nowrap; }
+.gift-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-height: min(46vh, 330px); overflow-y: auto; padding: 2px; margin-bottom: 10px; }
+.gift-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px 7px; border-radius: var(--r); background: var(--hover); border: 2px solid transparent; min-width: 0; transition: transform .12s, border-color .12s; }
+.gift-cell:hover { transform: translateY(-2px); } .gift-cell.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); } .gift-cell.poor { opacity: .55; } .gift-cell.hid { opacity: .5; }
+.gc-e { font-size: 2.1em; line-height: 1.15; } .gc-n { font-size: .72em; line-height: 1.2; text-align: center; color: var(--ink2); max-width: 100%; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: 2.4em; }
+.gc-p { font-size: .76em; font-weight: 700; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.modal-b > .fld + .check { margin-top: 10px; } .modal-b > .check + .hint { margin-top: 10px; }
+.pres-card { display: flex; flex-direction: column; align-items: center; gap: 2px; width: min(86%, 270px); padding: 14px 16px 12px; border-radius: 22px; text-align: center; color: #fff; background: radial-gradient(120% 90% at 50% 0%, #F2B14A, #D8672F 70%); box-shadow: 0 6px 18px rgba(216, 103, 47, .28); }
+.pres-card.mine { background: radial-gradient(120% 90% at 50% 0%, #6E7F76, #37443D 75%); box-shadow: none; }
+.pres-e { font-size: 4em; line-height: 1.1; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .22)); animation: pres-pop .5s cubic-bezier(.2, 1.4, .4, 1) both; } @keyframes pres-pop { from { transform: scale(.4) rotate(-12deg); opacity: 0; } }
+.pres-card b { font: 800 1.12em/1.2 var(--display); } .pres-s { font-size: .84em; color: rgba(255, 255, 255, .88); } .pres-card q { margin-top: 5px; font-size: .95em; overflow-wrap: anywhere; quotes: '«' '»'; }
+.pres-a { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 9px; } .pres-a .btn { background: #fff; color: #A8481C; } .pres-a .btn.ghost { background: rgba(255, 255, 255, .2); color: #fff; } .pres-card.mine .pres-a .btn { color: #37443D; }
+.pf-row.gifts p { margin-top: 2px; } .gift-shelf { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.gs-i { width: 42px; height: 42px; border-radius: 12px; background: var(--hover); font-size: 1.5em; line-height: 1; display: grid; place-items: center; transition: transform .12s; } .gs-i:hover { transform: scale(1.08); } .gs-i.hid { opacity: .45; } .gs-i.more { font-size: .82em; font-weight: 700; color: var(--ink2); }
+.gift-view { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 6px 0 4px; } .gv-e { font-size: 5.2em; line-height: 1.1; } .gift-view q { margin-top: 4px; quotes: '«' '»'; overflow-wrap: anywhere; } .gv-a { justify-content: center; margin-top: 14px; }
+@media (prefers-reduced-motion: reduce) { .pres-e { animation: none; } }
+

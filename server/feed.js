@@ -127,7 +127,7 @@ H['feed.seen'] = (c, p) => {
 };
 H['feed.viewers'] = (c, p) => { const x = post(p); need(x.by === c.uid, 'Кто смотрел запись, видит только её автор'); return { ...C.viewersOf(x, c.uid), total: x.views || 0 }; };
 H['feed.post'] = (c, p) => {
-  const u = me(c), imp = C.canImport(u), text = str(p.text, imp ? 4096 : 2000).trim();
+  C.needVoice(me(c)); const u = me(c), imp = C.canImport(u), text = str(p.text, imp ? 4096 : 2000).trim();
   const media = (Array.isArray(p.media) ? p.media : []).slice(0, imp ? 10 : 4).map(x => str(x, 200)).filter(x => isUpload(x) && (IMG_EXT.has(extOf(x)) || (imp && AV_EXT.has(extOf(x)))));
   need(text || media.length, 'Пустую запись публиковать незачем. Даже у нудистов есть что показать.');
   if (!imp) perDay(u, 'post', 30, 'Слишком много записей за день. Оставьте что-нибудь на завтра.');
@@ -142,7 +142,7 @@ H['feed.del'] = (c, p) => {
 H['feed.like'] = (c, p) => { const x = post(p); if (p.on === false) delete x.likes[c.uid]; else x.likes[c.uid] = 1; save(); return { likes: count(x.likes), liked: !!x.likes[c.uid] }; };
 H['feed.comments'] = (c, p) => { const x = post(p), u = me(c), list = (x.cm || []).filter(k => visible(k.by, u)).slice(-200); return { list, users: usersOf(list.map(k => k.by), c.uid) }; };
 H['feed.comment'] = (c, p) => {
-  const x = post(p), u = me(c), text = str(p.text, 500).trim(); need(text, 'Пустой комментарий');
+  const x = post(p), u = me(c), text = str(p.text, 500).trim(); need(text, 'Пустой комментарий'); C.needVoice(u);
   need(visible(x.by, u), 'Автор закрыл для вас комментарии');
   perDay(u, 'postcm', 300, 'Слишком много комментариев за день');
   const k = { id: id(), by: u.id, text, ts: now() }; x.cm = x.cm || []; x.cm.push(k); if (x.cm.length > 500) x.cm.splice(0, x.cm.length - 500); save();

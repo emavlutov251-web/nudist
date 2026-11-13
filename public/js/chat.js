@@ -6,6 +6,7 @@ import { OnceMsg, Streak } from './growth.js';
 import { Photo, Gif, VideoMsg, RoundMsg, VoiceMsg, AudioMsg, FileMsg, LocMsg } from './media.js';
 import { showProfile, chatActions, openMiniApp, JoinPreview, shareLeaves } from './panels.js';
 import { Composer, EmojiPicker, ForwardModal } from './composer.js';
+import { GiftCard } from './gifts.js';
 import { memberOf } from './guildui.js';
 import { startCall, VoiceRoom, joinVoice, RTC } from './rtc.js';
 
@@ -166,6 +167,7 @@ function EditHistory({ id, chat, m }) {
 
 function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const u = S.users[m.from], mine = m.from === S.me.id, sel = S.ui.sel;
+  if (m.type === 'service' && m.present) return html`<${GiftCard} m=${m} />`;
   if (m.type === 'service' && m.gift) { const mine = m.from === S.me.id, who = userName(S.users[m.from]); return html`<div class="leafgift" data-mid=${m.id}><div class=${cx('lg-card', mine && 'mine')}>
     <span class="lg-e" aria-hidden="true">🍃</span><div class="lg-m"><b>${mine ? '−' : '+'}${fmtNum(m.gift)} ${plural(m.gift, ['листик', 'листика', 'листиков'])}</b><span>${mine ? 'Вы поделились листиками' : who + ' делится с вами'} · ${fmtTime(m.ts)}</span>${m.note && html`<q>${m.note}</q>`}</div>
     ${!mine && S.flags.stars && html`<button class="btn sm" onClick=${() => shareLeaves(m.from)}>Ответить тем же</button>`}</div></div>`; }
@@ -289,6 +291,8 @@ function SelBar({ chat, thread }) {
 function Footer({ chat, thread }) {
   const can = chat.can || {}, u = chatInfo(chat).user, note = (icon, text, btn) => html`<div class="foot-note"><${Icon} n=${icon} s=${17} /><span>${text}</span>${btn}</div>`;
   if (chat.pending) return note('leaf', 'Сначала пройдите проверку: нажмите на фиговый листок в сообщении выше.');
+  if (S.me.muted > Date.now() && chat.type !== 'saved') return note('volume-x', `Администрация выдала вам мут до ${fmtFull(S.me.muted)}. Читать можно, писать — нет.`);
+  if (chat.muted > Date.now() && (chat.type === 'group' || thread)) return note('volume-x', chat.muted - Date.now() > 50 * 365 * 864e5 ? 'Администраторы запретили вам писать в этом чате.' : `Администраторы запретили вам писать в этом чате до ${fmtFull(chat.muted)}.`);
   if (chat.type === 'channel' && !thread && !can.send) return html`<div class="foot-note"><button class="btn ghost wide" onClick=${() => call('chat.state', { id: chat.id, mute: isMuted(chat) ? 0 : 1e15 })}><${Icon} n=${isMuted(chat) ? 'bell' : 'bell-off'} s=${16} /> ${isMuted(chat) ? 'Включить уведомления' : 'Отключить уведомления'}</button></div>`;
   if (chat.server && !can.send && !(chat.kind === 'voice' || chat.kind === 'stage')) return note('lock', chat.kind === 'rules' || chat.kind === 'announce' ? 'Писать сюда могут только модераторы. Остальные читают и кивают.' : 'У вас нет права писать в этот канал.');
   if (chat.type === 'group' && !can.send) return note('lock', 'Администраторы запретили участникам писать в эту группу.');

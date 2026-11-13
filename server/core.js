@@ -135,7 +135,7 @@ const canImport = u => !!u && (IMPORTERS.has(u.id) || isOwner(u));
 // Аккаунты редакции с автоматическими подборками: рядом с именем честно стоит значок «Бот».
 const ROBOTS = new Set(String(process.env.ROBOTS || '').split(',').map(s => s.trim()).filter(Boolean));
 function selfUser(u) {
-  return { ...pubUser(u, u.id), phone: u.phone, email: u.email, stars: u.stars || 0, premiumUntil: u.premiumUntil, privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, owner: isOwner(u) || undefined, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, private: !!u.private, lastDaily: u.lastDaily, taps: u.tapDay === today() ? u.taps : 0 };
+  return { ...pubUser(u, u.id), phone: u.phone, email: u.email, stars: u.stars || 0, premiumUntil: u.premiumUntil, privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, owner: isOwner(u) || undefined, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, private: !!u.private, lastDaily: u.lastDaily, muted: u.muted > now() ? u.muted : undefined, taps: u.tapDay === today() ? u.taps : 0 };
 }
 // Кому рассылать «в сети / изменил профиль»: только тем, кто этого человека действительно видит — собеседникам, контактам
 // и участникам небольших общих чатов и серверов. Рассылка «всем подключённым» на каждое подключение — это N² и смерть при первом же наплыве.
@@ -184,11 +184,16 @@ function isMember(chat, uid) {
   if (chat.server) { const s = db.servers[chat.server]; return !!s && !!s.members[uid] && sCan(s, uid, 'view', chat); }
   return !!chat.members[uid];
 }
+// Мут участника в группе или канале: хранится в самом чате, поэтому выйти и зайти заново, чтобы его сбросить, не получится.
+const chatMuted = (chat, uid) => { const t = (chat.mutes || {})[uid]; return t > now() ? t : 0; };
+// Мут от администрации сервиса: человек читает, но нигде ничего не публикует.
+function needVoice(u) { if (u && u.muted > now()) fail('Администрация выдала вам мут до ' + new Date(u.muted).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow' }) + ' (МСК). Помолчите, это полезно.'); }
 function can(chat, uid, act) {
   if (chat.server) return sCan(db.servers[chat.server], uid, act, chat);
   const m = chat.members[uid]; if (!m) return false;
   if (chat.type === 'dm' || chat.type === 'secret' || chat.type === 'saved') return act === 'send' || act === 'pin';
   if (m.role === 'owner') return true;
+  if (act === 'send' && chatMuted(chat, uid)) return false;
   if (m.role === 'admin' || m.role === 'mod') { const r = { ...DEFAULT_RIGHTS[m.role], ...(m.rights || {}) }; return !!r[act]; }
   if (chat.type !== 'group') return false;
   if (act === 'send') return !m.pending && (chat.perms || {}).send !== false;
@@ -303,6 +308,7 @@ function chatView(chat, uid) {
     v.count = size(chat.members);
     v.role = (chat.members[uid] || {}).role;
     v.pending = (chat.members[uid] || {}).pending;
+    if (chatMuted(chat, uid)) v.muted = chatMuted(chat, uid);
     if (chat.type === 'dm' || chat.type === 'secret') v.peer = Object.keys(chat.members).find(u => u !== uid) || uid;
     if (chat.sk) { const k = streakOf(chat); if (k) v.streak = k; }
     if (chat.type === 'secret') { v.keys = chat.keys; v.by = chat.by; }
@@ -322,7 +328,7 @@ function chatView(chat, uid) {
 function emitChat(chat, uids) { for (const u of uids || membersOf(chat)) if (isOnline(u)) emit(u, 'chat', chatView(chat, u)); }
 
 // ───── сообщения
-const MSG_FIELDS = ['text', 'media', 'reply', 'quote', 'fwd', 'poll', 'thread', 'btn', 'silent', 'sticker', 'loc', 'contact', 'enc', 'title', 'as', 'via', 'hook', 'call', 'act', 'dice', 'album', 'fx', 'gift', 'tags', 'rq', 'sig', 'link', 'once', 'files', 'note'];
+const MSG_FIELDS = ['text', 'media', 'reply', 'quote', 'fwd', 'poll', 'thread', 'btn', 'silent', 'sticker', 'loc', 'contact', 'enc', 'title', 'as', 'via', 'hook', 'call', 'act', 'dice', 'album', 'fx', 'gift', 'tags', 'rq', 'sig', 'link', 'once', 'files', 'note', 'present'];
 const expiring = [];
 for (const cid in db.msgs) for (const m of db.msgs[cid]) if (m.exp) expiring.push({ c: cid, i: m.id, at: m.exp });
 const hooks = { afterPost: [], userGone: [] };
@@ -451,4 +457,4 @@ function viewersOf(o, viewerId, key = 'seen') {
   for (const v of list) users[v.u] = pubUser(db.users[v.u], viewerId);
   return { list, users };
 }
-module.exports = { isRobot, markSeen, viewersOf, canImport, setOfflineHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

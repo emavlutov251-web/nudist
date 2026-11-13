@@ -31,7 +31,8 @@ const rpc = (m, p = {}) => new Promise((ok, no) => { if (!ws || ws.readyState !=
 
 let setToast = () => {};
 const toast = (text, err) => setToast({ text, err, k: Date.now() });
-const run = async (fn, okText) => { try { const r = await fn(); if (okText) toast(okText); return r === undefined ? true : r; } catch (e) { toast(e.message, true); return null; } };
+// Сервер на «ничего не вернул» отвечает null — это успех, а не сбой: раньше из-за этого экран после действия не обновлялся.
+const run = async (fn, okText) => { try { const r = await fn(); if (okText) toast(okText); return r === undefined || r === null ? true : r; } catch (e) { toast(e.message, true); return null; } };
 function useLoad(fn, deps = [], every) {
   const [d, setD] = useState(null), [n, setN] = useState(0);
   useEffect(() => { let live = true; fn().then(r => live && setD(r)).catch(e => live && toast(e.message, true)); return () => { live = false; }; }, [...deps, n]);
@@ -94,7 +95,7 @@ function Users({ role }) {
       <dl><dt>ID</dt><dd><code>${u.id}</code></dd><dt>Username</dt><dd>${u.username ? '@' + u.username : '—'}</dd><dt>Телефон</dt><dd>${u.phone || '—'}</dd><dt>Последний IP</dt><dd>${u.ip || '—'}</dd><dt>Активных сессий</dt><dd>${u.sessions}</dd><dt>2FA</dt><dd>${u.totp ? 'включена' : 'нет'}</dd><dt>Бейджи</dt><dd>${u.badges.join(', ') || '—'}</dd><dt>Премиум</dt><dd>${u.premiumUntil > Date.now() ? 'до ' + fmtDate(u.premiumUntil) : 'нет'}</dd>${u.banned && html`<dt>Причина бана</dt><dd>${u.banReason || 'не указана'}</dd>`}${u.muted ? html`<dt>Мут до</dt><dd>${fmtDate(u.muted)}</dd>` : null}${u.owner && html`<dt>Владелец бота</dt><dd><code>${u.owner}</code></dd>`}</dl>
       ${can('moderator') ? html`<h4>Модерация</h4><div class="acts">
         <button class=${'btn sm ' + (u.banned ? 'ghost' : 'danger')} onClick=${() => { const reason = u.banned ? '' : prompt('Причина бана (увидит только персонал):', 'нарушение правил пляжа'); if (!u.banned && reason === null) return; act(() => rpc('admin.user.ban', { id: u.id, on: !u.banned, reason }), u.banned ? 'Разбанен. Листок возвращён.' : 'Забанен, все сессии завершены'); }}>${u.banned ? 'Разбанить' : 'Забанить'}</button>
-        <button class="btn sm ghost" onClick=${() => act(() => rpc('admin.user.mute', { id: u.id, hours: u.muted ? 0 : 24 }), u.muted ? 'Мут снят' : 'Мут на 24 часа')}>${u.muted ? 'Снять мут' : 'Мут на 24 ч'}</button>
+        ${u.muted ? html`<button class="btn sm" onClick=${() => act(() => rpc('admin.user.mute', { id: u.id, hours: 0 }), 'Мут снят')}>Снять мут</button>` : [[1, '1 ч'], [24, '24 ч'], [168, '7 дн'], [720, '30 дн']].map(([h, l]) => html`<button class="btn sm ghost" onClick=${() => act(() => rpc('admin.user.mute', { id: u.id, hours: h }), 'Мут выдан: ' + l)}>Мут ${l}</button>`)}
         <button class="btn sm ghost" onClick=${() => act(() => rpc('admin.user.logout', { id: u.id }), 'Все сессии завершены')}>Разлогинить везде</button></div>` : html`<p class="hint">Роль «Наблюдатель» только смотрит. Руками не трогать.</p>`}
       ${can('admin') && html`<h4>Аккаунт</h4><div class="acts">
         ${['verified', 'developer', 'staff'].map(b => html`<button class=${'btn sm ' + (u.badges.includes(b) ? '' : 'ghost')} onClick=${() => act(() => rpc('admin.user.set', { id: u.id, badges: u.badges.includes(b) ? u.badges.filter(x => x !== b) : [...u.badges.filter(x => ['verified', 'developer', 'staff'].includes(x)), b] }), 'Бейджи обновлены')}>${{ verified: '✔ Верификация', developer: '🛠 Разработчик', staff: '🛟 Персонал' }[b]}</button>`)}

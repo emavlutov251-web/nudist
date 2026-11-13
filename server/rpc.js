@@ -317,7 +317,7 @@ H['chat.members'] = (c, p) => {
   if (p.filter === 'online') list = list.filter(x => C.isOnline(x.u.id));
   list.sort((a, b) => order[a.m.role] - order[b.m.role] || (C.isOnline(b.u.id) - C.isOnline(a.u.id)) || uname(a.u).localeCompare(uname(b.u)));
   const off = int(p.offset, 0, 1e6);
-  return { total: list.length, members: list.slice(off, off + 200).map(x => ({ user: pubUser(x.u, c.uid), role: x.m.role, rights: x.m.rights, at: x.m.at, pending: x.m.pending })), banned: can(ch, c.uid, 'ban') ? (ch.banned || []).map(u => pubUser(db.users[u], c.uid)).filter(Boolean) : undefined };
+  return { total: list.length, members: list.slice(off, off + 200).map(x => ({ user: pubUser(x.u, c.uid), role: x.m.role, rights: x.m.rights, title: x.m.title, at: x.m.at, pending: x.m.pending, muted: C.chatMuted(ch, x.u.id) || undefined })), banned: can(ch, c.uid, 'ban') ? (ch.banned || []).map(u => pubUser(db.users[u], c.uid)).filter(Boolean) : undefined };
 };
 H['chat.add'] = (c, p) => {
   const ch = getChat(c, p.id); need(ch.type === 'group' || ch.type === 'channel', 'Сюда нельзя добавлять участников');
@@ -362,6 +362,21 @@ H['chat.kick'] = (c, p) => {
   }
   save(); C.emitChat(ch);
   return { n };
+};
+// Запретить участнику писать: hours — на сколько часов, -1 — пока не вернут, 0 — снять запрет.
+H['chat.mute'] = (c, p) => {
+  const ch = getChat(c, p.id); need(ch.type === 'group' || ch.type === 'channel', 'Недоступно');
+  need(can(ch, c.uid, 'ban'), 'Недостаточно прав');
+  const o = getUser(p.user), m = ch.members[o.id], rank = { owner: 3, admin: 2, mod: 1, member: 0 }; need(o.id !== c.uid, 'Себе рот не заклеивают');
+  need(!m || rank[m.role] < rank[ch.members[c.uid].role], 'Нельзя запретить писать тому, кто равен вам по роли или выше');
+  const h = Number(p.hours) || 0, was = C.chatMuted(ch, o.id); ch.mutes = ch.mutes || {};
+  if (h) ch.mutes[o.id] = now() + (h < 0 ? 100 * 365 * 864e5 : Math.min(h, 8760) * 3600e3); else delete ch.mutes[o.id];
+  for (const k in ch.mutes) if (!(ch.mutes[k] > now())) delete ch.mutes[k];
+  const how = h < 0 ? 'бессрочно' : h >= 24 ? `на ${Math.round(h / 24)} дн.` : `на ${h} ч`;
+  audit(ch, c.uid, h ? 'mute' : 'unmute', uname(o) + (h ? ' ' + how : ''));
+  if (m && ch.type === 'group' && (h || was)) service(ch, o.id, h ? `получил(а) мут ${how}` : 'получил(а) право голоса обратно');
+  save(); C.emitChat(ch, [c.uid, o.id]);
+  return { muted: C.chatMuted(ch, o.id) };
 };
 H['chat.unban'] = (c, p) => { const ch = getChat(c, p.id); need(can(ch, c.uid, 'ban'), 'Недостаточно прав'); ch.banned = (ch.banned || []).filter(u => u !== p.user); audit(ch, c.uid, 'unban', uname(db.users[p.user])); save(); };
 H['invite.new'] = (c, p) => {
@@ -517,7 +532,7 @@ function buildPayload(c, chat, p) {
 }
 function checkSend(c, chat, p) {
   const u = user(c);
-  need(!(u.muted > now()), 'Администрация выдала вам мут. Помолчите, это полезно.');
+  if (chat.type !== 'saved') C.needVoice(u);
   if (chat.type === 'dm') {
     const o = db.users[Object.keys(chat.members).find(x => x !== c.uid)];
     if (o) {
@@ -526,7 +541,7 @@ function checkSend(c, chat, p) {
       need(!(u.blocked || []).includes(o.id), 'Вы заблокировали этого пользователя');
       if (!o.bot && !C.canSee(o, c.uid, 'msgs') && !(db.msgs[chat.id] || []).some(m => m.from === o.id)) fail('Пользователь принимает сообщения только от ' + ((o.privacy || {}).msgs === 'contacts' ? 'контактов' : 'избранных'));
     }
-  } else if (chat.type === 'channel' && p.thread) { /* комментарии доступны подписчикам */ }
+  } else if (chat.type === 'channel' && p.thread) { need(!C.chatMuted(chat, c.uid), 'Администраторы канала запретили вам комментировать'); }      // комментарии доступны подписчикам
   else need(can(chat, c.uid, 'send'), chat.type === 'channel' ? 'Писать в канал могут только администраторы' : (chat.members && chat.members[c.uid] && chat.members[c.uid].pending ? 'Сначала пройдите проверку: нажмите на листок' : 'У вас нет права писать в этот чат'));
   const admin = chat.type !== 'dm' && chat.type !== 'secret' && chat.type !== 'saved' && can(chat, c.uid, 'del');
   const s = st(chat, c.uid);
@@ -761,6 +776,7 @@ H['story.list'] = (c, p) => {
   return { stories: list.map(s => storyView(s, c.uid)), users: usersFor(c, list.map(s => s.user)) };
 };
 H['story.post'] = (c, p) => {
+  C.needVoice(user(c));
   need(db.flags.stories, 'Истории отключены администратором');
   const me = user(c); A.limit('story:' + c.uid, 30, 864e5);
   const kind = ['text', 'photo', 'video'].includes(p.kind) ? p.kind : 'text';
@@ -817,19 +833,24 @@ H['stars.tap'] = (c, p) => {
 // Поделиться листиками: перевод другому человеку с подписью. У обоих остаётся запись в истории, получателю приходит карточка в личке и уведомление.
 const SHARE = { max: envInt('LEAF_SHARE_MAX', 100000, 1, 1e9), ageH: envInt('LEAF_SHARE_AGE_H', 24, 0, 8760), keep: 40 };
 const leafLog = (u, rec) => { (u.leafLog = u.leafLog || []).unshift(rec); if (u.leafLog.length > SHARE.keep) u.leafLog.length = SHARE.keep; };
+// Общие условия для любого дарения (листики, подарки): кому можно и кто уже может.
+function giveCheck(u, o) {
+  need(db.flags.stars, 'Листики временно отключены');
+  need(o.id !== u.id, 'Себе дарить — это просто перекладывание');
+  need(!o.bot, 'Ботам дарить бесполезно: они не оценят');
+  need(!o.banned, 'Этот аккаунт заблокирован, до него ничего не долетит');
+  need(!(o.blocked || []).includes(u.id), 'Пользователь ограничил круг общения');
+  need(!(u.blocked || []).includes(o.id), 'Вы заблокировали этого пользователя');
+  // Свежий аккаунт сначала должен пожить: иначе листики печатаются регистрацией пустышек по приглашению и сливаются на основной.
+  const wait = SHARE.ageH * 3600e3 - (now() - (u.created || 0));
+  if (wait > 0 && !u.admin && !C.isOwner(u)) fail(`Дарить и делиться листиками можно через ${SHARE.ageH} ч после регистрации. Осталось примерно ${Math.max(1, Math.ceil(wait / 3600e3))} ч.`);
+}
 H['stars.send'] = (c, p) => {
   const u = user(c), o = getUser(p.to), n = Number(p.n), note = str(p.note, 120).replace(/\s+/g, ' ');
   need(db.flags.stars, 'Листики временно отключены');
   need(Number.isInteger(n) && n >= 1, 'Сколько листиков? Нужно целое число от 1.');
   need(n <= SHARE.max, `За один раз можно поделиться не больше чем ${SHARE.max} 🍃`);
-  need(o.id !== u.id, 'Себе дарить — это просто перекладывание');
-  need(!o.bot, 'Боты листиками не питаются');
-  need(!o.banned, 'Этот аккаунт заблокирован, листики до него не долетят');
-  need(!(o.blocked || []).includes(u.id), 'Пользователь ограничил круг общения');
-  need(!(u.blocked || []).includes(o.id), 'Вы заблокировали этого пользователя');
-  // Свежий аккаунт сначала должен пожить: иначе листики печатаются регистрацией пустышек по приглашению и сливаются на основной.
-  const wait = SHARE.ageH * 3600e3 - (now() - (u.created || 0));
-  if (wait > 0 && !u.admin && !C.isOwner(u)) fail(`Делиться листиками можно через ${SHARE.ageH} ч после регистрации. Осталось примерно ${Math.max(1, Math.ceil(wait / 3600e3))} ч.`);
+  giveCheck(u, o);
   A.limit('leafsend:' + u.id, 12, 60000);
   spend(u, n); o.stars = (o.stars || 0) + n;
   const ts = now(); leafLog(u, { ts, to: o.id, n, note: note || undefined }); leafLog(o, { ts, from: u.id, n, note: note || undefined });
@@ -843,4 +864,4 @@ H['stars.history'] = c => { const u = user(c), list = (u.leafLog || []).slice(0,
 H['premium.buy'] = c => { const u = user(c); spend(u, PREMIUM_PRICE, 'Листики копятся в мини-игре «Листопад», ежедневным бонусом и приглашениями друзей.'); u.premiumUntil = Math.max(u.premiumUntil || 0, now()) + 30 * 864e5; save(); selfUpdate(u); C.broadcastUser(u); return { until: u.premiumUntil }; };
 H['fun.buzz'] = (c, p) => { const ch = getChat(c, p.chat); need(ch.type === 'dm' || ch.type === 'group', 'Пинать можно только в личке и группах'); A.limit('buzz:' + c.uid + ch.id, 1, 15000); for (const u of membersOf(ch)) emit(u, 'buzz', { chat: ch.id, user: c.uid }); };
 
-module.exports = { H, getChat, getUser, uname, usersFor, ensureSaved, joinChat, chatPreview, serverPreview, resolveTarget, checkSend, buildPayload, hooksEdit, selfUpdate, spend, BOOST_PRICE, PREMIUM_PRICE, LEAF };
+module.exports = { H, getChat, getUser, uname, usersFor, ensureSaved, joinChat, chatPreview, serverPreview, resolveTarget, checkSend, buildPayload, hooksEdit, selfUpdate, spend, giveCheck, BOOST_PRICE, PREMIUM_PRICE, LEAF };

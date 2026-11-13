@@ -79,7 +79,7 @@ let clipOrder = null;      // id клипов от новых к старым; �
 const order = () => clipOrder || (clipOrder = Object.values(db.clips).sort((a, b) => b.ts - a.ts).map(k => k.id));
 
 H['clip.add'] = (c, p) => {
-  const u = me(c), m = p.media || {};
+  const u = me(c), m = p.media || {}; C.needVoice(u);
   need(isUpload(m.url) && VIDEO_EXT.has(extOf(m.url)), 'Нужно видео: mp4, webm или mov');
   const dur = Math.round(Number(m.dur) || 0); need(dur <= CLIP_MAX_SEC, `Клип — это до ${CLIP_MAX_SEC / 60} минут. Остальное называется фильм.`);
   const imp = C.canImport(u); if (!imp) perDay(u, 'clips', 30, 'На сегодня хватит клипов. Оставьте что-нибудь на завтра.');
@@ -130,7 +130,7 @@ H['clip.viewers'] = (c, p) => { const k = clip(p); need(k.by === c.uid, 'Кто 
 H['clip.del'] = (c, p) => { const k = clip(p), u = me(c); need(k.by === u.id || isMod(u), 'Удалять можно только свои клипы'); delete db.clips[k.id]; clipOrder = null; C.dropUpload(k.url); save(); };
 H['clip.comments'] = (c, p) => { const k = clip(p), list = (k.cm || []).slice(-200); return { list, users: usersOf(list.map(x => x.by), c.uid) }; };
 H['clip.comment'] = (c, p) => {
-  const k = clip(p), u = me(c), text = str(p.text, 500); need(text, 'Пустой комментарий');
+  const k = clip(p), u = me(c), text = str(p.text, 500); need(text, 'Пустой комментарий'); C.needVoice(u);
   perDay(u, 'clipcm', 300, 'Слишком много комментариев за день');
   const x = { id: id(), by: u.id, text, ts: now() }; k.cm = k.cm || []; k.cm.push(x); if (k.cm.length > 500) k.cm.splice(0, k.cm.length - 500); save();
   return { item: x, comments: k.cm.length, users: usersOf([u.id], c.uid) };
@@ -149,7 +149,7 @@ function endLive(l, why) { if (!lives.has(l.id)) return; lives.delete(l.id); liv
 
 H['live.list'] = c => { const list = [...lives.values()].sort((a, b) => b.viewers.size - a.viewers.size || b.started - a.started); return { list: list.map(liveView), users: usersOf(list.map(l => l.by), c.uid), max: LIVE_MAX }; };
 H['live.start'] = (c, p) => {
-  const u = me(c); need(db.flags.calls !== false, 'Эфиры отключены администратором');
+  const u = me(c); need(db.flags.calls !== false, 'Эфиры отключены администратором'); C.needVoice(u);
   for (const l of lives.values()) if (l.by === u.id) endLive(l, 'Ведущий начал новый эфир');
   const l = { id: id(), by: u.id, conn: c.id, title: str(p.title, 120) || `Эфир ${R.uname(u)}`, kind: p.kind === 'screen' ? 'screen' : 'cam', started: now(), viewers: new Map(), peak: 0, chat: [] };
   lives.set(l.id, l); liveAnnounce();
@@ -173,6 +173,7 @@ H['live.signal'] = (c, p) => {      // знакомство ведущего с�
   const t = C.connById.get(p.to); if (t) t.send('live.signal', { id: l.id, from: c.id, data: p.data });
 };
 H['live.chat'] = (c, p) => {
+  C.needVoice(db.users[c.uid]);
   const l = lives.get(str(p.id, 32)); need(l && (l.conn === c.id || l.viewers.has(c.id)), 'Вы не в этом эфире');
   const text = str(p.text, 300); need(text, 'Пустое сообщение');
   const m = { id: id(), by: c.uid, text, ts: now() }; l.chat.push(m); if (l.chat.length > 60) l.chat.shift();
