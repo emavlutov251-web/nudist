@@ -11,6 +11,7 @@ import { openSettings } from './settings.js';
 import { hashFromHistory } from './back.js';
 import './fluent.js';
 import { Hub, openHub, openApps } from './hub.js';
+import { Dock, foldDock } from './dock.js';
 import { takeRef, pendingRef, clearRef } from './growth.js';
 takeRef();
 // Офлайн-кеш оболочки: со второго захода приложение открывается с диска. Вышла новая версия — докачается в фоне и предложит обновиться.
@@ -159,6 +160,7 @@ function App() {
     ${S.ui.panel && chat && html`<${InfoPanel} chat=${chat} />`}
     <${Hub} />
   </div>
+  <${Dock} />
   <${CallLayer} /><${Modals} />${S.viewer && html`<${MediaViewer} />`}${S.storyView && html`<${StoryViewer} />`}<${Menu} /><${Toasts} />${S.ui.boss && html`<${BossScreen} />`}`;
 }
 
@@ -171,6 +173,7 @@ document.addEventListener('keydown', e => {
     if (S.viewer) { S.viewer = null; return bump(); }
     if (S.storyView) { S.storyView = null; return bump(); }
     if (S.modals.length) return closeModal();
+    if (S.dock && S.dock.open) return foldDock();
     if (S.ui.sel) { S.ui.sel = null; return bump(); }
     if (S.ui.reply || S.ui.edit) { S.ui.reply = null; S.ui.edit = null; return bump(); }
     if (S.ui.thread) { S.ui.thread = null; return bump(); }

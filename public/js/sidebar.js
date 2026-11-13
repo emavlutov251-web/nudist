@@ -24,7 +24,7 @@ export function Rail() {
       <button class="rail-b add" title="Каталог серверов" onClick=${() => openModal(Discover)}><${Icon} n="compass" /></button>
     </div>
     <i class="rail-sep"></i>
-    ${[['feed', 'list', 'Лента'], ['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['apps', 'layout-grid', 'Приложения']].map(([k, ic, name]) => html`<button class=${cx('rail-b add hubb', S.ui.hub === k && 'on')} title=${name} aria-label=${name} onClick=${() => openHub(k)}><${Icon} n=${ic} /></button>`)}
+    ${[['feed', 'list', 'Лента'], ['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['tv', 'tv', 'Телевизор'], ['apps', 'layout-grid', 'Приложения']].map(([k, ic, name]) => html`<button class=${cx('rail-b add hubb', S.ui.hub === k && 'on')} title=${name} aria-label=${name} onClick=${() => openHub(k)}><${Icon} n=${ic} /></button>`)}
     <i class="rail-sep"></i>
     <button class="rail-b add" title="Прикрыться (Esc Esc)" onClick=${() => { S.ui.boss = true; bump(); }}><${Icon} n="table" /></button>
     <button class="rail-b add" title="Настройки (Ctrl+,)" onClick=${() => openSettings()}><${Icon} n="settings" /></button>

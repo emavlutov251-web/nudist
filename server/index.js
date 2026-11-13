@@ -17,6 +17,7 @@ require('./gifts');
 require('./tgpacks');
 require('./tunes');
 require('./common');
+require('./tv');
 const Seed = require('./seed');
 const { db, save, now, emit } = C;
 

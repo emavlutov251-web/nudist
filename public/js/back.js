@@ -29,6 +29,7 @@ function layers() {
     if (u.sel) L.push(() => { u.sel = null; });
   }
   if (u.hub) L.push(() => { import('./hub.js').then(h => h.closeHub()); });
+  if (S.dock && S.dock.open) L.push(() => { import('./dock.js').then(k => k.foldDock()); });      // музыка сворачивается и играет дальше, телевизор выключается
   for (const m of S.modals) {
     L.push(() => { if (m.props && typeof m.props.res === 'function') m.props.res(null); closeModal(m.id); });
     const h = backHooks.get(m.id); if (h && h.depth()) L.push(() => { h(); });          // внутри окна есть свой шаг назад
@@ -50,23 +51,35 @@ window.nudistBack = goBack;
 // ── Синхронизация с историей браузера: на каждый слой — одна запись, чтобы системная «Назад» снимала ровно один слой.
 // Работает на узких экранах и в Android-оболочке; на широких экранах историю не трогаем.
 let depth = 0, pending = 0, skipHash = false;
-const enabled = () => narrow() || /NudistAndroid/.test(navigator.userAgent);
+// Android-оболочка с версии 1.3 сама зовёт nudistBack() — история ей не нужна. Без неё надёжнее: вставки с чужих сайтов (плеер Яндекс Музыки,
+// сайты телеканалов) пишут в общую историю свои записи и сами шагают по ней назад, а со стороны это выглядит как нажатие «Назад».
+const nativeBack = () => { try { return !!(window.NudistApp && window.NudistApp.version && Number(window.NudistApp.version()) >= 13); } catch (e) { return false; } };
+const enabled = () => !nativeBack() && (narrow() || /NudistAndroid/.test(navigator.userAgent));
 const pos = () => (history.state && history.state.nb) || 0;      // номер текущей записи истории в нашей стопке
 export const hashFromHistory = () => skipHash;      // hashchange после нашего перехода по истории обрабатывать не нужно
 function sync() {
   if (pending) return;
   const want = enabled() ? layers().length : 0;
   while (depth < want) { depth++; history.pushState({ nb: depth }, '', location.href); }
-  if (depth > want) { pending = 1; const n = depth - want; depth = want; history.go(-n); }
+  if (depth > want) { const n = depth - want; depth = want; travel(-n); }
+}
+// Переход по истории, которого мы ждём. Если между нашими записями оказались записи вставки, шаг уходит ей и popstate к нам не приходит:
+// тогда через треть секунды шагаем дальше, пока не вернёмся к своей записи. Без этого кнопка «Назад» переставала работать до перезагрузки.
+let timer = 0, hops = 0;
+function travel(n) { pending = 1; clearTimeout(timer); timer = setTimeout(settle, 350); try { history.go(n); } catch (e) { /* нет истории */ } }
+function settle() {
+  if (!pending) return;
+  if (pos() > depth && hops < 40) { hops++; travel(-1); return; }
+  pending = 0; hops = 0; sync();
 }
 addEventListener('popstate', () => {
   skipHash = true; setTimeout(() => { skipHash = false; }, 60);
-  if (pending) { pending = 0; sync(); return; }
   const p = pos();
-  if (p > depth) { pending = 1; history.go(depth - p); return; }      // «Вперёд» не поддерживаем: закрытый слой сам не откроется
+  if (pending) { clearTimeout(timer); if (p > depth && hops < 40) { hops++; travel(depth - p); return; } pending = 0; hops = 0; sync(); return; }
+  if (p > depth) { travel(depth - p); return; }      // «Вперёд» не поддерживаем: закрытый слой сам не откроется
   while (depth > p) { depth--; if (!goBack()) break; }
   depth = p;
 });
 // После перезагрузки страницы в истории могли остаться наши старые записи — возвращаемся к основанию стопки.
-if (pos() > 0) { pending = 1; history.go(-pos()); }
+if (pos() > 0) travel(-pos());
 onBump(sync);

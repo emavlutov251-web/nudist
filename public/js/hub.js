@@ -4,8 +4,10 @@ import { openChat, sendPayload } from './store.js';
 import { playAudio, AudioBar } from './media.js';
 import { openMiniApp } from './panels.js';
 import { Feed, Viewers } from './feed.js';
+import { openDock } from './dock.js';
+import { TV } from './tv.js';
 
-const TABS = [['feed', 'list', 'Лента'], ['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['apps', 'layout-grid', 'Приложения'], ['help', 'life-buoy', 'Поддержка']];
+const TABS = [['feed', 'list', 'Лента'], ['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['tv', 'tv', 'Телевизор'], ['apps', 'layout-grid', 'Приложения'], ['help', 'life-buoy', 'Поддержка']];
 const isStaff = () => ['moderator', 'admin', 'superadmin'].includes((S.me || {}).admin);
 const err = e => toast(e.message || String(e), 'err');
 let MB = 45;      // предел размера файла, сервер уточняет
@@ -24,7 +26,7 @@ export function Hub() {
       <nav class="hub-tabs" role="tablist">${TABS.map(([k, ic, name]) => html`<button role="tab" aria-selected=${tab === k} class=${cx(tab === k && 'on')} onClick=${() => setTab(k)} title=${name}><${Icon} n=${ic} s=${19} /><span>${name}</span>${k === 'live' && LIVE.n > 0 && html`<b class="hub-dot">${LIVE.n}</b>`}</button>`)}</nav>
       <button class="ib" onClick=${closeHub} title="Закрыть и вернуться к чатам"><${Icon} n="x" /></button>
     </header>
-    <div class="hub-b">${tab === 'feed' ? html`<${Feed} />` : tab === 'music' ? html`<${Music} />` : tab === 'clips' ? html`<${Clips} />` : tab === 'live' ? html`<${Live} />` : tab === 'apps' ? html`<div class="hub-pad"><${AppsCatalog} /></div>` : html`<${Help} />`}</div>
+    <div class="hub-b">${tab === 'feed' ? html`<${Feed} />` : tab === 'music' ? html`<${Music} />` : tab === 'clips' ? html`<${Clips} />` : tab === 'live' ? html`<${Live} />` : tab === 'tv' ? html`<${TV} />` : tab === 'apps' ? html`<div class="hub-pad"><${AppsCatalog} /></div>` : html`<${Help} />`}</div>
     ${tab !== 'clips' && !(tab === 'live' && LV.cur) && html`<${AudioBar} />`}
   </section>`;
 }
@@ -72,13 +74,8 @@ export async function takeShared(key) {
 // Оболочка присылает событие с пропуском к файлам; пропуск получает только главная страница, вставкам с других сайтов он недоступен
 window.addEventListener('nudist-share', e => { takeShared(typeof e.detail === 'string' ? e.detail : ''); });
 on('init', () => { setTimeout(() => { try { if (window.NudistApp && window.NudistApp.shareAsk) window.NudistApp.shareAsk(); } catch (e) { /* старая сборка */ } }, 1200); });
-function YandexFrame({ id, t }) {
-  const x = t.ext, old = / NudistAndroid\//.test(navigator.userAgent) && !(window.NudistApp && window.NudistApp.version && Number(window.NudistApp.version()) >= 14);
-  return html`<${Modal} id=${id} title=${t.title} icon="music" cls="small" footer=${html`<a class="btn ghost" href=${x.page} target="_blank" rel="noopener noreferrer"><${Icon} n="external-link" s=${16} /> Открыть в Яндекс Музыке</a>`}>
-    ${old ? html`<p class="note warn">В старой версии приложения плеер Яндекса не открывается. Обновите «Нудист» или нажмите кнопку ниже — трек откроется в Яндекс Музыке.</p>`
-      : html`<iframe class="ym-frame" style=${`height:${x.kind === 'track' ? 180 : 450}px`} src=${x.frame} allow="autoplay; encrypted-media; clipboard-write" title="Плеер Яндекс Музыки"></iframe>`}
-    <p class="hint">Это официальный плеер Яндекс Музыки. Что играть целиком, а что отрывком — решает Яндекс: полные треки он обычно даёт тем, кто вошёл к нему с подпиской.</p><//>`;
-}
+// Официальный плеер Яндекс Музыки открывается в закреплённом плеере: его можно свернуть, и музыка не остановится
+const ymDock = t => ({ kind: 'ym', key: 'ym:' + t.id, title: t.title, src: t.ext.frame, link: t.ext.page, h: t.ext.kind === 'track' ? 180 : 450 });
 
 function Music() {
   const [tab, setTabM] = useState(local.get('music.tab') || 'my'), [q, setQ] = useState(''), [d, setD] = useState(null), [pub, setPub] = useState(!!local.get('music.pub'));
@@ -93,7 +90,7 @@ function Music() {
   useEffect(() => { musicReload = () => { if (tab !== 'my') setTabM('my'); else load(); }; return () => { musicReload = null; }; });
   const cur = S.player && String(S.player.id).startsWith('trk_') ? S.player.id.slice(4) : null;
   useEffect(() => { if (cur) rpc('music.play', { id: cur }).catch(() => {}); }, [cur]);
-  const play = t => (t.ext && t.ext.s === 'ym' ? openModal(YandexFrame, { t }) : playAudio(trackMsg(t), d.tracks.filter(x => x.url).map(trackMsg)));
+  const play = t => (t.ext && t.ext.s === 'ym' ? openDock(ymDock(t)) : playAudio(trackMsg(t), d.tracks.filter(x => x.url).map(trackMsg)));
   const playNet = it => playAudio(extMsg(it), net.items.map(extMsg));
   const keepNet = it => rpc('tunes.keep', { key: it.key }).then(() => { setNet(o => ({ ...o, items: o.items.map(i => (i.key === it.key ? { ...i, mine: true } : i)) })); toast(it.s === 'rb' ? 'Станция добавлена в вашу музыку' : 'Добавлено в вашу музыку'); }).catch(err);
   const yandex = async () => {

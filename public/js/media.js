@@ -44,6 +44,7 @@ audio.onended = () => { const p = P(); if (!p) return; if (p.repeat) { audio.cur
 export async function playAudio(m, queue) {
   const p = P();
   if (p && p.id === m.id) { audio.paused ? audio.play() : audio.pause(); return; }
+  if (S.dock) S.dock = null;      // вставка с чужого сайта (Яндекс Музыка, телевизор) выключается: два звука сразу не нужны
   S.player = { id: m.id, chat: m.chat, kind: m.type, title: m.type === 'voice' ? 'Голосовое · ' + userName(S.users[m.from]) : (m.media.name || 'Аудио'), dur: m.media.dur || 0, t: 0, on: false, rate: (p && p.kind === 'voice' && m.type === 'voice' && p.rate) || 1, repeat: p ? p.repeat : false, shuffle: p ? p.shuffle : false, queue: (queue || [m]).filter(x => x.type === m.type), m };
   try { audio.src = await mediaUrl(m.media); audio.playbackRate = S.player.rate; await audio.play(); } catch (e) { toast('Не удалось воспроизвести', 'err'); }
   bump();

@@ -124,3 +124,38 @@ article.post footer { font-size: inherit; color: inherit; }
 .ym-frame { display: block; width: 100%; border: 0; border-radius: 8px; background: var(--hover); }
 .music .trk a.ib { display: inline-flex; align-items: center; justify-content: center; color: var(--ink3); }
 @media (max-width: 640px) { .hub-bar .mus-seg { flex: 1 1 100%; overflow-x: auto; } .hub-bar .mus-seg button { padding-left: 8px; padding-right: 8px; font-size: .92em; } .music .trk a.ib { display: none; } }
+/* закреплённый плеер: вставка с чужого сайта. Свёрнутое окно уезжает за край экрана, а не исчезает — иначе музыка бы остановилась */
+.dock { flex: none; }
+.dock-win { position: fixed; top: 0; bottom: 0; left: 0; width: 100%; z-index: 58; display: grid; place-items: center; padding: 16px; overflow-y: auto; }
+.dock-shade { position: fixed; inset: 0; background: var(--overlay); animation: fade .15s; }
+.dock-card { position: relative; display: flex; flex-direction: column; width: min(420px, 100%); max-height: min(92dvh, 900px); border-radius: var(--r-l); background: var(--panel); box-shadow: var(--shadow); overflow: hidden; }
+.dock-h { display: flex; align-items: center; flex: none; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--line); } .dock-h > .ic:first-child { color: var(--accent); margin-right: 10px; flex: none; }
+.dock-h h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1em; }
+.dock-n { display: inline-block; min-width: 26px; margin-right: 8px; padding: 0 6px; font-style: normal; font-size: .86em; line-height: 22px; text-align: center; color: #fff; background: #2B2B2B; border-radius: 4px; }
+.dock-b { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px; } .dock-b > .hint { margin: 10px 0 0; }
+.dock-frame { display: block; width: 100%; border: 0; border-radius: 8px; background: var(--hover); }
+.dock-f { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; flex: none; padding: 8px 12px; border-top: 1px solid var(--line); } .dock-f > * { margin: 4px; } .dock-f > .hint { flex: 1 1 200px; }
+.dock.mini .dock-win { left: -300vw; pointer-events: none; } .dock.mini .dock-shade { display: none; }
+.dock-mini { display: flex; align-items: center; height: 52px; padding: 0 6px 0 4px; background: var(--panel); border-top: 1px solid var(--line); position: relative; z-index: 40; }
+.dock-mini-m { display: flex; align-items: center; flex: 1; min-width: 0; height: 100%; padding: 0 8px; text-align: left; color: var(--ink); } .dock-mini-m:hover { background: var(--hover); } .dock-mini-m > .ic { flex: none; color: var(--ink3); }
+.dock-mini-t { flex: 1; min-width: 0; margin: 0 10px; } .dock-mini-t b, .dock-mini-t small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .dock-mini-t small { color: var(--ink2); font-size: .8em; }
+.dock-eq { display: flex; align-items: flex-end; flex: none; width: 20px; height: 18px; } .dock-eq i { flex: 1; margin: 0 1px; background: var(--accent); animation: dock-eq 1s ease-in-out infinite; } .dock-eq i:nth-child(2) { animation-delay: -.35s; } .dock-eq i:nth-child(3) { animation-delay: -.7s; }
+@keyframes dock-eq { 0%, 100% { height: 25%; } 50% { height: 100%; } }
+@media (prefers-reduced-motion: reduce) { .dock-eq i { animation: none; height: 60%; } }
+.has-dock .hub { bottom: 52px; }
+/* телевизор — на весь экран, без полей: картинке нужно место */
+.dock-tv .dock-win { padding: 0; } .dock-tv .dock-card { width: 100%; height: 100%; max-height: none; border-radius: 0; background: #000; }
+.dock-tv .dock-h, .dock-tv .dock-f { background: var(--panel); } .dock-tv .dock-b { padding: 0; overflow: hidden; display: flex; } .dock-tv .dock-frame { flex: 1; height: auto; border-radius: 0; background: #000; }
+.dock-tv .dock-f { padding: 2px 8px; } .dock-tv .dock-f > .hint { font-size: .8em; }
+@media (max-height: 480px) and (orientation: landscape) { .dock-tv .dock-f { display: none; } .dock-tv .dock-h { padding: 2px 6px 2px 12px; } }
+/* телевизор: кнопки каналов */
+.tv-live { display: inline-flex; align-items: center; font-size: .82em; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #E81123; } .tv-live i { width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #E81123; animation: tv-blink 1.6s ease-in-out infinite; }
+@keyframes tv-blink { 50% { opacity: .25; } } @media (prefers-reduced-motion: reduce) { .tv-live i { animation: none; } }
+.tv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.tv-ch { display: flex; align-items: center; min-width: 0; padding: 8px 12px 8px 8px; text-align: left; text-decoration: none; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); transition: background .12s, border-color .12s; }
+.tv-ch:hover { background: var(--hover); } .tv-ch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; } .tv-ch.on { border-color: var(--accent); }
+.tv-n { display: grid; place-items: center; flex: none; width: 44px; height: 44px; margin-right: 12px; font-size: 1.15em; font-weight: 700; color: #fff; border-radius: calc(var(--r) - 4px); font-variant-numeric: tabular-nums; }
+.tv-m { flex: 1; min-width: 0; } .tv-m b, .tv-m small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .tv-m small { color: var(--ink2); font-size: .82em; }
+.tv-ch > .ic { flex: none; margin-left: 8px; color: var(--ink3); } .tv-ch:not(.out) > .ic { color: var(--accent); }
+@media (max-width: 480px) { .tv-grid { grid-template-columns: 1fr 1fr; gap: 6px; } .tv-ch { padding: 6px 8px 6px 6px; } .tv-n { width: 36px; height: 36px; margin-right: 8px; font-size: 1em; } .tv-ch > .ic { display: none; } }
+.has-dock .toasts { bottom: 66px; }
