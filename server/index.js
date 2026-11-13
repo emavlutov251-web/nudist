@@ -16,6 +16,7 @@ const Adm = require('./admin');
 require('./gifts');
 require('./tgpacks');
 require('./tunes');
+require('./common');
 const Seed = require('./seed');
 const { db, save, now, emit } = C;
 

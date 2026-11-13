@@ -124,9 +124,9 @@
 [data-style='fluent'] .folders button.on, [data-style='fluent'] .tabs button.on { color: var(--ink); font-weight: 600; border-color: var(--accent); }
 [data-style='fluent'] .folders button b, [data-style='fluent'] .tabs button b { border-radius: 0; }
 [data-style='fluent'] .mi { padding: 8px 14px; } [data-style='fluent'] .menu hr { margin: 4px 0; }
-[data-style='fluent'] .rail-b, [data-style='fluent'] .rail-b:hover, [data-style='fluent'] .rail-b.on, [data-style='fluent'] .rail-b .ava { border-radius: 0; }
+[data-style='fluent'] .rail-b, [data-style='fluent'] .rail-b:hover, [data-style='fluent'] .rail-b.on, [data-style='fluent'] .rail-b .ava { border-radius: 14px; }      /* панель значков — единственное скруглённое место в этом оформлении: так попросили */
 [data-style='fluent'] .rail-b.home.on { background: rgba(255, 255, 255, .16); } [data-style='fluent'] .rail-b.add:hover { background: rgba(255, 255, 255, .18); }
-[data-style='fluent'] .rail-b .pill { left: -11px; width: 3px; border-radius: 0; background: var(--accent); }
+[data-style='fluent'] .rail-b .pill { left: -8px; width: 4px; border-radius: 0 4px 4px 0; background: var(--accent); }
 
 /* ───── сообщения */
 [data-style='fluent'] .bubble, [data-style='fluent'] .msg.out .bubble, [data-style='fluent'] .msg.grp .bubble { border-radius: 2px; box-shadow: 0 1px 2px rgba(0, 0, 0, .14); }
