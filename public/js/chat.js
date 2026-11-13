@@ -1,6 +1,6 @@
 // Окно чата: шапка, закрепы, поиск, лента сообщений, треды, форум.
 import { svcText, html, useState, useEffect, useRef, useLayoutEffect, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, Badges, cx, showMenu, closeMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtTime, fmtDay, fmtFull, fmtShort, sameDay, userName, lastSeen, kindIcon, md, copyText, confirmDlg, promptDlg, addUsers, Empty, Spinner, plural, fmtNum, fmtDur, ttlLabel, isMuted, setSetting, debounce } from './lib.js';
-import { msgKey, loadHistory, openChat, closeChat, openUser, markRead, retryMsg } from './store.js';
+import { msgKey, loadHistory, openChat, closeChat, openUser, markRead, retryMsg, secretIssue, ensureKey } from './store.js';
 import { Sticker, sfx } from './fun.js';
 import { OnceMsg, Streak } from './growth.js';
 import { Photo, Gif, VideoMsg, RoundMsg, VoiceMsg, AudioMsg, FileMsg, LocMsg } from './media.js';
@@ -47,6 +47,14 @@ function Header({ chat, thread, onSearch }) {
   </header>`;
 }
 
+// Секретный чат привязан к ключам двух конкретных устройств. Если ключ сменился, честно говорим об этом, а не молча показываем абракадабру.
+function SecretNote({ chat }) {
+  const why = secretIssue(chat); if (!why) return null;
+  const again = async () => { try { await ensureKey(); const c = await rpc('secret.open', { user: chat.peer }); if (c) { S.chats[c.id] = c; openChat(c.id); } } catch (e) { toast(e.message, 'err'); } };
+  return html`<div class="secret-note" role="status"><${Icon} n="triangle-alert" s=${18} />
+    <p>${why === 'mine' ? 'Этот секретный чат создан на другом вашем устройстве. Здесь его не прочитать и в него не написать: ключ остался там.' : 'Ключ собеседника изменился: он зашёл с другого устройства или переустановил приложение. Там этот чат не расшифруется. Если смена неожиданная, сверьте код безопасности в новом чате.'}</p>
+    <button class="btn sm" onClick=${again}>Новый секретный чат</button></div>`;
+}
 function PinBar({ chat, onJump }) {
   const ids = chat.pinned || [], [d, setD] = useState(null), [i, setI] = useState(0);
   useEffect(() => { if (!ids.length) { setD(null); return; } let live = true; rpc('msg.pinned', { chat: chat.id }).then(r => { addUsers(r.users); if (live) setD(r.msgs); }).catch(() => {}); return () => { live = false; }; }, [ids.join()]);
@@ -302,6 +310,7 @@ export function Main({ chat }) {
   return html`<section class=${cx('chat', flat ? 'flat' : 'bub', hid && 'shield', voice && 'has-voice')} onDragOver=${e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); e.currentTarget.classList.add('drag'); } }} onDragLeave=${e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('drag'); }} onDrop=${drop}>
     <${Header} chat=${chat} thread=${thread} onSearch=${() => setSearch(!search)} />
     ${!thread && !forum && html`<${PinBar} chat=${chat} onJump=${mid => openChat(chat.id, { jump: mid, keepServer: true })} />`}
+    ${chat.type === 'secret' && html`<${SecretNote} chat=${chat} />`}
     ${search && html`<${SearchBar} chat=${chat} onClose=${() => setSearch(false)} />`}
     ${voice && !thread && html`<${VoiceRoom} chat=${chat} />`}
     ${forum ? html`<${Forum} chat=${chat} />` : html`<${MsgList} chat=${chat} thread=${thread} flat=${flat} />`}

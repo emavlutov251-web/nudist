@@ -33,6 +33,7 @@ H['me.update'] = (c, p) => {
       u.username = n || undefined; if (n) C.byName.set(n.toLowerCase(), u.id);
     }
   }
+  const oldAvatars = [u.avatar, ...(u.avatars || [])];
   if (p.avatar !== undefined) {
     need(!p.avatar || isUpload(p.avatar), 'Некорректный аватар');
     if (p.avatar && /\.(mp4|webm|gif)$/.test(p.avatar)) need(C.isPremium(u), 'Анимированный аватар — привилегия «Нудист Голый Премиум»');
@@ -40,6 +41,7 @@ H['me.update'] = (c, p) => {
     if (p.avatar) { u.avatars = [p.avatar, ...(u.avatars || []).filter(a => a !== p.avatar)].slice(0, 12); }
   }
   if (p.delAvatar) { u.avatars = (u.avatars || []).filter(a => a !== p.delAvatar); if (u.avatar === p.delAvatar) u.avatar = u.avatars[0]; }
+  if (p.avatar !== undefined || p.delAvatar) C.releaseFiles(oldAvatars);      // сотрутся только те, что выпали из списка
   if (p.color !== undefined) u.color = int(p.color, 0, 7);
   if (p.status !== undefined) u.status = p.status && (p.status.e || p.status.t) ? { e: str(p.status.e, 16), t: str(p.status.t, 80), until: p.status.until ? int(p.status.until, 0, 1e15) : undefined } : undefined;
   if (p.links !== undefined) u.links = (Array.isArray(p.links) ? p.links : []).slice(0, 5).map(l => ({ t: str(l.t, 40), u: str(l.u, 200) })).filter(l => /^https?:\/\//i.test(l.u));
@@ -208,7 +210,7 @@ H['chat.update'] = (c, p) => {
       if (p.title !== undefined) { const t = str(p.title, 100); need(t, 'Нужно название'); if (t !== ch.title) { ch.title = t; service(ch, c.uid, 'изменил(а) название на «' + t + '»'); } }
       if (p.about !== undefined) ch.about = str(p.about, 500);
       if (p.rules !== undefined) ch.rules = str(p.rules, 2000);
-      if (p.avatar !== undefined) { need(!p.avatar || isUpload(p.avatar), 'Некорректный аватар'); ch.avatar = p.avatar || undefined; }
+      if (p.avatar !== undefined) { need(!p.avatar || isUpload(p.avatar), 'Некорректный аватар'); C.releaseFiles(ch.avatar); ch.avatar = p.avatar || undefined; }
       if (p.pub !== undefined) ch.pub = !!p.pub;
       if (p.username !== undefined) setChatUsername(ch, p.username);
       if (p.slow !== undefined) ch.slow = int(p.slow, 0, 86400) || undefined;
@@ -468,6 +470,8 @@ function buildPayload(c, chat, p) {
   if (chat.type === 'secret') {
     need(p.enc && typeof p.enc.iv === 'string' && typeof p.enc.ct === 'string' && p.enc.ct.length < 400000, 'В секретном чате сообщения должны быть зашифрованы');
     out.enc = { iv: p.enc.iv.slice(0, 64), ct: p.enc.ct };
+    // Что внутри, сервер не видит. Адреса зашифрованных файлов приложение называет отдельно — только чтобы стереть их вместе с сообщением.
+    const fl = Array.isArray(p.files) ? p.files.filter(isUpload).slice(0, 12) : []; if (fl.length) out.files = fl;
   } else if (['photo', 'video', 'file', 'audio', 'voice', 'round', 'gif'].includes(type)) {
     out.type = type; out.media = mediaOf(p); out.text = str(p.text, 1024);
     if (p.once) { need(type === 'photo' || type === 'video', 'Одноразовыми бывают только фото и видео'); need(chat.type === 'dm', 'Одноразовые фото и видео — только в личных чатах'); out.once = true; out.text = ''; }
@@ -780,7 +784,7 @@ H['story.react'] = (c, p) => {
   }
 };
 H['story.viewers'] = (c, p) => { const s = db.stories[p.id]; need(s && s.user === c.uid, 'История не найдена'); return { views: s.views.map(v => ({ ...v, e: s.rx[v.u] })), users: usersFor(c, s.views.map(v => v.u)) }; };
-H['story.del'] = (c, p) => { const s = db.stories[p.id]; need(s && s.user === c.uid, 'История не найдена'); delete db.stories[s.id]; save(); C.emitAll('story.del', { id: s.id }); };
+H['story.del'] = (c, p) => { const s = db.stories[p.id]; need(s && s.user === c.uid, 'История не найдена'); C.releaseFiles(s); delete db.stories[s.id]; save(); C.emitAll('story.del', { id: s.id }); };
 
 // ══════════ ЛИСТИКИ (внутренняя валюта) И ПРЕМИУМ ══════════
 const PREMIUM_PRICE = 500, BOOST_PRICE = 200;

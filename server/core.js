@@ -260,14 +260,36 @@ function streakOf(chat) {      // { n, hot }: hot — сегодня серия 
   if (k.last === dayMsk(-1)) return { n: k.n, hot: false };
   return null;
 }
-// Стереть загруженный файл совсем: с диска и из облака (одноразовые фото и видео).
-function dropUpload(url) {
-  const name = isUpload(url) ? String(url).slice(3) : ''; if (!/^[\w-]+\.[a-z0-9]{1,8}$/.test(name)) return;
-  // Один файл может стоять и в записи ленты, и в клипе (перенос из канала): стираем, только когда он больше нигде не нужен.
-  for (const k in db.posts || {}) if ((db.posts[k].media || []).includes(url)) return;
-  for (const k in db.clips || {}) if (db.clips[k].url === url) return;
-  fs.unlink(path.join(UPLOADS, name), () => {}); Cloud.dropUpload(name);
+// ───── Файлы, на которые больше никто не ссылается
+// Удалили сообщение, запись, клип, чат или аккаунт — их файлы нужно стереть, иначе хранилище забьётся мёртвым грузом.
+// Но один файл может стоять в нескольких местах (пересланное сообщение, запись ленты и клип разом), поэтому файлы
+// сначала попадают в список кандидатов, а через минуту сверяются со всей базой: стирается только то, на что не осталось ни одной ссылки.
+const FILE_DELAY = Number(process.env.FILE_DELAY_MS) || 60000;
+const FILE_RE = /\/u\/([\w-]+\.[a-z0-9]{1,8})(?![\w.-])/g;
+const FREE_TEXT = new Set(['text', 'enc', 'about', 'bio', 'title', 'name', 'caption', 'html']);      // здесь адрес файла мог напечатать человек — это не вложение
+function filesIn(x) {
+  const out = new Set(); if (x == null) return out;
+  const s = typeof x === 'string' ? x : JSON.stringify(x, (k, v) => (FREE_TEXT.has(k) ? undefined : v)) || '';
+  for (const m of s.matchAll(FILE_RE)) out.add(m[1]);
+  return out;
 }
+const fileTrash = new Set(); let fileTimer = null;
+function releaseFiles(...things) {
+  for (const x of things) for (const n of filesIn(x)) fileTrash.add(n);
+  if (fileTrash.size && !fileTimer) { fileTimer = setTimeout(sweepFiles, FILE_DELAY); fileTimer.unref(); }
+}
+function sweepFiles() {
+  fileTimer = null; if (!fileTrash.size) return 0;
+  const names = [...fileTrash]; fileTrash.clear();
+  const blob = JSON.stringify(db); let n = 0;
+  for (const name of names) {
+    if (blob.includes('/u/' + name)) continue;          // файл ещё где-то нужен
+    fs.unlink(path.join(UPLOADS, name), () => {}); Cloud.dropUpload(name); n++;
+  }
+  if (n) console.log(`[files] стёрто файлов, на которые не осталось ссылок: ${n}`);
+  return n;
+}
+const dropUpload = url => releaseFiles(String(url || ''));
 function chatView(chat, uid) {
   const s = st(chat, uid);
   const v = { id: chat.id, type: chat.type, title: chat.title, about: chat.about, avatar: chat.avatar, username: chat.username, pub: chat.pub, created: chat.created, seq: chat.seq,
@@ -300,10 +322,10 @@ function chatView(chat, uid) {
 function emitChat(chat, uids) { for (const u of uids || membersOf(chat)) if (isOnline(u)) emit(u, 'chat', chatView(chat, u)); }
 
 // ───── сообщения
-const MSG_FIELDS = ['text', 'media', 'reply', 'quote', 'fwd', 'poll', 'thread', 'btn', 'silent', 'sticker', 'loc', 'contact', 'enc', 'title', 'as', 'via', 'hook', 'call', 'act', 'dice', 'album', 'fx', 'gift', 'tags', 'rq', 'sig', 'link', 'once'];
+const MSG_FIELDS = ['text', 'media', 'reply', 'quote', 'fwd', 'poll', 'thread', 'btn', 'silent', 'sticker', 'loc', 'contact', 'enc', 'title', 'as', 'via', 'hook', 'call', 'act', 'dice', 'album', 'fx', 'gift', 'tags', 'rq', 'sig', 'link', 'once', 'files'];
 const expiring = [];
 for (const cid in db.msgs) for (const m of db.msgs[cid]) if (m.exp) expiring.push({ c: cid, i: m.id, at: m.exp });
-const hooks = { afterPost: [] };
+const hooks = { afterPost: [], userGone: [] };
 
 function findMsg(chatId, mid) { return (db.msgs[chatId] || []).find(m => m.id === mid); }
 function mentionedUsers(chat, from, text) {
@@ -350,15 +372,16 @@ function postMessage(chat, from, p, o = {}) {
 function service(chat, from, text, extra) { return postMessage(chat, from, { type: 'service', text, ...extra }, { quiet: true }); }
 function updateMsg(chat, m) { for (const u of membersOf(chat)) if (isOnline(u)) emit(u, 'msg.upd', { chat: chat.id, msg: msgView(m, u) }); save(); }
 function deleteMessages(chat, ids) {
-  const arr = db.msgs[chat.id] || []; const set = new Set(ids); const gone = [];
+  const arr = db.msgs[chat.id] || []; const set = new Set(ids); const gone = [], dead = [];
   for (let i = arr.length - 1; i >= 0; i--) {
     const m = arr[i];
     if (set.has(m.id) || (m.thread && set.has(m.thread))) {
-      gone.push(m.id); arr.splice(i, 1);
+      gone.push(m.id); dead.push(m); arr.splice(i, 1);
       if (m.thread && !set.has(m.thread)) { const r = findMsg(chat.id, m.thread); if (r && r.tcount) { r.tcount--; updateMsg(chat, r); } }
     }
   }
   if (!gone.length) return gone;
+  releaseFiles(dead);
   if (chat.pinned) chat.pinned = chat.pinned.filter(x => !set.has(x));
   for (const u of membersOf(chat)) if (isOnline(u)) emit(u, 'msg.del', { chat: chatView(chat, u), ids: gone });
   save();
@@ -398,6 +421,7 @@ function openDm(a, b) {
 function destroyChat(chat) {
   for (const u of Object.keys(chat.members)) removeFromChat(chat, u);
   if (chat.username) chatNames.delete(chat.username.toLowerCase());
+  releaseFiles(db.msgs[chat.id], chat.avatar);
   delete db.chats[chat.id]; delete db.msgs[chat.id];
   save();
 }
@@ -427,4 +451,4 @@ function viewersOf(o, viewerId, key = 'seen') {
   for (const v of list) users[v.u] = pubUser(db.users[v.u], viewerId);
   return { list, users };
 }
-module.exports = { isRobot, markSeen, viewersOf, canImport, setOfflineHook, audience, size, dropUpload, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { isRobot, markSeen, viewersOf, canImport, setOfflineHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

@@ -34,6 +34,15 @@ async function chatKey(chat) {
   const key = await subtle.deriveKey({ name: 'ECDH', public: pub }, priv, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
   keyCache.set(chat.id, key); return key;
 }
+// Что не так с секретным чатом: 'mine' — его ключ остался на другом моём устройстве, 'peer' — собеседник сменил ключ
+// (зашёл с другого устройства или переустановил приложение) и прочитать этот чат там не сможет. null — всё в порядке.
+export function secretIssue(chat) {
+  if (!chat || chat.type !== 'secret' || !chat.keys || !S.me) return null;
+  const my = local.get('ecdh.' + S.me.id), mine = chat.keys[S.me.id], peer = chat.keys[chat.peer], pu = S.users[chat.peer];
+  if (!subtle || !my || !mine || mine.x !== my.pub.x) return 'mine';
+  if (peer && pu && pu.pubKey && pu.pubKey.x !== peer.x) return 'peer';
+  return null;
+}
 export async function encryptFor(chat, obj) {
   const key = await chatKey(chat), iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
@@ -131,7 +140,7 @@ export async function sendPayload(chatId, p, o = {}) {
   if (!p.at) { listOf(k).push(tmp); bump(); }
   try {
     let body = { chat: chatId, thread, ...p };
-    if (chat.type === 'secret') { const { reply, quote, ttl, silent, ...plain } = p; body = { chat: chatId, reply, quote, ttl, silent, enc: await encryptFor(chat, plain) }; }
+    if (chat.type === 'secret') { const { reply, quote, ttl, silent, ...plain } = p; body = { chat: chatId, reply, quote, ttl, silent, enc: await encryptFor(chat, plain), files: [...new Set(JSON.stringify(plain).match(/\/u\/[\w-]+\.[a-z0-9]{1,8}/g) || [])].slice(0, 12) }; }      // files: адреса зашифрованных файлов, чтобы сервер стёр их вместе с сообщением
     const r = await rpc('msg.send', body);
     S.msgs[k] = listOf(k).filter(m => m.id !== tmp.id);
     if (r.scheduled) { toast('Сообщение отложено. Уйдёт само, как по расписанию.'); bump(); return r; }

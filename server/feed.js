@@ -20,6 +20,7 @@ function perDay(u, key, max, msg) {
   if (!k || k.d !== d) u.lim[key] = { d, n: 0 };
   need(u.lim[key].n < max, msg); u.lim[key].n++;
 }
+C.hooks.userGone.push(u => { let n = 0; for (const k of Object.keys(db.posts)) if (db.posts[k].by === u.id) { C.releaseFiles(db.posts[k]); delete db.posts[k]; n++; } if (n) order = null; });      // аккаунт удалён — его записи тоже
 let order = null;      // id записей от новых к старым; сбрасывается при добавлении и удалении
 const sorted = () => order || (order = Object.values(db.posts).sort((a, b) => b.ts - a.ts).map(p => p.id));
 const view = (p, u) => ({ id: p.id, by: p.by, ts: p.ts, text: p.text, media: p.media || [], likes: count(p.likes), liked: !!p.likes[u.id], comments: (p.cm || []).length, views: p.views || 0, own: p.by === u.id || isMod(u) });

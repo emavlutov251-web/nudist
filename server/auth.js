@@ -84,13 +84,22 @@ function deviceName(ua = '') {
   const br = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /YaBrowser/.test(ua) ? 'Яндекс Браузер' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Браузер';
   return br + ' · ' + os;
 }
+// Сеансы хранятся под хешем токена: сам токен знает только устройство человека. Если файл базы утечёт,
+// войти по нему в чужие аккаунты не получится. Внутри сервера «ключ сеанса» — это везде хеш.
+const sid = t => crypto.createHash('sha256').update(String(t || '')).digest('hex');
+if (!db.meta.sessHashed) {          // однократный перевод старой базы
+  const old = Object.keys(db.sessions);
+  for (const k of old) { const s = db.sessions[k]; delete db.sessions[k]; db.sessions[sid(k)] = s; }
+  db.meta.sessHashed = 1; save();
+  if (old.length) console.log(`[auth] сеансы переведены на хранение под хешем: ${old.length}`);
+}
 function createSession(u, meta) {
   if (u.banned) fail('Аккаунт заблокирован администрацией' + (u.banReason ? ': ' + u.banReason : ''));
-  const t = token(32);
+  const t = token(32), key = sid(t);
   const s = { id: id(), user: u.id, ua: deviceName(meta.ua), ip: meta.ip, at: now(), seen: now() };
-  db.sessions[t] = s;
+  db.sessions[key] = s;
   let others = 0;
-  if (now() - u.created > 15000) for (const k in db.sessions) if (k !== t && db.sessions[k].user === u.id) { others = 1; break; }      // у только что созданного аккаунта других сеансов нет
+  if (now() - u.created > 15000) for (const k in db.sessions) if (k !== key && db.sessions[k].user === u.id) { others = 1; break; }      // у только что созданного аккаунта других сеансов нет
   if (others > 0) hooks.onLogin.forEach(h => h(u, s));
   save();
   return { token: t };
@@ -112,7 +121,9 @@ function deleteUser(u) {
     if (wasOwner) { const next = Object.keys(c.members)[0]; if (next) c.members[next].role = 'owner'; else C.destroyChat(c); }
   }
   for (const sid of [...(u.servers || [])]) { const s = db.servers[sid]; if (!s) continue; delete s.members[u.id]; if (s.owner === u.id) { const next = Object.keys(s.members)[0]; if (next) s.owner = next; } }
-  for (const sid of Object.keys(db.stories)) if (db.stories[sid].user === u.id) delete db.stories[sid];
+  for (const k of Object.keys(db.stories)) if (db.stories[k].user === u.id) { C.releaseFiles(db.stories[k]); delete db.stories[k]; }
+  for (const h of C.hooks.userGone) { try { h(u); } catch (e) { console.error('[hook]', e); } }      // записи ленты и клипы
+  C.releaseFiles(u.avatar, u.avatars);
   if (u.username) C.byName.delete(u.username.toLowerCase());
   db.users[u.id] = { id: u.id, deleted: true, name: 'Удалённый аккаунт', created: u.created };
   C.broadcastUser(db.users[u.id]);
@@ -209,4 +220,4 @@ function approveQr(user, qid) {
 }
 setInterval(() => { const t = now(); for (const [k, q] of qr) if (q.exp < t - 60e3) qr.delete(k); for (const [k, p] of phoneCodes) if (p.exp < t) phoneCodes.delete(k); }, 60e3).unref();
 
-module.exports = { REF_BONUS, api, hashPass, checkPass, totp, totpOk, b32enc, newRecovery, useRecovery, createUser, createSession, killSession, deleteUser, approveQr, limit, hooks, normPhone, findByPhone, phoneCodes };
+module.exports = { REF_BONUS, api, hashPass, checkPass, totp, totpOk, b32enc, newRecovery, useRecovery, createUser, createSession, killSession, sid, deleteUser, approveQr, limit, hooks, normPhone, findByPhone, phoneCodes };

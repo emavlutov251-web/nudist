@@ -74,6 +74,7 @@ const VIDEO_EXT = new Set(['mp4', 'webm', 'mov']);
 const CLIP_MAX_SEC = 180;
 const count = o => { let n = 0; for (const k in o) n++; return n; };
 const clipView = (k, uid) => ({ id: k.id, by: k.by, url: k.url, w: k.w, h: k.h, dur: k.dur, text: k.text, ts: k.ts, likes: count(k.likes), liked: !!k.likes[uid], views: k.views || 0, comments: (k.cm || []).length, own: k.by === uid });
+C.hooks.userGone.push(u => { let n = 0; for (const k of Object.keys(db.clips)) if (db.clips[k].by === u.id) { C.releaseFiles(db.clips[k]); delete db.clips[k]; n++; } if (n) clipOrder = null; });      // аккаунт удалён — его клипы тоже
 let clipOrder = null;      // id клипов от новых к старым; пересобирается при добавлении и удалении
 const order = () => clipOrder || (clipOrder = Object.values(db.clips).sort((a, b) => b.ts - a.ts).map(k => k.id));
 

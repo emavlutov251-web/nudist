@@ -62,7 +62,8 @@ function leaveServer(s, uid) {
 }
 function destroyServer(s) {
   for (const u of Object.keys(s.members)) leaveServer(s, u);
-  for (const cid of s.channels) { delete db.chats[cid]; delete db.msgs[cid]; }
+  for (const cid of s.channels) { C.releaseFiles(db.msgs[cid], db.chats[cid] && db.chats[cid].avatar); delete db.chats[cid]; delete db.msgs[cid]; }
+  C.releaseFiles(s);
   for (const k of Object.keys(db.invites)) if (db.invites[k].server === s.id) delete db.invites[k];
   delete db.servers[s.id]; save();
 }
@@ -132,7 +133,7 @@ H['server.channel.update'] = (c, p) => {
 };
 H['server.channel.del'] = (c, p) => {
   const ch = db.chats[p.id]; need(ch && ch.server, 'Канал не найден'); const s = getServer(c, ch.server, 'channels');
-  s.channels = s.channels.filter(x => x !== ch.id); delete db.chats[ch.id]; delete db.msgs[ch.id]; rooms.delete(ch.id);
+  s.channels = s.channels.filter(x => x !== ch.id); C.releaseFiles(db.msgs[ch.id], ch.avatar); delete db.chats[ch.id]; delete db.msgs[ch.id]; rooms.delete(ch.id);
   for (const u in s.members) emit(u, 'chat.gone', { id: ch.id });
   audit(s, c.uid, 'channel.del', '#' + ch.title); save();
 };

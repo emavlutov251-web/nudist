@@ -23,13 +23,35 @@ const INLINE_UPLOAD = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'mp4
 const CSP = "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'self' https:; object-src 'none'; base-uri 'self'";
 
 // Адрес клиента. На Render перед нами Cloudflare: он сам пишет настоящий адрес в cf-connecting-ip, а первый элемент x-forwarded-for клиент может подделать.
-const ipOf = req => { const h = req.headers, cf = process.env.RENDER && (h['cf-connecting-ip'] || h['true-client-ip']); return String(cf || String(h['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '').replace(/^::ffff:/, ''); };
+// Адрес клиента. Заголовкам X-Forwarded-For и подобным верим, только если запрос пришёл от своего прокси
+// (Caddy, nginx, балансировщик хостинга). Иначе любой мог бы прислать заголовок с выдуманным адресом и обойти
+// ограничения на подбор пароля и флуд. TRUST_PROXY: не задано — прокси считается тот, кто подключился с локального
+// или внутреннего адреса; off — заголовкам не верить никогда; число — сколько прокси стоит перед сервером;
+// cloudflare — брать адрес из заголовка Cloudflare.
+const TRUST = String(process.env.TRUST_PROXY || '').trim().toLowerCase().replace(/^auto$/, '');
+const HOPS = /^[1-9]\d?$/.test(TRUST) ? Number(TRUST) : 1;
+const innerAddr = ip => /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|f[cd][0-9a-f]{2}:)/i.test(ip);
+const ipOf = req => {
+  const h = req.headers, peer = String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  const viaProxy = TRUST === 'off' || TRUST === '0' ? false : (TRUST || process.env.RENDER) ? true : innerAddr(peer);
+  if (!viaProxy) return peer;
+  const cf = (process.env.RENDER || TRUST === 'cloudflare') && (h['cf-connecting-ip'] || h['true-client-ip']);
+  if (cf) return String(cf).trim().replace(/^::ffff:/, '');
+  const xs = String(h['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);      // ближайший прокси дописывает адрес в конец
+  return (xs[Math.max(0, xs.length - HOPS)] || peer).replace(/^::ffff:/, '');
+};
+// Загрузка файлов: не больше стольких штук и мегабайт в час с одного аккаунта (и втрое больше с одного адреса).
+const UP_N = Number(process.env.UPLOADS_PER_HOUR) || 200, UP_MB = Number(process.env.UPLOAD_MB_PER_HOUR) || 1024;
+const upBytes = new Map();
+const upUsed = k => { const t = Date.now() - 3600e3, a = (upBytes.get(k) || []).filter(x => x[0] > t); if (a.length) upBytes.set(k, a); else upBytes.delete(k); return a.reduce((n, x) => n + x[1], 0); };
+const upAdd = (k, n) => { const a = upBytes.get(k) || []; a.push([Date.now(), n]); upBytes.set(k, a); };
+setInterval(() => { for (const k of [...upBytes.keys()]) upUsed(k); }, 600e3).unref();
 const json = (res, code, body) => { const s = JSON.stringify(body); res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); res.end(s); };
 function readBody(req, max = 100000) {
   return new Promise((resolve, reject) => { const ch = []; let n = 0; req.on('data', d => { n += d.length; if (n > max) { reject(new C.PubError('Слишком большой запрос')); req.destroy(); } else ch.push(d); }); req.on('end', () => resolve(Buffer.concat(ch))); req.on('error', reject); });
 }
 async function readJson(req) { const b = await readBody(req); if (!b.length) return {}; try { const ct = req.headers['content-type'] || ''; return /urlencoded/.test(ct) ? Object.fromEntries(new URLSearchParams(b.toString())) : JSON.parse(b.toString('utf8')); } catch (e) { throw new C.PubError('Некорректный JSON'); } }
-const sessionOf = req => { const t = (req.headers.authorization || '').replace(/^Bearer\s+/i, ''); const s = db.sessions[t]; return s && db.users[s.user] && !db.users[s.user].banned ? { s, u: db.users[s.user], t } : null; };
+const sessionOf = req => { const t = (req.headers.authorization || '').replace(/^Bearer\s+/i, ''); const s = db.sessions[A.sid(t)]; return s && db.users[s.user] && !db.users[s.user].banned ? { s, u: db.users[s.user], t } : null; };
 
 // ───── статика
 const gzCache = new Map();
@@ -113,6 +135,12 @@ function handleUpload(req, res) {
   if (!db.flags.uploads) return json(res, 403, { error: 'Загрузка файлов отключена администратором' });
   const maxMb = Number(process.env.MAX_UPLOAD_MB) || (C.isPremium(a.u) ? 400 : 100), max = maxMb * 1024 * 1024;
   const len = Number(req.headers['content-length']) || 0;
+  const free = C.canImport(a.u), ip = ipOf(req), capMb = UP_MB * (C.isPremium(a.u) ? 3 : 1);      // владельцу и переносу из Telegram ограничения не нужны
+  if (!free) {
+    try { A.limit('up:' + a.u.id, UP_N, 3600e3); A.limit('upip:' + ip, UP_N * 3, 3600e3); }
+    catch (e) { req.resume(); return json(res, 429, { error: 'Слишком много файлов за час. Передохните и попробуйте позже.' }); }
+    if (upUsed('u' + a.u.id) + len > capMb * 1048576 || upUsed('i' + ip) + len > capMb * 3 * 1048576) { req.resume(); return json(res, 429, { error: `За час можно загрузить не больше ${capMb} МБ. Попробуйте позже.` }); }
+  }
   if (!Cloud.hasRoom(len)) { req.resume(); return json(res, 507, { error: 'Хранилище файлов заполнено. Удалите ненужные треки и клипы или напишите в поддержку.' }); }
   if (len > max) { req.resume(); return json(res, 413, { error: `Файл больше ${maxMb} МБ. ${C.isPremium(a.u) ? '' : 'С Премиумом лимит выше.'}` }); }
   let name = ''; try { name = decodeURIComponent(req.headers['x-name'] || ''); } catch (e) { /* игнор */ }
@@ -127,6 +155,7 @@ function handleUpload(req, res) {
   req.on('aborted', () => { if (!dead) { dead = true; out.destroy(); fs.unlink(tmp, () => {}); } });
   out.on('finish', async () => {
     if (dead) return;
+    if (!free) { upAdd('u' + a.u.id, size); upAdd('i' + ip, size); }
     try { await Cloud.putUpload(fname, tmp); }
     catch (e) { console.error('[cloud] файл не сохранён:', e.message); fs.unlink(tmp, () => {}); return json(res, e.full ? 507 : 502, { error: e.full ? 'Хранилище файлов заполнено. Удалите ненужные треки и клипы или напишите в поддержку.' : 'Не удалось сохранить файл в хранилище. Попробуйте ещё раз.' }); }
     json(res, 200, { url: '/u/' + fname, name, size, mime: (req.headers['content-type'] || 'application/octet-stream').slice(0, 100) });
@@ -176,10 +205,10 @@ const wss = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 });
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname !== '/ws') return socket.destroy();
-  const t = url.searchParams.get('token'), s = db.sessions[t], u = s && db.users[s.user];
+  const t = url.searchParams.get('token'), key = A.sid(t), s = db.sessions[key], u = s && db.users[s.user];
   wss.handleUpgrade(req, socket, head, ws => {
     if (!s || !u || u.deleted || u.banned) { ws.send(JSON.stringify({ ev: 'session.killed', d: { reason: u && u.banned ? 'Аккаунт заблокирован' : 'Сеанс недействителен' } })); return ws.close(); }
-    onConnect(ws, t, s, u, ipOf(req));
+    onConnect(ws, key, s, u, ipOf(req));
   });
 });
 function presence(u, online) { for (const uid of C.audience(u)) if (C.canSee(u, uid, 'lastSeen')) emit(uid, 'presence', { user: u.id, online, seen: u.seen }); }
