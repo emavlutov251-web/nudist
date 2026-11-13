@@ -222,7 +222,6 @@ export function Composer({ chat, thread }) {
     { icon: 'circle-dot', label: 'Кружочек', run: () => startRec('round') },
     { icon: 'map-pin', label: 'Геопозиция', run: geo },
     { icon: 'contact', label: 'Контакт', run: async () => { const ids = await pickUsers({ title: 'Поделиться контактом', ok: 'Отправить' }); if (ids && ids[0]) post({ type: 'contact', contact: { id: ids[0] } }); } },
-    peer && !peer.bot && S.flags.stars && { emoji: '🎁', label: 'Подарок', hint: 'за листики', run: () => openGiftShop(peer.id) },
     peer && !peer.bot && S.flags.stars && { emoji: '🍃', label: 'Поделиться листиками', run: () => shareLeaves(peer.id) },
     '-', { icon: 'clock', label: 'Отложенные сообщения', run: () => openModal(ScheduledModal, { chat }) },
   ], { anchor: e.currentTarget });
@@ -250,6 +249,7 @@ export function Composer({ chat, thread }) {
       : botStart ? html`<button class="btn wide big" onClick=${() => post({ text: '/start' })}>ЗАПУСТИТЬ</button>`
       : html`<div class="c-row">
         ${!edit && html`<button class="ib" title="Прикрепить" onClick=${attach}><${Icon} n="paperclip" /></button>`}
+        ${!edit && peer && !peer.bot && !peer.deleted && S.flags.stars && html`<button class="ib c-gift" title="Подарить подарок" aria-label="Подарить подарок" onClick=${() => openGiftShop(peer.id)}><${Icon} n="gift" /></button>`}
         <textarea ref=${ta} rows="1" placeholder=${ph} value=${text} onInput=${onInput} onKeyDown=${onKey} onPaste=${onPaste} onBlur=${() => setTimeout(() => setSug(null), 150)} aria-label="Сообщение"></textarea>
         ${peer && peer.bot && (peer.cmds || []).length > 0 && !text && html`<button class="ib" title="Команды бота" onClick=${e => showMenu(e, [...peer.cmds.map(c => ({ label: '/' + c.c, hint: c.d, run: () => post({ text: '/' + c.c }) })), peer.app && '-', peer.app && { icon: 'app-window', label: 'Открыть приложение', run: () => openMiniApp(peer.id) }], { anchor: e.currentTarget, right: true })}><${Icon} n="square-slash" /></button>`}
         <button class=${cx('ib hide-s', fmt && 'act')} title="Форматирование" onClick=${() => setFmt(!fmt)}><${Icon} n="type" /></button>

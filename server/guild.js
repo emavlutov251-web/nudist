@@ -173,7 +173,7 @@ H['server.member'] = (c, p) => {
     m.roles = next; audit(s, c.uid, 'member.roles', R.uname(db.users[p.user]));
   }
   if (p.nick !== undefined) { need(p.user === c.uid || sCan(s, c.uid, 'kick'), 'Недостаточно прав'); m.nick = str(p.nick, 40) || undefined; }
-  if (p.muted !== undefined) { need(sCan(s, c.uid, 'kick') && p.user !== s.owner, 'Недостаточно прав'); m.muted = !!p.muted || undefined; audit(s, c.uid, p.muted ? 'mute' : 'unmute', R.uname(db.users[p.user])); }
+  if (p.muted !== undefined) { need(p.user !== c.uid, 'Себя на сервере не глушат'); need(sCan(s, c.uid, 'kick') && p.user !== s.owner, 'Недостаточно прав'); m.muted = !!p.muted || undefined; audit(s, c.uid, p.muted ? 'mute' : 'unmute', R.uname(db.users[p.user])); }
   save(); emit(p.user, 'server', serverView(s, p.user)); emitChannels(s);
 };
 H['server.kick'] = (c, p) => {
@@ -313,7 +313,7 @@ H['rtc.state'] = (c, p) => {
 };
 H['rtc.mod'] = (c, p) => {
   const ch = rtcChat(c, p.chat); need(ch.server ? C.can(ch, c.uid, 'voice') : C.can(ch, c.uid, 'ban'), 'Недостаточно прав');
-  const r = rooms.get(ch.id); const s = r && r.peers.get(p.peer); need(s, 'Участник уже вышел');
+  const r = rooms.get(ch.id); const s = r && r.peers.get(p.peer); need(s, 'Участник уже вышел'); need(s.user !== c.uid, 'К себе меры не применяют: свой микрофон выключается обычной кнопкой');
   const t = C.connById.get(p.peer);
   if (p.act === 'mute') { s.smute = !s.smute; s.muted = s.muted || s.smute; if (t) t.send('rtc.force', { chat: ch.id, mute: s.smute }); }
   else if (p.act === 'speak') { s.speak = !s.speak; s.hand = false; if (!s.speak) s.muted = true; if (t) t.send('rtc.force', { chat: ch.id, speak: s.speak }); }

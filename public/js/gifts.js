@@ -50,12 +50,19 @@ export function GiftShelf({ user }) {
     <div class="gift-shelf">${list.slice(0, 8).map(x => html`<button class=${cx('gs-i', x.hidden && 'hid')} title=${x.name + (x.hidden ? ' (спрятан, видите только вы)' : '')} onClick=${() => openModal(GiftView, { gift: x, onChange: load })}>${x.e}</button>`)}${d.total > 8 && html`<button class="gs-i more" title="Все подарки" onClick=${() => openGifts(user)}>+${d.total - 8}</button>`}${give && html`<button class="gs-i give" title="Подарить подарок" aria-label="Подарить подарок" onClick=${() => openGiftShop(user)}><${Icon} n="gift" s=${19} /></button>`}</div>
     ${!d.total && html`<p class="dim">${me ? 'Пока пусто. Подарки от друзей появятся здесь, и их увидят все, кто откроет ваш профиль.' : 'Пока пусто. Можно стать первым.'}</p>`}</div>`;
 }
+// Все подарки человека сеткой: вкладка «Подарки» в профиле и окно «Мои подарки». Чужие подарки видны всем, спрятанные — только хозяину.
+export function GiftGrid({ user, onTotal, onGive }) {
+  const me = user === S.me.id, [d, load] = useGifts(user, me ? 0 : S.me.stars), total = d ? d.total : null;
+  useEffect(() => { if (total !== null && onTotal) onTotal(total); }, [total]);
+  if (!d) return html`<${Spinner} />`;
+  const give = !me && S.flags.stars && html`<button class="btn wide" style="margin-top:12px" onClick=${() => { onGive && onGive(); openGiftShop(user); }}><${Icon} n="gift" s=${16} /> Подарить подарок</button>`;
+  if (!d.total) return html`<div class="gift-tab"><${Empty} icon="gift" title="Подарков пока нет" text=${me ? 'Когда кто-нибудь вам что-то подарит, оно появится здесь, и это увидят все.' : 'Можно стать первым.'} />${give}</div>`;
+  return html`<div class="gift-tab"><p class="hint">${d.total} ${giftWord(d.total)}${me ? '. Их видят все. Нажмите на подарок, чтобы спрятать его или продать.' : ''}</p>
+    <div class="gift-grid">${d.gifts.map(x => html`<button class=${cx('gift-cell', x.hidden && 'hid')} title=${x.hidden ? 'Спрятан: видите только вы' : x.name} onClick=${() => openModal(GiftView, { gift: x, onChange: load })}><span class="gc-e">${x.e}</span><span class="gc-n">${x.name}</span><span class="gc-p">${x.hidden ? 'скрыт' : x.from ? userName(S.users[x.from]).split(' ')[0] : 'аноним'}</span></button>`)}</div>${give}</div>`;
+}
 function GiftShelfModal({ id, user }) {
-  const [d, load] = useGifts(user), me = user === S.me.id, u = S.users[user] || S.me;
-  return html`<${Modal} id=${id} title=${me ? 'Мои подарки' : 'Подарки: ' + userName(u)} icon="gift" cls="small">
-    ${!d ? html`<${Spinner} />` : !d.total ? html`<${Empty} icon="gift" title="Подарков пока нет" text=${me ? 'Когда кто-нибудь вам что-то подарит, оно появится здесь.' : 'Можно стать первым.'} />`
-      : html`<p class="hint">${d.total} ${giftWord(d.total)}${me ? '. Нажмите на подарок, чтобы спрятать его из профиля или продать.' : ''}</p><div class="gift-grid">${d.gifts.map(x => html`<button class=${cx('gift-cell', x.hidden && 'hid')} onClick=${() => openModal(GiftView, { gift: x, onChange: load })}><span class="gc-e">${x.e}</span><span class="gc-n">${x.name}</span><span class="gc-p">${x.hidden ? 'скрыт' : x.from ? userName(S.users[x.from]).split(' ')[0] : 'аноним'}</span></button>`)}</div>`}
-    ${!me && html`<button class="btn wide" style="margin-top:12px" onClick=${() => { closeModal(id); openGiftShop(user); }}><${Icon} n="gift" s=${16} /> Подарить подарок</button>`}<//>`;
+  const me = user === S.me.id, u = S.users[user] || S.me;
+  return html`<${Modal} id=${id} title=${me ? 'Мои подарки' : 'Подарки: ' + userName(u)} icon="gift" cls="small"><${GiftGrid} user=${user} onGive=${() => closeModal(id)} /><//>`;
 }
 function GiftView({ id, gift, onChange }) {
   const [x, setX] = useState(gift), mine = x.to === S.me.id, from = x.from && S.users[x.from];

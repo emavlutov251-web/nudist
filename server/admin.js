@@ -63,7 +63,7 @@ H['admin.user.ban'] = (c, p) => {
   log(c, p.on ? 'user.ban' : 'user.unban', `${R.uname(u)} (@${u.username || u.id})${p.reason ? ': ' + str(p.reason, 200) : ''}`);
 };
 H['admin.user.mute'] = (c, p) => { const u = target(c, p.id); const h = int(p.hours, 0, 8760); need(u.id !== c.uid, 'Себя мутить не надо'); u.muted = h ? now() + h * 3600e3 : undefined; log(c, h ? 'user.mute' : 'user.unmute', `${R.uname(u)}${h ? ' на ' + h + ' ч' : ''}`); R.selfUpdate(u); return { muted: u.muted || 0 }; };
-H['admin.user.logout'] = (c, p) => { const u = target(c, p.id); for (const t of Object.keys(db.sessions)) if (db.sessions[t].user === u.id) A.killSession(t); log(c, 'user.logout', R.uname(u)); };
+H['admin.user.logout'] = (c, p) => { const u = target(c, p.id); need(u.id !== c.uid, 'Себя отсюда не разлогинивают: выход есть в настройках'); for (const t of Object.keys(db.sessions)) if (db.sessions[t].user === u.id) A.killSession(t); log(c, 'user.logout', R.uname(u)); };
 // Роли администраторов. Назначает главный админ; тех, кто равен ему по рангу, может менять только владелец сервиса.
 function roleBlock(me, u) {
   if (rank(me) < RANK.superadmin) return 'Назначать администраторов может только главный админ';

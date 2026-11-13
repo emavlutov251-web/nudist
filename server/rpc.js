@@ -113,7 +113,7 @@ H['me.contact'] = (c, p) => {
   save(); selfUpdate(u); emit(o.id, 'user', pubUser(u, o.id));
 };
 H['me.block'] = (c, p) => {
-  const u = user(c), o = getUser(p.id);
+  const u = user(c), o = getUser(p.id); need(o.id !== u.id, 'Себя заблокировать нельзя');
   u.blocked = (u.blocked || []).filter(x => x !== o.id); if (p.on !== false) u.blocked.push(o.id);
   save(); selfUpdate(u);
 };
@@ -145,7 +145,8 @@ H['user.get'] = (c, p) => {
   need(o, 'Пользователь не найден');
   const me = user(c);
   const common = (me.chats || []).map(x => db.chats[x]).filter(ch => ch && ch.type === 'group' && ch.members[o.id]).map(ch => ({ id: ch.id, title: ch.title })).slice(0, 20);
-  return { user: pubUser(o, c.uid), common, dm: db.chats[C.dmId(c.uid, o.id)] ? C.dmId(c.uid, o.id) : null };
+  let gifts = 0; for (const k in db.gifts || {}) { const g = db.gifts[k]; if (g.to === o.id && (!g.hidden || o.id === c.uid)) gifts++; }      // для вкладки «Подарки» в профиле
+  return { user: pubUser(o, c.uid), common, gifts, dm: db.chats[C.dmId(c.uid, o.id)] ? C.dmId(c.uid, o.id) : null };
 };
 H['users.get'] = (c, p) => (Array.isArray(p.ids) ? p.ids : []).slice(0, 200).map(x => pubUser(db.users[x], c.uid)).filter(Boolean);
 

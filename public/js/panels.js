@@ -2,7 +2,7 @@
 import { html, useState, useEffect, useRef, useMemo, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, Badges, cx, showMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtFull, fmtShort, fmtDur, fmtNum, fmtSize, userName, lastSeen, copyText, download, confirmDlg, promptDlg, addUsers, Empty, Spinner, plural, TTL_OPTS, ttlLabel, isMuted, setSetting, debounce, Toggle, Tabs, uploadAvatar, esc } from './lib.js';
 import { openChat, openUser, safetyCode, e2eeAvailable, ensureKey } from './store.js';
 import { NOTIF_SOUNDS, sfx, confetti } from './fun.js';
-import { GiftShelf, openGiftShop } from './gifts.js';
+import { GiftShelf, GiftGrid, openGiftShop } from './gifts.js';
 import qrcode from '/vendor/qrcode.js';
 import { ServerPanel } from './guildui.js';
 import { startCall } from './rtc.js';
@@ -31,10 +31,10 @@ function UserPicker({ id, title, ok = 'Готово', multi, res, exclude = [] }
 export const pickUsers = o => new Promise(res => openModal(UserPicker, { ...o, res }));
 
 // ═════ Профиль ═════
-export function showProfile(userId, username) { openModal(Profile, { userId, username }); }
-function Profile({ id, userId, username }) {
-  const [d, setD] = useState(null);
-  useEffect(() => { rpc('user.get', userId ? { id: userId } : { username }).then(r => { S.users[r.user.id] = { ...S.users[r.user.id], ...r.user }; setD(r); }).catch(e => { toast(e.message, 'err'); closeModal(id); }); }, []);
+export function showProfile(userId, username, tab) { openModal(Profile, { userId, username, tab }); }
+function Profile({ id, userId, username, tab: tab0 }) {
+  const [d, setD] = useState(null), [tab, setTab] = useState(tab0 === 'gifts' ? 'gifts' : 'info'), [gn, setGn] = useState(0);
+  useEffect(() => { rpc('user.get', userId ? { id: userId } : { username }).then(r => { S.users[r.user.id] = { ...S.users[r.user.id], ...r.user }; setGn(r.gifts || 0); setD(r); }).catch(e => { toast(e.message, 'err'); closeModal(id); }); }, []);
   if (!d) return html`<${Modal} id=${id} title="Профиль" cls="small"><${Spinner} /><//>`;
   const u = S.users[d.user.id] || d.user, me = u.id === S.me.id, contact = (S.me.contacts || []).includes(u.id), blocked = (S.me.blocked || []).includes(u.id), pr = u.profile || {};
   const go = f => { closeModal(id); f(); };
@@ -59,7 +59,8 @@ function Profile({ id, userId, username }) {
         { icon: 'flag', label: 'Пожаловаться', danger: true, run: async () => { const t = await promptDlg({ title: 'Жалоба на пользователя', label: 'Что случилось?', area: true, ok: 'Отправить' }); if (t !== null) { const r = await call('report', { type: 'user', target: u.id, reason: 'other', text: t }); if (r) toast('Жалоба отправлена модераторам'); } } },
       ], { anchor: e.currentTarget })}><${Icon} n="ellipsis" /><span>Ещё</span></button></div>`}
       ${me && html`<div class="pf-acts"><button onClick=${() => go(() => openSettings('profile'))}><${Icon} n="pencil" /><span>Изменить</span></button><button onClick=${() => go(() => openModal(StatusDlg))}><${Icon} n="smile" /><span>Статус</span></button>${u.username && html`<button onClick=${() => openModal(QrModal, { title: 'Мой QR', text: link('u=' + u.username), hint: 'Покажите этот код — и вас найдут. Даже если вы прикрылись.' })}><${Icon} n="qr-code" /><span>Мой QR</span></button>`}</div>`}
-      ${!u.bot && !u.deleted && html`<${GiftShelf} user=${u.id} />`}
+      ${!u.bot && !u.deleted && html`<div class="tabs pf-tabs" role="tablist"><button role="tab" aria-selected=${tab === 'info'} class=${cx(tab === 'info' && 'on')} onClick=${() => setTab('info')}>Профиль</button><button role="tab" aria-selected=${tab === 'gifts'} class=${cx(tab === 'gifts' && 'on')} onClick=${() => setTab('gifts')}>🎁 Подарки${gn > 0 && html`<b>${gn}</b>`}</button></div>`}
+      ${tab === 'gifts' && !u.bot && !u.deleted ? html`<${GiftGrid} user=${u.id} onTotal=${setGn} />` : html`
       ${u.private && html`<p class="hint">🔒 Закрытый профиль: подробности видят только контакты.</p>`}
       ${u.bio && html`<div class="pf-row"><small>О себе</small><p>${u.bio}</p></div>`}
       ${u.username && html`<button class="pf-row click" onClick=${() => { copyText('@' + u.username); toast('Username скопирован'); }}><small>Username</small><p>@${u.username}</p></button>`}
@@ -68,7 +69,7 @@ function Profile({ id, userId, username }) {
       ${u.birthday && html`<div class="pf-row"><small>День рождения</small><p>🎂 ${new Date(u.birthday).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</p></div>`}
       ${(u.links || []).length > 0 && html`<div class="pf-row"><small>Ссылки</small>${u.links.map(l => html`<a href=${l.u} target="_blank" rel="noopener noreferrer">${l.t || l.u}</a>`)}</div>`}
       ${u.bot && (u.cmds || []).length > 0 && html`<div class="pf-row"><small>Команды бота</small>${u.cmds.map(c => html`<p><code class="mono">/${c.c}</code> — ${c.d}</p>`)}</div>`}
-      ${(d.common || []).length > 0 && html`<div class="pf-row"><small>Общие группы</small>${d.common.map(c => html`<button class="link" onClick=${() => go(() => openChat(c.id))}>${c.title}</button>`)}</div>`}
+      ${(d.common || []).length > 0 && html`<div class="pf-row"><small>Общие группы</small>${d.common.map(c => html`<button class="link" onClick=${() => go(() => openChat(c.id))}>${c.title}</button>`)}</div>`}`}
     </div><//>`;
 }
 export function StatusDlg({ id }) {

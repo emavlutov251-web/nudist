@@ -74,7 +74,7 @@ function Dash() {
     <div class="akpis small">${K(num(s.groups), 'групп', 'users-round')}${K(num(s.channels), 'каналов', 'megaphone')}${K(num(s.servers), 'серверов', 'server')}${K(num(s.dms), 'личных чатов', 'user')}${K(num(s.secrets), 'секретных', 'lock')}${K(num(s.stories), 'историй за сутки', 'circle-dashed')}${K(num(s.premium), 'с премиумом', 'crown')}${K(num(s.starsTotal) + ' 🍃', 'листиков в обороте', 'leaf')}${K(num(s.banned), 'забанено', 'ban')}${K(num(s.reportsOpen), 'жалоб в очереди', 'flag')}${K(fmtSize(s.uploads) + (s.uploadsMax ? ' из ' + fmtSize(s.uploadsMax) : ''), num(s.uploadFiles) + ' файлов', 'hard-drive')}</div></div>`;
 }
 
-function Users({ role }) {
+function Users({ role, me }) {
   const [q, setQ] = useState(''), [f, setF] = useState(''), [off, setOff] = useState(0), [sel, setSel] = useState(null);
   const [d, reload] = useLoad(() => rpc('admin.users', { q, filter: f, offset: off }), [q, f, off]);
   const can = r => RANK[role] >= RANK[r];
@@ -93,7 +93,7 @@ function Users({ role }) {
       <div class="abar"><button class="btn ghost sm" disabled=${!off} onClick=${() => setOff(Math.max(0, off - 50))}>← Назад</button><span class="hint">${off + 1}–${Math.min(off + 50, d.total)} из ${d.total}</span><button class="btn ghost sm" disabled=${off + 50 >= d.total} onClick=${() => setOff(off + 50)}>Дальше →</button></div>`}
     ${u && html`<aside class="adrawer" role="dialog" aria-label="Карточка пользователя"><header><b>${u.name}</b><button class="ib" onClick=${() => setSel(null)} aria-label="Закрыть"><${Icon} n="x" /></button></header>
       <dl><dt>ID</dt><dd><code>${u.id}</code></dd><dt>Username</dt><dd>${u.username ? '@' + u.username : '—'}</dd><dt>Телефон</dt><dd>${u.phone || '—'}</dd><dt>Последний IP</dt><dd>${u.ip || '—'}</dd><dt>Активных сессий</dt><dd>${u.sessions}</dd><dt>2FA</dt><dd>${u.totp ? 'включена' : 'нет'}</dd><dt>Бейджи</dt><dd>${u.badges.join(', ') || '—'}</dd><dt>Премиум</dt><dd>${u.premiumUntil > Date.now() ? 'до ' + fmtDate(u.premiumUntil) : 'нет'}</dd>${u.banned && html`<dt>Причина бана</dt><dd>${u.banReason || 'не указана'}</dd>`}${u.muted ? html`<dt>Мут до</dt><dd>${fmtDate(u.muted)}</dd>` : null}${u.owner && html`<dt>Владелец бота</dt><dd><code>${u.owner}</code></dd>`}</dl>
-      ${can('moderator') ? html`<h4>Модерация</h4><div class="acts">
+      ${me && u.id === me.id ? html`<h4>Модерация</h4><p class="hint">Это вы. Себя не банят, не мутят и не разлогинивают — кнопок тут нет нарочно.</p>` : can('moderator') ? html`<h4>Модерация</h4><div class="acts">
         <button class=${'btn sm ' + (u.banned ? 'ghost' : 'danger')} onClick=${() => { const reason = u.banned ? '' : prompt('Причина бана (увидит только персонал):', 'нарушение правил пляжа'); if (!u.banned && reason === null) return; act(() => rpc('admin.user.ban', { id: u.id, on: !u.banned, reason }), u.banned ? 'Разбанен. Листок возвращён.' : 'Забанен, все сессии завершены'); }}>${u.banned ? 'Разбанить' : 'Забанить'}</button>
         ${u.muted ? html`<button class="btn sm" onClick=${() => act(() => rpc('admin.user.mute', { id: u.id, hours: 0 }), 'Мут снят')}>Снять мут</button>` : [[1, '1 ч'], [24, '24 ч'], [168, '7 дн'], [720, '30 дн']].map(([h, l]) => html`<button class="btn sm ghost" onClick=${() => act(() => rpc('admin.user.mute', { id: u.id, hours: h }), 'Мут выдан: ' + l)}>Мут ${l}</button>`)}
         <button class="btn sm ghost" onClick=${() => act(() => rpc('admin.user.logout', { id: u.id }), 'Все сессии завершены')}>Разлогинить везде</button></div>` : html`<p class="hint">Роль «Наблюдатель» только смотрит. Руками не трогать.</p>`}
@@ -183,7 +183,7 @@ function App() {
   return html`<div class="admin"><nav class="anav" aria-label="Разделы"><a class="abrand" href="/"><${Icon} n="life-buoy" s=${22} /><span>Вышка<small>админка «Нудиста»</small></span></a>
       ${tabs.map(x => html`<button class=${cur[0] === x[0] ? 'on' : ''} onClick=${() => setTab(x[0])}><${Icon} n=${x[2]} /> <span>${x[1]}</span></button>`)}
       <div class="awho"><b>${[st.me.name, st.me.last].filter(Boolean).join(' ')}</b><small>${ROLE_NAMES[st.role]}</small>${!st.me.totp && html`<small class="warnx">2FA выключена — включите в мессенджере: Настройки → Приватность</small>`}</div></nav>
-    <main class="amain"><h2>${cur[1]}</h2><${View} role=${st.role} /></main>
+    <main class="amain"><h2>${cur[1]}</h2><${View} role=${st.role} me=${st.me} /></main>
     ${t && html`<div class=${'atoast' + (t.err ? ' err' : '')} role="status" key=${t.k}>${t.text}</div>`}</div>`;
 }
 render(html`<${App} />`, document.getElementById('admin'));
