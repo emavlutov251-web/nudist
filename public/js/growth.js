@@ -1,5 +1,5 @@
 // Рост и удержание: приглашения друзей, «огонёк» серии переписки, одноразовые фото и видео, установка как приложения.
-import { html, useState, useEffect, S, bump, rpc, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, copyText, local, Spinner, plural, fmtNum, Toggle, upload, download, fmtShort } from './lib.js';
+import { html, useState, useEffect, S, bump, rpc, on, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, copyText, local, Spinner, plural, fmtNum, Toggle, upload, download, fmtShort } from './lib.js';
 import { QR } from './panels.js';
 
 // ───── приглашения
@@ -144,3 +144,44 @@ export async function installApp() {
     ${ios ? html`<ol class="steps"><li>Откройте сайт в Safari.</li><li>Нажмите «Поделиться» (квадрат со стрелкой вверх).</li><li>Выберите «На экран „Домой“».</li></ol><p class="hint">Появится значок «Нудиста», откроется без адресной строки, как обычное приложение.</p>`
       : html`<ol class="steps"><li>Откройте меню браузера (три точки справа вверху).</li><li>Выберите «Установить приложение» или «Добавить на главный экран».</li></ol><p class="hint">На компьютере в Chrome и Edge значок установки есть прямо в адресной строке. На Android можно ещё скачать APK в «Настройки → Продвинутые».</p>`}<//>`);
 }
+
+// ───── уведомления при закрытом приложении (Web Push)
+// Работают в браузере и в приложении, установленном из браузера. В APK на WebView механизма push нет.
+const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const keyBytes = k => { const t = atob(k.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - k.length % 4) % 4)), a = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) a[i] = t.charCodeAt(i); return a; };
+const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(msg)), ms))]);
+async function pushSub() {
+  const reg = await withTimeout(navigator.serviceWorker.ready, 8000, 'Приложение ещё не готово. Обновите страницу и попробуйте снова.'), { key } = await rpc('push.key');
+  let sub = await reg.pushManager.getSubscription();
+  if (sub && sub.options && sub.options.applicationServerKey && btoa(String.fromCharCode.apply(null, new Uint8Array(sub.options.applicationServerKey))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') !== key) { await sub.unsubscribe(); sub = null; } // ключ сервера сменился
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
+  await rpc('push.sub', { sub: sub.toJSON() }); local.set('push.on', true); return sub;
+}
+async function pushOff() {
+  local.set('push.on', null);
+  const reg = await withTimeout(navigator.serviceWorker.ready, 8000, 'Приложение ещё не готово'), sub = await reg.pushManager.getSubscription();
+  if (sub) { await rpc('push.unsub', { endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); }
+}
+// После входа молча обновляем подписку, если человек её уже включал на этом устройстве
+on('init', () => { setTimeout(() => { if (pushOk() && Notification.permission === 'granted' && local.get('push.on')) pushSub().catch(() => {}); }, 4000); });
+export function PushSetup({ id }) {
+  const [st, setSt] = useState(!pushOk() ? 'none' : Notification.permission === 'denied' ? 'denied' : Notification.permission === 'granted' && local.get('push.on') ? 'on' : 'off'), [busy, setBusy] = useState(false);
+  const run = async f => { setBusy(true); try { await f(); } catch (e) { toast(e.message || 'Не получилось', 'err'); } finally { setBusy(false); } };
+  const enable = () => run(async () => {
+    const perm = await Notification.requestPermission(); if (perm !== 'granted') { setSt(perm === 'denied' ? 'denied' : 'off'); return toast('Без разрешения браузера уведомления не придут', 'err'); }
+    await pushSub(); setSt('on'); toast('Уведомления включены на этом устройстве');
+  });
+  const disable = () => run(async () => { await pushOff(); setSt('off'); toast('Уведомления на этом устройстве выключены'); });
+  const test = () => run(async () => { const r = await rpc('push.test'); toast(r.sent ? 'Отправили. Уведомление придёт через пару секунд.' : 'Служба доставки не приняла уведомление. Выключите и включите заново.', r.sent ? undefined : 'err'); });
+  return html`<${Modal} id=${id} title="Уведомления" icon="bell">
+    <div class="ask">
+      <p>Когда «Нудист» закрыт, новые личные сообщения, сообщения в группах, анонимные вопросы и звонки будут приходить уведомлениями. Каналы и серверы присылают только упоминания, чаты с выключенным звуком молчат.</p>
+      ${st === 'none' && html`<p><b>Здесь уведомления недоступны.</b> В приложении для Android (APK) и в старых браузерах такого механизма нет. Откройте сайт в Chrome или Яндекс Браузере, нажмите в меню «Установить приложение» и включите уведомления там.</p>`}
+      ${st === 'denied' && html`<p><b>Браузер запретил уведомления для этого сайта.</b> Откройте настройки сайта (значок слева от адреса) и разрешите уведомления, потом вернитесь сюда.</p>`}
+      ${st === 'off' && html`<button class="btn" disabled=${busy} onClick=${enable}><${Icon} n="bell-ring" s=${16} /> Включить уведомления</button>`}
+      ${st === 'on' && html`<p><b>На этом устройстве включено.</b> На каждом телефоне и компьютере уведомления включаются отдельно.</p>
+        <div class="ask-btns"><button class="btn" disabled=${busy} onClick=${test}><${Icon} n="bell-ring" s=${16} /> Проверить</button><button class="btn ghost" disabled=${busy} onClick=${disable}><${Icon} n="bell-off" s=${16} /> Выключить</button></div>`}
+    </div>
+  <//>`;
+}
+export const openPush = () => openModal(PushSetup);

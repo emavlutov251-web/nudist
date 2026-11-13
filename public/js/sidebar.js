@@ -7,7 +7,7 @@ import { RTC, joinVoice, leaveVoice, toggleMute, toggleDeaf } from './rtc.js';
 import { StoryEditor } from './media.js';
 import { openSettings } from './settings.js';
 import { openHub, openApps, openSupport } from './hub.js';
-import { Streak, openInvite, openAsk, installApp, isStandalone } from './growth.js';
+import { Streak, openInvite, openAsk, openPush, installApp, isStandalone } from './growth.js';
 
 // ═════ Рейка ═════
 export function Rail() {
@@ -133,6 +133,7 @@ function HomeSidebar() {
   const count = f => live.filter(c => inFolder(c, f) && c.unread > 0 && !isMuted(c)).length;
   const menu = e => showMenu(e, [
     { icon: 'venetian-mask', label: 'Голая правда', hint: 'анонимные вопросы', run: openAsk },
+    { icon: 'bell', label: 'Уведомления', hint: 'когда приложение закрыто', run: openPush },
     { icon: 'user-plus', label: 'Позвать друзей', hint: '+50 🍃', run: openInvite },
     !isStandalone() && { icon: 'smartphone', label: 'Установить как приложение', run: installApp },
     '-',

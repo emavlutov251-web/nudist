@@ -134,3 +134,5 @@ span.ava { flex: 0 0 auto !important; display: inline-grid !important; overflow:
 .ask-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
 .ask-q { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--hover); border-radius: var(--r-s); } .ask-q > div { flex: 1; min-width: 0; } .ask-q p { margin: 0; overflow-wrap: anywhere; } .ask-q small { color: var(--ink3); }
 .ask-q.off { opacity: .55; } .ask-q .btn { flex: none; }
+
+.ask-btns { display: flex; gap: 8px; flex-wrap: wrap; }

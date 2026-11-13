@@ -72,6 +72,7 @@ function emit(uid, ev, d) {
 }
 function emitAll(ev, d) { const s = JSON.stringify({ ev, d }); for (const set of conns.values()) for (const c of set) c.raw(s); }
 const isOnline = uid => conns.has(uid);
+let offlineHook = null; const setOfflineHook = f => { offlineHook = f; };      // куда сообщать о письме человеку без открытых соединений (уведомления)
 // Число ключей в большом объекте (участники сообщества). Object.keys(…).length на 100 тысячах участников — это миллисекунды,
 // а считается оно на каждое сообщение каждому получателю. Большие объекты пересчитываем не чаще раза в 3 секунды.
 const sizeCache = new WeakMap();
@@ -326,6 +327,7 @@ function postMessage(chat, from, p, o = {}) {
       if (s.archived && (mention || !(s.mute > now()))) s.archived = false;
     }
     if (isOnline(uid)) { s.deliv = m.seq; emit(uid, 'msg', { chat: chatView(chat, uid), msg: msgView(m, uid), root: root ? msgView(root, uid) : undefined, mention }); }
+    else if (offlineHook && m.type !== 'service') { try { offlineHook(uid, chat, m, mention, s); } catch (e) { console.error('[push]', e.message); } }
   }
   if (isOnline(from)) emit(from, 'msg', { chat: chatView(chat, from), msg: msgView(m, from), root: root ? msgView(root, from) : undefined });
   save();
@@ -397,4 +399,4 @@ function usernameTaken(n, exceptId) {
   return false;
 }
 
-module.exports = { audience, size, dropUpload, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { setOfflineHook, audience, size, dropUpload, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

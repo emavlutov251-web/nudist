@@ -7,6 +7,7 @@ const Cloud = require('./cloud');
 const A = require('./auth');
 const Hub = require('./hub');
 require('./feed');
+const Push = require('./push');
 const Ask = require('./ask');
 const R = require('./rpc');
 const G = require('./guild');
@@ -72,6 +73,10 @@ self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(func
 self.addEventListener('message',function(e){if(e.data==='skip')self.skipWaiting()});
 self.addEventListener('fetch',function(e){var q=e.request;if(q.method!=='GET')return;var u=new URL(q.url);if(u.origin!==location.origin)return;var p=u.pathname==='/'?'/index.html':u.pathname;if(!SET[p])return;
 e.respondWith(caches.open(V).then(function(c){return c.match(p)}).then(function(r){return r||fetch(q)}))});
+self.addEventListener('push',function(e){var d={};try{d=e.data?e.data.json():{}}catch(x){}
+e.waitUntil(self.registration.showNotification(d.title||'Нудист',{body:d.body||'',tag:d.tag||'nudist',renotify:true,icon:'/icon-192.png',badge:'/icon-192.png',data:{url:d.url||'/'}}))});
+self.addEventListener('notificationclick',function(e){e.notification.close();var u=(e.notification.data&&e.notification.data.url)||'/';
+e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(function(cs){for(var i=0;i<cs.length;i++){if('focus' in cs[i])return cs[i].focus()}return self.clients.openWindow(u)}))});
 `;
 }
 function serveSw(req, res) {
