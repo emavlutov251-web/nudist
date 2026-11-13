@@ -814,12 +814,32 @@ H['stars.tap'] = (c, p) => {
   if (n) { u.stars = (u.stars || 0) + n; selfUpdate(u); } if (taps) save();
   return { n, taps, ...leafInfo(u) };
 };
+// Поделиться листиками: перевод другому человеку с подписью. У обоих остаётся запись в истории, получателю приходит карточка в личке и уведомление.
+const SHARE = { max: envInt('LEAF_SHARE_MAX', 100000, 1, 1e9), ageH: envInt('LEAF_SHARE_AGE_H', 24, 0, 8760), keep: 40 };
+const leafLog = (u, rec) => { (u.leafLog = u.leafLog || []).unshift(rec); if (u.leafLog.length > SHARE.keep) u.leafLog.length = SHARE.keep; };
 H['stars.send'] = (c, p) => {
-  const u = user(c), o = getUser(p.to), n = int(p.n, 1, 100000); need(o.id !== u.id, 'Себе дарить — это просто перекладывание');
-  spend(u, n); o.stars = (o.stars || 0) + n; save(); selfUpdate(u); selfUpdate(o);
+  const u = user(c), o = getUser(p.to), n = Number(p.n), note = str(p.note, 120).replace(/\s+/g, ' ');
+  need(db.flags.stars, 'Листики временно отключены');
+  need(Number.isInteger(n) && n >= 1, 'Сколько листиков? Нужно целое число от 1.');
+  need(n <= SHARE.max, `За один раз можно поделиться не больше чем ${SHARE.max} 🍃`);
+  need(o.id !== u.id, 'Себе дарить — это просто перекладывание');
+  need(!o.bot, 'Боты листиками не питаются');
+  need(!o.banned, 'Этот аккаунт заблокирован, листики до него не долетят');
+  need(!(o.blocked || []).includes(u.id), 'Пользователь ограничил круг общения');
+  need(!(u.blocked || []).includes(o.id), 'Вы заблокировали этого пользователя');
+  // Свежий аккаунт сначала должен пожить: иначе листики печатаются регистрацией пустышек по приглашению и сливаются на основной.
+  const wait = SHARE.ageH * 3600e3 - (now() - (u.created || 0));
+  if (wait > 0 && !u.admin && !C.isOwner(u)) fail(`Делиться листиками можно через ${SHARE.ageH} ч после регистрации. Осталось примерно ${Math.max(1, Math.ceil(wait / 3600e3))} ч.`);
+  A.limit('leafsend:' + u.id, 12, 60000);
+  spend(u, n); o.stars = (o.stars || 0) + n;
+  const ts = now(); leafLog(u, { ts, to: o.id, n, note: note || undefined }); leafLog(o, { ts, from: u.id, n, note: note || undefined });
+  save(); selfUpdate(u); selfUpdate(o);
   const ch = C.openDm(u.id, o.id);
-  postMessage(ch, u.id, { type: 'service', text: `подарил(а) ${n} 🍃`, gift: n }, { quiet: true });
+  const m = postMessage(ch, u.id, { type: 'service', text: `подарил(а) ${n} 🍃`, gift: n, note }, { quiet: true });
+  if (!C.isOnline(o.id)) { try { require('./push').notify(o.id, { title: uname(u), body: `Делится с вами: ${n} 🍃${note ? ' — ' + note : ''}`.slice(0, 140), tag: ch.id, url: '/' }); } catch (e) { console.error('[push]', e.message); } }
+  return { stars: u.stars, chat: ch.id, msg: m.id };
 };
+H['stars.history'] = c => { const u = user(c), list = (u.leafLog || []).slice(0, SHARE.keep); return { list, users: usersFor(c, list.map(r => r.to || r.from)), max: SHARE.max }; };
 H['premium.buy'] = c => { const u = user(c); spend(u, PREMIUM_PRICE, 'Листики копятся в мини-игре «Листопад», ежедневным бонусом и приглашениями друзей.'); u.premiumUntil = Math.max(u.premiumUntil || 0, now()) + 30 * 864e5; save(); selfUpdate(u); C.broadcastUser(u); return { until: u.premiumUntil }; };
 H['fun.buzz'] = (c, p) => { const ch = getChat(c, p.chat); need(ch.type === 'dm' || ch.type === 'group', 'Пинать можно только в личке и группах'); A.limit('buzz:' + c.uid + ch.id, 1, 15000); for (const u of membersOf(ch)) emit(u, 'buzz', { chat: ch.id, user: c.uid }); };
 

@@ -2,7 +2,7 @@
 import { html, useState, useEffect, useRef, useLayoutEffect, useMemo, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, cx, showMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtFull, fmtDur, fmtSize, userName, promptDlg, addUsers, Empty, Spinner, plural, TTL_OPTS, setSetting, debounce, pickFile, upload, Toggle, kindIcon } from './lib.js';
 import { msgKey, saveDraft, sendPayload, uploads, sendFiles, encryptFor, encryptFile, openChat } from './store.js';
 import { Sticker, PACKS, stickerHints, SLASH, MemeModal } from './fun.js';
-import { pickUsers, openMiniApp } from './panels.js';
+import { pickUsers, openMiniApp, shareLeaves } from './panels.js';
 
 // ═════ Эмодзи / стикеры / GIF ═════
 // Словарь эмодзи (200 КБ) не нужен, чтобы открыть чат: подгружаем его, когда человек тянется к смайликам.
@@ -221,7 +221,7 @@ export function Composer({ chat, thread }) {
     { icon: 'circle-dot', label: 'Кружочек', run: () => startRec('round') },
     { icon: 'map-pin', label: 'Геопозиция', run: geo },
     { icon: 'contact', label: 'Контакт', run: async () => { const ids = await pickUsers({ title: 'Поделиться контактом', ok: 'Отправить' }); if (ids && ids[0]) post({ type: 'contact', contact: { id: ids[0] } }); } },
-    peer && !peer.bot && S.flags.stars && { emoji: '🍃', label: 'Подарить листики', run: async () => { const v = await promptDlg({ title: 'Подарить листики', label: `Сколько? У вас ${S.me.stars || 0} 🍃`, type: 'number', value: '10', ok: 'Подарить' }); if (v && +v > 0) { const r = await call('stars.send', { to: peer.id, n: Math.floor(+v) }); if (r !== undefined) toast('Листики улетели адресату'); } } },
+    peer && !peer.bot && S.flags.stars && { emoji: '🍃', label: 'Поделиться листиками', run: () => shareLeaves(peer.id) },
     '-', { icon: 'clock', label: 'Отложенные сообщения', run: () => openModal(ScheduledModal, { chat }) },
   ], { anchor: e.currentTarget });
   const sendMenu = e => showMenu(e, [

@@ -50,7 +50,7 @@ function Profile({ id, userId, username }) {
     <div class="pf-body">
       ${!me && !u.deleted && html`<div class="pf-acts"><button onClick=${() => go(() => openUser(u.id))}><${Icon} n="message-circle" /><span>Написать</span></button>${!u.bot && html`<button onClick=${async () => { await openUser(u.id); const c = Object.values(S.chats).find(x => x.type === 'dm' && x.peer === u.id); if (c) go(() => startCall(c.id, false)); }}><${Icon} n="phone" /><span>Позвонить</span></button><button onClick=${secret}><${Icon} n="lock" /><span>Секретный чат</span></button>`}<button onClick=${e => showMenu(e, [
         { icon: contact ? 'user-minus' : 'user-plus', label: contact ? 'Убрать из контактов' : 'В контакты', run: () => call('me.contact', { id: u.id, on: !contact }) },
-        S.flags.stars && !u.bot && { emoji: '🍃', label: 'Подарить листики', run: async () => { const v = await promptDlg({ title: 'Подарить листики', label: `Сколько? У вас ${S.me.stars || 0} 🍃`, type: 'number', value: '10', ok: 'Подарить' }); if (v && +v > 0) { const r = await call('stars.send', { to: u.id, n: Math.floor(+v) }); if (r !== undefined) { toast('Подарок отправлен'); confetti(); } } } },
+        S.flags.stars && !u.bot && { emoji: '🍃', label: 'Поделиться листиками', run: () => shareLeaves(u.id) },
         u.username && { icon: 'qr-code', label: 'QR-код профиля', run: () => openModal(QrModal, { title: 'QR профиля', text: link('u=' + u.username), hint: 'Наведите камеру — откроется профиль @' + u.username }) },
         S.me.admin === 'superadmin' && !u.bot && { icon: 'shield', label: 'Роль администратора…', run: () => openModal(AdminRoleDlg, { user: u }) },
         '-', { icon: 'ban', label: blocked ? 'Разблокировать' : 'Заблокировать', danger: !blocked, run: () => call('me.block', { id: u.id, on: !blocked }) },
@@ -103,12 +103,49 @@ export function StarsModal({ id }) {
   const PERKS = [['sticker', 'Набор стикеров «Мемные реакции»'], ['smile-plus', 'До 3 реакций на одно сообщение'], ['film', 'Анимированный аватар (видео или GIF)'], ['upload', 'Файлы до 400 МБ вместо 100'], ['leaf', 'Золотой листок рядом с именем'], ['megaphone-off', 'Без рекламы (её и так нет, но приятно)']];
   return html`<${Modal} id=${id} title="Листики и Премиум" icon="leaf">
     <div class="stars-hero"><span class="sh-n">${fmtNum(u.stars || 0)} 🍃</span><p>Листики — внутренняя валюта «Нудиста». Игрушечная: купить за деньги нельзя, зато можно заработать, подарить и потратить.</p>
-      <div class="row"><button class="btn" disabled=${busy || u.lastDaily === new Date().toISOString().slice(0, 10)} onClick=${daily}><${Icon} n="gift" s=${16} /> ${u.lastDaily === new Date().toISOString().slice(0, 10) ? 'Бонус уже собран' : 'Ежедневный бонус'}</button><button class="btn ghost" onClick=${game}><${Icon} n="gamepad-2" s=${16} /> Играть в «Листопад»</button></div></div>
+      <div class="row"><button class="btn" disabled=${busy || u.lastDaily === new Date().toISOString().slice(0, 10)} onClick=${daily}><${Icon} n="gift" s=${16} /> ${u.lastDaily === new Date().toISOString().slice(0, 10) ? 'Бонус уже собран' : 'Ежедневный бонус'}</button><button class="btn ghost" onClick=${game}><${Icon} n="gamepad-2" s=${16} /> Играть в «Листопад»</button><button class="btn ghost" onClick=${() => shareLeaves()}><${Icon} n="send" s=${16} /> Поделиться</button></div></div>
+    <${LeafHistory} />
     <div class=${cx('prem', prem && 'on')}><h3><${Icon} n="leaf" /> Нудист Голый Премиум</h3>${prem ? html`<p>Активен до ${new Date(u.premiumUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>` : html`<p>Всё то же самое, только с позолотой. ${price} 🍃 за 30 дней.</p>`}
       <ul>${PERKS.map(([i, t]) => html`<li><${Icon} n=${i} s=${16} /> ${t}</li>`)}</ul>
       <button class="btn warn" onClick=${buy}>${prem ? 'Продлить на 30 дней' : 'Оформить'} · ${price} 🍃</button></div>
     <p class="hint">Откуда берутся листики: ежедневный бонус ${lf.dailyMin === lf.dailyMax ? lf.dailyMin : lf.dailyMin + '–' + lf.dailyMax} 🍃, «Листопад» — листик за каждые ${lf.per} тапов, не больше ${lf.limit} 🍃 в день, и 50 🍃 за приглашённого друга. Деревья не резиновые.</p>
     <p class="hint">На что ещё тратить: буст сервера (${(S.prices || {}).boost || 200} 🍃), платные каналы, подарки друзьям.</p><//>`;
+}
+
+// ═════ Поделиться листиками ═════
+export const shareLeaves = to => { if (!S.flags.stars) return toast('Листики временно отключены', 'err'); openModal(ShareLeaves, { to }); };
+const leafWord = n => plural(n, ['листик', 'листика', 'листиков']);
+function LeafHistory() {
+  const [d, setD] = useState(null), stars = S.me.stars || 0;
+  useEffect(() => { let live = true; rpc('stars.history').then(r => { if (!live) return; for (const k in r.users) S.users[k] = { ...S.users[k], ...r.users[k] }; setD(r.list); }).catch(() => live && setD([])); return () => { live = false; }; }, [stars]);
+  if (!d || !d.length) return null;
+  return html`<div class="leaf-hist"><h3><${Icon} n="history" s=${16} /> Кому и от кого</h3><div class="lh-list">
+    ${d.map(r => { const out = !!r.to, o = S.users[r.to || r.from] || {}, gone = !o.id || o.deleted; return html`<button class="ci" disabled=${gone} title=${gone ? '' : 'Поделиться с этим человеком'} onClick=${() => shareLeaves(o.id)}>
+      <${Avatar} src=${o.avatar} name=${userName(o)} color=${o.color} s=${36} deleted=${o.deleted} /><span class="ci-m"><span class="ci-t"><b>${out ? 'Вы → ' + userName(o) : userName(o) + ' → вам'}</b><time>${fmtShort(r.ts)}</time></span><span class="ci-p"><span>${r.note || (out ? 'Поделились листиками' : 'Поделился с вами')}</span></span></span>
+      <b class=${cx('lh-n', out ? 'out' : 'in')}>${out ? '−' : '+'}${fmtNum(r.n)} 🍃</b></button>`; })}</div></div>`;
+}
+function ShareLeaves({ id, to }) {
+  const [peer, setPeer] = useState(to || null), [q, setQ] = useState(''), [res, setRes] = useState(null), [n, setN] = useState('10'), [note, setNote] = useState(''), [busy, setBusy] = useState(false);
+  const have = S.me.stars || 0, u = peer && S.users[peer], v = /^\d+$/.test(n.trim()) ? +n : 0, bad = !v ? 'Введите целое число' : v > have ? `Не хватает: у вас ${have} 🍃` : '';
+  const search = useRef(debounce(async t => { if (!t) return setRes(null); try { const r = await rpc('search', { q: t }); for (const x of r.users) S.users[x.id] = { ...S.users[x.id], ...x }; setRes(r.users); } catch (e) { setRes([]); } }, 250)).current;
+  useEffect(() => { if (peer && !S.users[peer]) rpc('user.get', { id: peer }).then(r => { S.users[r.user.id] = r.user; bump(); }).catch(() => setPeer(null)); }, [peer]);
+  const known = [...new Set([...Object.values(S.chats).filter(c => c.type === 'dm' && c.peer).sort((a, b) => ((b.last || {}).ts || 0) - ((a.last || {}).ts || 0)).map(c => c.peer), ...(S.me.contacts || [])])].map(i => S.users[i]).filter(Boolean);
+  const list = (res || known).filter(x => x && !x.deleted && !x.bot && x.id !== S.me.id);
+  const send = async () => {
+    if (bad || busy) return; setBusy(true); const r = await call('stars.send', { to: peer, n: v, note: note.trim() }); setBusy(false); if (!r) return;
+    closeModal(id); confetti(); sfx('coin'); toast(`${v} 🍃 улетели: ${userName(u)}`);
+  };
+  if (!peer) return html`<${Modal} id=${id} title="Поделиться листиками" icon="leaf" cls="small">
+    <p class="hint">С кем делимся? У вас ${fmtNum(have)} 🍃.</p>
+    <div class="pk-search"><${Icon} n="search" s=${15} /><input autofocus placeholder="Имя или @username" value=${q} onInput=${e => { setQ(e.target.value); search(e.target.value.trim()); }} /></div>
+    <div class="pick-list tall">${list.length ? list.map(x => html`<button class="ci" onClick=${() => setPeer(x.id)}><${Avatar} src=${x.avatar} name=${userName(x)} color=${x.color} s=${40} online=${x.online} /><span class="ci-m"><span class="ci-t"><b>${userName(x)}</b><${Badges} list=${x.badges} s=${13} /></span><span class="ci-p"><span>${x.username ? '@' + x.username + ' · ' : ''}${lastSeen(x)}</span></span></span></button>`)
+      : html`<${Empty} icon="users" title=${res ? 'Никого не нашли' : 'Пока не с кем'} text=${res ? 'Проверьте имя или username.' : 'Найдите человека через поиск выше.'} />`}</div><//>`;
+  return html`<${Modal} id=${id} title="Поделиться листиками" icon="leaf" cls="small" footer=${html`<button class="btn ghost" onClick=${() => closeModal(id)}>Отмена</button><button class="btn" disabled=${!!bad || busy || !u} onClick=${send}><${Icon} n="send" s=${16} /> ${v ? `Поделиться · ${fmtNum(v)} 🍃` : 'Поделиться'}</button>`}>
+    <button class="ci share-to" onClick=${() => { setPeer(null); setQ(''); setRes(null); }} title="Выбрать другого человека">${u ? html`<${Avatar} src=${u.avatar} name=${userName(u)} color=${u.color} s=${40} /><span class="ci-m"><span class="ci-t"><b>${userName(u)}</b></span><span class="ci-p"><span>${u.username ? '@' + u.username : 'получатель'}</span></span></span>` : html`<${Spinner} />`}<${Icon} n="pencil" s=${16} /></button>
+    <label class="fld"><span>Сколько <em>у вас ${fmtNum(have)} 🍃</em></span><input class="share-n" type="text" inputmode="numeric" maxlength="7" value=${n} onInput=${e => setN(e.target.value.replace(/\D/g, ''))} onKeyDown=${e => e.key === 'Enter' && send()} ref=${el => el && !el.dataset.f && (el.dataset.f = 1, el.focus(), el.select())} aria-label="Сколько листиков" /></label>
+    <div class="chips">${[10, 50, 100, 500].filter(x => x <= have).map(x => html`<button class=${cx('chip', v === x && 'on')} onClick=${() => setN(String(x))}>${x}</button>`)}${have > 0 && html`<button class=${cx('chip', v === have && 'on')} onClick=${() => setN(String(have))}>Всё (${fmtNum(have)})</button>`}</div>
+    <label class="fld"><span>Подпись, если хочется</span><input maxlength="120" value=${note} placeholder="На мороженое" onInput=${e => setNote(e.target.value)} onKeyDown=${e => e.key === 'Enter' && send()} /></label>
+    <p class=${cx('hint', n && bad && 'err')}>${n && bad ? bad : have ? `После перевода у вас останется ${fmtNum(have - v)} 🍃. Вернуть можно, только если получатель поделится в ответ.` : 'Листиков пока нет: соберите ежедневный бонус или сыграйте в «Листопад».'}</p><//>`;
 }
 
 // ═════ Контакты, боты, звонки ═════

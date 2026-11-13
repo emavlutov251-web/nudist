@@ -112,7 +112,7 @@
 [data-style='fluent'] .toggle input:checked + i { background: var(--accent); border-color: var(--accent); }
 [data-style='fluent'] .toggle input:checked + i::after { transform: translateX(24px); background: var(--accent-ink); }
 [data-style='fluent'] .seg { padding: 0; background: rgba(127, 127, 127, .2); }
-[data-style='fluent'] .chip { background: rgba(127, 127, 127, .18); }
+[data-style='fluent'] .chip { background: rgba(127, 127, 127, .18); } [data-style='fluent'] .chip.on { background: var(--accent); color: var(--accent-ink); }
 [data-style='fluent'] .search { background: var(--card); border: 2px solid rgba(127, 127, 127, .45); height: 34px; } [data-style='fluent'] .search:focus-within { border-color: var(--accent); }
 [data-style='fluent'] .search input { border: 0 !important; }
 

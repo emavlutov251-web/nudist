@@ -136,3 +136,18 @@ span.ava { flex: 0 0 auto !important; display: inline-grid !important; overflow:
 .ask-q.off { opacity: .55; } .ask-q .btn { flex: none; }
 
 .ask-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Поделиться листиками: окно перевода, история, карточка в чате */
+.stars-hero .row { flex-wrap: wrap; }
+.share-to { background: var(--hover); margin-bottom: 12px; } .share-to > svg { color: var(--ink3); flex: none; }
+.fld > span em { font-style: normal; color: var(--ink3); }
+input.share-n { font: 800 1.9em/1.2 var(--display); text-align: center; letter-spacing: .01em; }
+.modal-b > .fld + .chips, .modal-b > .chips + .fld { margin-top: 10px; } .modal-b > .fld + .hint { margin-top: 10px; }
+.leaf-hist { margin: 0 0 12px; padding: 10px 12px 6px; border: 1px solid var(--line); border-radius: var(--r-l); } .lh-list { max-height: 172px; overflow-y: auto; } .leaf-hist h3 { display: flex; align-items: center; gap: 6px; font-size: .95em; margin: 0 0 4px; } .leaf-hist .ci { padding: 6px 4px; }
+.lh-n { flex: none; font-weight: 700; font-size: .92em; white-space: nowrap; } .lh-n.in { color: var(--leaf); } .lh-n.out { color: var(--ink2); }
+.leafgift { display: flex; justify-content: center; margin: 8px 0; flex: none; }
+.lg-card { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; max-width: min(92%, 420px); padding: 10px 14px; border-radius: var(--r-l); color: #fff; background: linear-gradient(150deg, #48CC82, #12733F); box-shadow: 0 4px 14px rgba(18, 115, 63, .22); }
+.lg-card.mine { background: linear-gradient(150deg, #5B6B62, #2F3B35); box-shadow: none; }
+.lg-e { font-size: 1.9em; line-height: 1; } .lg-m { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 150px; }
+.lg-m b { font: 800 1.15em/1.2 var(--display); } .lg-m span { font-size: .84em; color: rgba(255, 255, 255, .86); }
+.lg-m q { margin-top: 4px; font-size: .95em; overflow-wrap: anywhere; quotes: '«' '»'; }
+.lg-card .btn { background: #fff; color: #12733F; flex: none; }

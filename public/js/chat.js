@@ -4,7 +4,7 @@ import { msgKey, loadHistory, openChat, closeChat, openUser, markRead, retryMsg,
 import { Sticker, sfx } from './fun.js';
 import { OnceMsg, Streak } from './growth.js';
 import { Photo, Gif, VideoMsg, RoundMsg, VoiceMsg, AudioMsg, FileMsg, LocMsg } from './media.js';
-import { showProfile, chatActions, openMiniApp, JoinPreview } from './panels.js';
+import { showProfile, chatActions, openMiniApp, JoinPreview, shareLeaves } from './panels.js';
 import { Composer, EmojiPicker, ForwardModal } from './composer.js';
 import { memberOf } from './guildui.js';
 import { startCall, VoiceRoom, joinVoice, RTC } from './rtc.js';
@@ -166,7 +166,10 @@ function EditHistory({ id, chat, m }) {
 
 function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const u = S.users[m.from], mine = m.from === S.me.id, sel = S.ui.sel;
-  if (m.type === 'service') return html`<div class="svc" data-mid=${m.id}><span>${m.gift ? '🎁 ' : ''}${svcText(m)}</span></div>`;
+  if (m.type === 'service' && m.gift) { const mine = m.from === S.me.id, who = userName(S.users[m.from]); return html`<div class="leafgift" data-mid=${m.id}><div class=${cx('lg-card', mine && 'mine')}>
+    <span class="lg-e" aria-hidden="true">🍃</span><div class="lg-m"><b>${mine ? '−' : '+'}${fmtNum(m.gift)} ${plural(m.gift, ['листик', 'листика', 'листиков'])}</b><span>${mine ? 'Вы поделились листиками' : who + ' делится с вами'} · ${fmtTime(m.ts)}</span>${m.note && html`<q>${m.note}</q>`}</div>
+    ${!mine && S.flags.stars && html`<button class="btn sm" onClick=${() => shareLeaves(m.from)}>Ответить тем же</button>`}</div></div>`; }
+  if (m.type === 'service') return html`<div class="svc" data-mid=${m.id}><span>${svcText(m)}</span></div>`;
   const chan = m.as === 'chan', out = mine && !flat && !chan && chat.type !== 'channel';
   const grouped = !root && prev && prev.type !== 'service' && prev.from === m.from && !prev.hook === !m.hook && prev.as === m.as && m.ts - prev.ts < 300e3 && sameDay(m.ts, prev.ts);
   const sm = chat.server ? memberOf(chat.server, m.from) : null;
