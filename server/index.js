@@ -45,6 +45,9 @@ const ipOf = req => {
   const xs = String(h['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);      // ближайший прокси дописывает адрес в конец
   return (xs[Math.max(0, xs.length - HOPS)] || peer).replace(/^::ffff:/, '');
 };
+// Из какой страны пришёл запрос (две буквы) — по заголовку Cloudflare, если он стоит перед нами; иначе пусто. Нужно только телевизору:
+// с включённым VPN эфиры пишут «канал не доступен в вашем регионе», и мы заранее подсказываем, в чём дело. Нигде не сохраняется.
+const countryOf = req => { const c = (process.env.RENDER || TRUST === 'cloudflare') ? String(req.headers['cf-ipcountry'] || '').trim().toUpperCase() : ''; return /^[A-Z]{2}$/.test(c) && c !== 'XX' ? c : ''; };
 // Загрузка файлов: не больше стольких штук и мегабайт в час с одного аккаунта (и втрое больше с одного адреса).
 const UP_N = Number(process.env.UPLOADS_PER_HOUR) || 200, UP_MB = Number(process.env.UPLOAD_MB_PER_HOUR) || 1024;
 const upBytes = new Map();
@@ -179,7 +182,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/upload' && req.method === 'POST') return handleUpload(req, res);
     if (p === '/api/notify' && req.method === 'GET') { const a = sessionOf(req); if (a) { try { A.limit('notify:' + a.u.id, 90, 60000); } catch (e) { return json(res, 429, { error: 'Слишком часто' }); } } return Push.poll(req, res, url, a, json); }      // лента уведомлений для приложения на Android
     if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined, mirror: Cloud.mirrorStatus(), files: (u => u ? { mb: Math.round(u.bytes / 1048576), maxMb: Math.round(u.max / 1048576), count: u.files } : undefined)(Cloud.usage()) });
-    if (p === '/api/version') return json(res, 200, { build: buildVer(), apk: Push.apkInfo() });      // что сейчас выложено: интерфейс и сборка для Android
+    if (p === '/api/version') return json(res, 200, { build: buildVer(), apk: Push.apkInfo(), cc: countryOf(req) });      // что сейчас выложено: интерфейс и сборка для Android
     if (p === '/api/config') return json(res, 200, { flags: db.flags, name: 'Нудист', version: '1.0.0' });
     if (p === '/api/clientlog' && req.method === 'POST') {      // телефон сообщает, почему приложение не запустилось
       try { A.limit('clog:' + ipOf(req), 20, 600e3); const b = (await readBody(req, 6000)).toString('utf8').replace(/[\r\n]+/g, ' ').slice(0, 1500); console.log('[client]', (req.headers['user-agent'] || '').slice(0, 200), '|', b); } catch (e) { /* лимит или мусор */ }

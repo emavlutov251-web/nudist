@@ -53,9 +53,9 @@ export function Dock() {
           ${!tv && html`<p class="hint">Это официальный плеер Яндекс Музыки. Что играть целиком, а что отрывком — решает Яндекс: полные треки он обычно даёт тем, кто вошёл к нему с подпиской. Окно можно свернуть — музыка не остановится.</p>`}
         </div>
         <footer class="dock-f">
-          ${tv && html`<span class="hint">Это страница эфира на сайте канала. Не показывает — откройте её отдельно.</span>`}
+          ${tv && html`<span class="hint">${d.site ? `Это плеер ${d.site}. Не показывает — откройте эфир отдельно.` : 'Это страница эфира на сайте канала. Не показывает — откройте её отдельно.'}</span>`}
           ${!tv && !old && html`<button class="btn ghost" onClick=${closeDock}><${Icon} n="square" s=${15} /> Выключить</button>`}
-          <a class="btn ghost" href=${d.link} target="_blank" rel="noopener noreferrer"><${Icon} n="external-link" s=${16} /> ${tv ? 'На сайте канала' : 'Открыть в Яндекс Музыке'}</a>
+          <a class="btn ghost" href=${d.link} target="_blank" rel="noopener noreferrer"><${Icon} n="external-link" s=${16} /> ${tv ? (d.site ? 'Открыть на ' + d.site : 'На сайте канала') : 'Открыть в Яндекс Музыке'}</a>
         </footer>
       </div>
     </div>

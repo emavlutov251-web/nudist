@@ -3,8 +3,8 @@
 //  • Reveal — пятно света и рамка следуют за указателем мыши.
 // Работает только при data-style="fluent" и включённых анимациях. Один набор обработчиков на весь документ.
 const root = document.documentElement;
-const PRESS = '.btn, .ib, .ci, .mi, .rail-b, .chip, .send, .folders button, .tabs button, .set-nav button, .seg button, .th, .wall, .story, .toggle, .em-grid button, .swatches button';
-const REVEAL = '.btn, .ib, .ci, .mi, .rail-b, .chip, .set-nav button, .seg button, .th, .wall';
+const PRESS = '.btn, .ib, .ci, .mi, .rail-b, .chip, .send, .folders button, .tabs button, .set-nav button, .seg button, .th, .wall, .story, .toggle, .em-grid button, .swatches button, .hub-tabs button, .tv-ch, .trk, .app-grid > *, .make-i, .gift-i, .dock-h button';
+const REVEAL = '.btn, .ib, .ci, .mi, .rail-b, .chip, .set-nav button, .seg button, .th, .wall, .tv-ch, .hub-tabs button';
 const on = () => root.dataset.style === 'fluent' && root.dataset.anim !== '0';
 
 let pressed = null;

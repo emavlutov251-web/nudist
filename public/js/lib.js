@@ -196,8 +196,9 @@ export function applyTheme() {
   const sys = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   r.dataset.theme = s.theme === 'system' ? sys : s.theme;
   r.dataset.style = s.style === 'classic' ? 'classic' : 'fluent';
-  // «Авто»: на телефонах с малым объёмом памяти размытие выключаем, оно дорого обходится видеочипу
-  const weak = (navigator.deviceMemory && navigator.deviceMemory < 4) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4);
+  // «Авто»: размытие — главная черта оформления, поэтому выключаем его только на совсем слабых устройствах (до 1 ГБ памяти или два ядра):
+  // там оно тормозит прокрутку. Раньше порог был 4 ГБ, и на большинстве недорогих телефонов размытия не было вовсе.
+  const weak = (navigator.deviceMemory && navigator.deviceMemory < 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 3);
   r.dataset.acrylic = s.acrylic === false || (s.acrylic !== true && weak) ? '0' : '1';
   r.dataset.wall = s.wallpaper; r.dataset.anim = s.anim ? '1' : '0'; r.dataset.contrast = s.contrast ? '1' : '0';
   r.style.setProperty('--fs', (s.fontSize || 15) + 'px');

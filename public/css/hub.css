@@ -161,3 +161,5 @@ article.post footer { font-size: inherit; color: inherit; }
 .has-dock .toasts { bottom: 66px; }
 .tv-upd { justify-content: space-between; } .tv-upd .btn { flex: none; text-decoration: none; }
 .tv-src { flex: none; margin-left: 8px; } .tv .hub-bar + .hub-bar { margin-top: 4px; }
+.tv-vpn { align-items: flex-start; margin: 8px 0; line-height: 1.4; } .tv-vpn b { display: block; margin-bottom: 2px; } .tv-m small.tv-ok { color: #107C10; font-weight: 600; }
+.tv-bar { flex-wrap: wrap; } .tv-src button { white-space: nowrap; } @media (max-width: 480px) { .tv-src { margin-left: 6px; } .tv-src button { padding-left: 10px; padding-right: 10px; } }
