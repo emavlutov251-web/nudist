@@ -41,10 +41,10 @@ jobs:
           for n in bad: print('::warning::Не сохраняется: ' + n)
           PY
       - name: Не дать GitHub отключить расписание
-        if: github.event_name == 'schedule'
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Достаточно раза в сутки: в остальные запуски шаг ничего не делает.
-          [ "$(date -u +%H)" = "04" ] || exit 0
+          # Достаточно раза в сутки (и при ручном запуске): в остальные запуски шаг ничего не делает.
+          [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(date -u +%H)" = "04" ] || exit 0
           gh api -X PUT "repos/${{ github.repository }}/actions/workflows/monitor.yml/enable" && echo "Расписание продлено." || echo "::warning::Не удалось продлить расписание"
