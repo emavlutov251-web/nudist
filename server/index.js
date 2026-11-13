@@ -58,7 +58,7 @@ function serveStatic(req, res, rel) {
 // ───── офлайн-кеш оболочки (service worker)
 // Браузер один раз скачивает все файлы интерфейса и дальше открывает приложение с диска, без единого запроса за кодом.
 // Версия — хеш содержимого: после выкладки новой версии браузер сам докачает её в фоне и предложит обновиться.
-const SW_SKIP = /^\/(admin\.html|ask\.html|css\/admin\.css|js\/admin\.js|js\/ask\.js|nudist\.apk|og\.png|sw\.js)$/;
+const SW_SKIP = /^\/(admin\.html|ask\.html|start\.html|start-phone\.jpg|css\/admin\.css|js\/admin\.js|js\/ask\.js|js\/start\.js|js\/start-qr\.js|nudist\.apk|og\.png|sw\.js)$/;
 let swBody = null;
 function buildSw() {
   const files = [], hash = crypto.createHash('sha1');
@@ -162,6 +162,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/sw.js') return serveSw(req, res);
     if (p === '/' || p === '/index.html') return serveStatic(req, res, 'index.html');
     if (p === '/admin' || p === '/admin/') return serveStatic(req, res, 'admin.html');
+    if (/^\/(start|download)\/?$/.test(p)) return serveStatic(req, res, 'start.html');   // страница для новых людей: «в браузере» или «скачать APK»
     if (/^\/q\/[\w.-]{1,40}\/?$/.test(p)) return serveStatic(req, res, 'ask.html');      // «Голая правда»: страница анонимного вопроса
     return serveStatic(req, res, p);
   } catch (e) {
