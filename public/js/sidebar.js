@@ -24,7 +24,7 @@ export function Rail() {
       <button class="rail-b add" title="Каталог серверов" onClick=${() => openModal(Discover)}><${Icon} n="compass" /></button>
     </div>
     <i class="rail-sep"></i>
-    ${[['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['apps', 'layout-grid', 'Приложения']].map(([k, ic, name]) => html`<button class=${cx('rail-b add hubb', S.ui.hub === k && 'on')} title=${name} aria-label=${name} onClick=${() => openHub(k)}><${Icon} n=${ic} /></button>`)}
+    ${[['feed', 'list', 'Лента'], ['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['apps', 'layout-grid', 'Приложения']].map(([k, ic, name]) => html`<button class=${cx('rail-b add hubb', S.ui.hub === k && 'on')} title=${name} aria-label=${name} onClick=${() => openHub(k)}><${Icon} n=${ic} /></button>`)}
     <i class="rail-sep"></i>
     <button class="rail-b add" title="Прикрыться (Esc Esc)" onClick=${() => { S.ui.boss = true; bump(); }}><${Icon} n="table" /></button>
     <button class="rail-b add" title="Настройки (Ctrl+,)" onClick=${() => openSettings()}><${Icon} n="settings" /></button>
@@ -136,6 +136,7 @@ function HomeSidebar() {
     { icon: 'user-plus', label: 'Позвать друзей', hint: '+50 🍃', run: openInvite },
     !isStandalone() && { icon: 'smartphone', label: 'Установить как приложение', run: installApp },
     '-',
+    { icon: 'list', label: 'Лента', run: () => openHub('feed') },
     { icon: 'music', label: 'Музыка, клипы и эфиры', run: () => openHub() },
     { icon: 'layout-grid', label: 'Приложения', run: () => openApps(S.ui.chat) },
     { icon: 'life-buoy', label: 'Помощь и поддержка', run: () => openHub('help') },

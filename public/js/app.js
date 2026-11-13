@@ -161,7 +161,7 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('click', () => { try { if ('Notification' in window && Notification.permission === 'default' && S.ready && S.settings.notif && !local.get('askedNotif')) { local.set('askedNotif', 1); Notification.requestPermission(); } } catch (e) { /* игнор */ } }, { passive: true });
 async function handleHash(first) {
-  if (/^#hub(=\w+)?$/.test(location.hash)) { const t = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); openHub(['music', 'clips', 'live', 'apps', 'help'].includes(t) ? t : 'music'); return; }
+  if (/^#hub(=\w+)?$/.test(location.hash)) { const t = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); openHub(['feed', 'music', 'clips', 'live', 'apps', 'help'].includes(t) ? t : 'music'); return; }
   if (location.hash === '#ask') { history.replaceState(history.state, '', location.pathname); import('./growth.js').then(g => g.openAsk()); return; }
   if (location.hash === '#invite') { history.replaceState(history.state, '', location.pathname); import('./growth.js').then(g => g.openInvite()); return; }
   if (first && pendingRef()) { const r = pendingRef(); clearRef(); if (S.me && r.toLowerCase() !== (S.me.username || '').toLowerCase()) { showProfile(null, r); return; } }      // уже вошедший открыл чужую ссылку-приглашение — покажем, кто звал

@@ -3,8 +3,9 @@ import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avata
 import { openChat, sendPayload } from './store.js';
 import { playAudio, AudioBar } from './media.js';
 import { openMiniApp } from './panels.js';
+import { Feed } from './feed.js';
 
-const TABS = [['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['apps', 'layout-grid', 'Приложения'], ['help', 'life-buoy', 'Поддержка']];
+const TABS = [['feed', 'list', 'Лента'], ['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['apps', 'layout-grid', 'Приложения'], ['help', 'life-buoy', 'Поддержка']];
 const isStaff = () => ['moderator', 'admin', 'superadmin'].includes((S.me || {}).admin);
 const err = e => toast(e.message || String(e), 'err');
 let MB = 45;      // предел размера файла, сервер уточняет
@@ -23,7 +24,7 @@ export function Hub() {
       <nav class="hub-tabs" role="tablist">${TABS.map(([k, ic, name]) => html`<button role="tab" aria-selected=${tab === k} class=${cx(tab === k && 'on')} onClick=${() => setTab(k)} title=${name}><${Icon} n=${ic} s=${19} /><span>${name}</span>${k === 'live' && LIVE.n > 0 && html`<b class="hub-dot">${LIVE.n}</b>`}</button>`)}</nav>
       <button class="ib" onClick=${closeHub} title="Закрыть и вернуться к чатам"><${Icon} n="x" /></button>
     </header>
-    <div class="hub-b">${tab === 'music' ? html`<${Music} />` : tab === 'clips' ? html`<${Clips} />` : tab === 'live' ? html`<${Live} />` : tab === 'apps' ? html`<div class="hub-pad"><${AppsCatalog} /></div>` : html`<${Help} />`}</div>
+    <div class="hub-b">${tab === 'feed' ? html`<${Feed} />` : tab === 'music' ? html`<${Music} />` : tab === 'clips' ? html`<${Clips} />` : tab === 'live' ? html`<${Live} />` : tab === 'apps' ? html`<div class="hub-pad"><${AppsCatalog} /></div>` : html`<${Help} />`}</div>
     ${tab !== 'clips' && !(tab === 'live' && LV.cur) && html`<${AudioBar} />`}
   </section>`;
 }

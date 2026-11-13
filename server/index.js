@@ -6,6 +6,7 @@ const C = require('./core');
 const Cloud = require('./cloud');
 const A = require('./auth');
 const Hub = require('./hub');
+require('./feed');
 const Ask = require('./ask');
 const R = require('./rpc');
 const G = require('./guild');
