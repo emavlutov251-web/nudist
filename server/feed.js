@@ -1,4 +1,6 @@
 // «Лента»: записи людей как в соцсети. Текст и до четырёх картинок, лайки, комментарии, подписки на авторов.
+// При переносе из своего канала (C.canImport) запись может нести до десяти вложений, включая видео и голосовые, и исходную дату.
+// Дата может быть и в будущем: такая запись лежит скрытой и сама появляется в ленте, когда приходит её время.
 // Чтобы у новичка лента не была пустой, в общую вкладку подмешиваются свежие записи каналов, на которые он подписан.
 const C = require('./core');
 const R = require('./rpc');
@@ -7,6 +9,7 @@ const H = R.H;
 
 db.posts = db.posts || {};        // записи: id → запись
 const IMG_EXT = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp']);
+const AV_EXT = new Set(['mp4', 'webm', 'mov', 'm4a', 'mp3', 'ogg', 'oga', 'opus', 'aac', 'wav']);
 const extOf = url => String(url).split('.').pop().toLowerCase();
 const isMod = u => !!u && ['moderator', 'admin', 'superadmin'].includes(u.admin);
 const me = c => db.users[c.uid];
@@ -33,7 +36,7 @@ function channelItems(u) {
       const m = arr[i]; if (m.type === 'service' || m.enc || m.once || m.thread || !(m.text || m.media)) continue;
       const url = m.media && m.media.url, img = url && isUpload(url) && IMG_EXT.has(extOf(url)) ? [url] : [];
       if (!m.text && !img.length) continue;
-      out.push({ id: 'ch.' + cid + '.' + m.id, kind: 'channel', chat: cid, title: ch.title, avatar: ch.avatar, color: ch.color || 0, ts: m.ts, text: m.text || '', media: img }); n++;
+      out.push({ id: 'ch.' + cid + '.' + m.id, kind: 'channel', chat: cid, title: ch.title, avatar: ch.avatar, color: ch.color || 0, ts: m.ts, text: (m.text || '').replace(/\*\*|__|~~|\|\||`/g, ''), media: img });      // разметку чата лента не понимает: убираем звёздочки n++;
     }
   }
   return out;
@@ -41,7 +44,7 @@ function channelItems(u) {
 
 H['feed.list'] = (c, p) => {
   const u = me(c), tab = ['all', 'subs', 'user'].includes(p.tab) ? p.tab : 'all', off = int(p.off, 0, 1e6), who = str(p.user, 32), fol = new Set(u.follows || []);
-  let items = sorted().map(i => db.posts[i]).filter(x => visible(x.by, u));
+  const t = now(); let items = sorted().map(i => db.posts[i]).filter(x => x.ts <= t && visible(x.by, u));
   if (tab === 'subs') items = items.filter(x => x.by === u.id || fol.has(x.by));
   else if (tab === 'user') items = items.filter(x => x.by === (who || u.id));
   items = items.map(x => view(x, u));
@@ -50,11 +53,12 @@ H['feed.list'] = (c, p) => {
   return { items: page, more: off + page.length < items.length, users: usersOf(page.map(x => x.by), u.id), follows: [...fol] };
 };
 H['feed.post'] = (c, p) => {
-  const u = me(c), text = str(p.text, 2000).trim();
-  const media = (Array.isArray(p.media) ? p.media : []).slice(0, 4).map(x => str(x, 200)).filter(x => isUpload(x) && IMG_EXT.has(extOf(x)));
+  const u = me(c), imp = C.canImport(u), text = str(p.text, imp ? 4096 : 2000).trim();
+  const media = (Array.isArray(p.media) ? p.media : []).slice(0, imp ? 10 : 4).map(x => str(x, 200)).filter(x => isUpload(x) && (IMG_EXT.has(extOf(x)) || (imp && AV_EXT.has(extOf(x)))));
   need(text || media.length, 'Пустую запись публиковать незачем. Даже у нудистов есть что показать.');
-  perDay(u, 'post', 30, 'Слишком много записей за день. Оставьте что-нибудь на завтра.');
-  const x = { id: id(), by: u.id, ts: now(), text, media, likes: {} }; db.posts[x.id] = x; order = null; save();
+  if (!imp) perDay(u, 'post', 30, 'Слишком много записей за день. Оставьте что-нибудь на завтра.');
+  const ts = imp && Number(p.ts) > 0 ? Math.min(now() + 31 * 864e5, Math.round(Number(p.ts))) : now();
+  const x = { id: id(), by: u.id, ts, text, media, likes: {} }; db.posts[x.id] = x; order = null; save();
   return view(x, u);
 };
 H['feed.del'] = (c, p) => {

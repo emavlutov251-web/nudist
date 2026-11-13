@@ -1,5 +1,5 @@
 // «Лента»: записи людей и каналов. Текст и до четырёх картинок, лайки, комментарии, подписки на авторов.
-import { html, useState, useEffect, S, bump, rpc, toast, Icon, Avatar, cx, userName, fmtShort, fmtNum, confirmDlg, pickFile, upload, Empty, Spinner } from './lib.js';
+import { html, useState, useEffect, S, bump, rpc, toast, Icon, Avatar, Badges, cx, userName, fmtShort, fmtNum, confirmDlg, pickFile, upload, Empty, Spinner } from './lib.js';
 import { openChat } from './store.js';
 
 const TABS = [['all', 'Все'], ['subs', 'Подписки'], ['user', 'Мои записи']];
@@ -43,17 +43,20 @@ function Comments({ post, users, onCount }) {
 }
 
 function Post({ p, users, follows, onChange, onDel, onFollow }) {
-  const [open, setOpen] = useState(false), ch = p.kind === 'channel', u = users[p.by];
+  const [open, setOpen] = useState(false), [full, setFull] = useState(false), ch = p.kind === 'channel', u = users[p.by];
+  const lines = (p.text || '').split('\n'), long = !full && ((p.text || '').length > 700 || lines.length > 14);      // длинное сворачиваем, чтобы лента листалась
+  const shown = long ? lines.slice(0, 10).join('\n').slice(0, 500).trimEnd() + '…' : p.text;
   const like = async () => { const on = !p.liked; onChange({ ...p, liked: on, likes: p.likes + (on ? 1 : -1) }); try { const r = await rpc('feed.like', { id: p.id, on }); onChange({ ...p, ...r }); } catch (e) { onChange(p); toast(e.message, 'err'); } };
   const del = async () => { if (!await confirmDlg({ title: 'Удалить запись?', text: 'Вместе с лайками и комментариями. Вернуть не получится.', ok: 'Удалить', danger: true })) return; try { await rpc('feed.del', { id: p.id }); onDel(p); } catch (e) { toast(e.message, 'err'); } };
   const mine = p.by === S.me.id, fol = follows.includes(p.by);
   return html`<article class="post">
     <header class="post-h"><${Avatar} src=${ch ? p.avatar : u && u.avatar} name=${ch ? p.title : userName(u)} color=${ch ? p.color : u ? u.color : 0} s=${40} />
-      <div class="post-who"><b>${ch ? p.title : userName(u)}</b><small>${ch ? 'канал · ' : ''}${fmtShort(p.ts)}</small></div>
+      <div class="post-who"><b>${ch ? p.title : userName(u)} ${!ch && u && html`<${Badges} list=${u.badges} s=${14} />`}</b><small>${ch ? 'канал · ' : ''}${fmtShort(p.ts)}</small></div>
       ${!ch && !mine && html`<button class=${cx('btn ghost post-fol', fol && 'on')} onClick=${() => onFollow(p.by, !fol)}><${Icon} n=${fol ? 'user-check' : 'user-plus'} s=${15} /> ${fol ? 'Вы подписаны' : 'Подписаться'}</button>`}
       ${!ch && p.own && html`<button class="ib" title="Удалить запись" aria-label="Удалить запись" onClick=${del}><${Icon} n="trash-2" s=${16} /></button>`}</header>
-    ${p.text && html`<p class="post-t">${p.text}</p>`}
-    ${p.media && p.media.length > 0 && html`<div class=${'post-m n' + p.media.length}>${p.media.map(m => html`<img key=${m} src=${m} alt="" loading="lazy" />`)}</div>`}
+    ${p.text && html`<p class="post-t">${shown}</p>`}
+    ${long && html`<button class="post-more" onClick=${() => setFull(true)}>Показать полностью</button>`}
+    ${p.media && p.media.length > 0 && html`<div class=${'post-m n' + Math.min(p.media.length, 5)}>${p.media.map(m => /\.(mp4|webm|mov)$/i.test(m) ? html`<video key=${m} src=${m + '#t=0.1'} controls playsinline preload="metadata"></video>` : /\.(m4a|mp3|ogg|oga|opus|aac|wav)$/i.test(m) ? html`<audio key=${m} src=${m} controls preload="none"></audio>` : html`<img key=${m} src=${m} alt="" loading="lazy" />`)}</div>`}
     <footer class="post-f">${ch
       ? html`<button class="post-a" onClick=${() => { S.ui.hub = null; openChat(p.chat); bump(); }}><${Icon} n="megaphone" s=${17} /> Открыть канал</button>`
       : html`<button class=${cx('post-a', p.liked && 'on')} aria-pressed=${!!p.liked} title="Нравится" onClick=${like}><${Icon} n="heart" s=${18} /> ${p.likes ? fmtNum(p.likes) : ''}</button>

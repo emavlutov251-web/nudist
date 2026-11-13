@@ -103,7 +103,7 @@ function canSee(u, viewerId, key) {
 function badges(u) {
   const b = [...(u.badges || [])];
   if (isPremium(u)) b.push('premium');
-  if (u.bot) b.push('bot');
+  if (u.bot || ROBOTS.has(u.id)) b.push('bot');
   return b;
 }
 function pubUser(u, vid) {
@@ -124,6 +124,12 @@ function pubUser(u, vid) {
 // их роль никто не может снять, и только они могут менять роль других главных админов.
 const OWNERS = new Set(String(process.env.OWNERS || '').split(',').map(s => s.trim()).filter(Boolean));
 const isOwner = u => !!u && OWNERS.has(u.id);
+// Перенос записей из своего канала в другой сети (scripts/tg-import.js). Людям из IMPORTERS (id через запятую) и владельцам
+// можно ставить записи и клипы с исходной датой, прикладывать видео и голосовые и не упираться в дневной лимит.
+const IMPORTERS = new Set(String(process.env.IMPORTERS || '').split(',').map(s => s.trim()).filter(Boolean));
+const canImport = u => !!u && (IMPORTERS.has(u.id) || isOwner(u));
+// Аккаунты редакции с автоматическими подборками: рядом с именем честно стоит значок «Бот».
+const ROBOTS = new Set(String(process.env.ROBOTS || '').split(',').map(s => s.trim()).filter(Boolean));
 function selfUser(u) {
   return { ...pubUser(u, u.id), phone: u.phone, email: u.email, stars: u.stars || 0, premiumUntil: u.premiumUntil, privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, owner: isOwner(u) || undefined, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, private: !!u.private, lastDaily: u.lastDaily, taps: u.tapDay === today() ? u.taps : 0 };
 }
@@ -253,6 +259,9 @@ function streakOf(chat) {      // { n, hot }: hot — сегодня серия 
 // Стереть загруженный файл совсем: с диска и из облака (одноразовые фото и видео).
 function dropUpload(url) {
   const name = isUpload(url) ? String(url).slice(3) : ''; if (!/^[\w-]+\.[a-z0-9]{1,8}$/.test(name)) return;
+  // Один файл может стоять и в записи ленты, и в клипе (перенос из канала): стираем, только когда он больше нигде не нужен.
+  for (const k in db.posts || {}) if ((db.posts[k].media || []).includes(url)) return;
+  for (const k in db.clips || {}) if (db.clips[k].url === url) return;
   fs.unlink(path.join(UPLOADS, name), () => {}); Cloud.dropUpload(name);
 }
 function chatView(chat, uid) {
@@ -399,4 +408,4 @@ function usernameTaken(n, exceptId) {
   return false;
 }
 
-module.exports = { setOfflineHook, audience, size, dropUpload, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { canImport, setOfflineHook, audience, size, dropUpload, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

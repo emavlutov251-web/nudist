@@ -31,11 +31,11 @@ H['music.add'] = (c, p) => {
   const u = me(c), m = p.media || {};
   need(isUpload(m.url) && AUDIO_EXT.has(extOf(m.url)), 'Нужен аудиофайл: mp3, m4a, ogg, wav или flac');
   need(cleanLib(u).length < MUSIC_MAX, `В библиотеке уже ${MUSIC_MAX} треков. Удалите что-нибудь из старого.`);
-  perDay(u, 'music', 100, 'На сегодня хватит загрузок. Уши тоже должны отдыхать.');
+  const imp = C.canImport(u); if (!imp) perDay(u, 'music', 100, 'На сегодня хватит загрузок. Уши тоже должны отдыхать.');
   const raw = str(m.name, 200).replace(/\.[a-z0-9]{2,5}$/i, '').replace(/_/g, ' ');
   let title = str(p.title, 120), artist = str(p.artist, 120);
   if (!title) { const parts = raw.split(/\s+[-–—]\s+/); if (parts.length > 1) { artist = artist || parts[0].trim(); title = parts.slice(1).join(' - ').trim(); } else title = raw || 'Без названия'; }
-  const t = { id: id(), by: u.id, title: title.slice(0, 120), artist: artist || 'Неизвестный исполнитель', url: m.url, size: int(m.size, 0, 2e9), dur: Math.round(Number(m.dur) || 0), ts: now(), pub: !!p.pub, plays: 0 };
+  const t = { id: id(), by: u.id, title: title.slice(0, 120), artist: artist || 'Неизвестный исполнитель', url: m.url, size: int(m.size, 0, 2e9), dur: Math.round(Number(m.dur) || 0), ts: imp && Number(p.ts) > 0 ? Math.min(now() + 31 * 864e5, Math.round(Number(p.ts))) : now(), pub: !!p.pub, plays: 0 };
   db.tracks[t.id] = t; u.music.unshift(t.id); save();
   return trackView(t, u);
 };
@@ -43,7 +43,7 @@ H['music.list'] = (c, p) => {
   const u = me(c), q = str(p.q, 60).toLowerCase(), tab = p.tab === 'all' ? 'all' : 'my';
   let list;
   if (tab === 'my') list = cleanLib(u).map(i => db.tracks[i]);
-  else { list = []; for (const k in db.tracks) if (db.tracks[k].pub) list.push(db.tracks[k]); list.sort((a, b) => (b.plays || 0) - (a.plays || 0) || b.ts - a.ts); }
+  else { list = []; const t = now(); for (const k in db.tracks) if (db.tracks[k].pub && db.tracks[k].ts <= t) list.push(db.tracks[k]); list.sort((a, b) => (b.plays || 0) - (a.plays || 0) || b.ts - a.ts); }
   if (q) list = list.filter(t => (t.title + ' ' + t.artist).toLowerCase().includes(q));
   const off = int(p.off, 0, 1e6), page = list.slice(off, off + 100);
   return { tracks: page.map(t => trackView(t, u)), total: list.length, max: MUSIC_MAX, mb: upMb(u), users: usersOf(page.map(t => t.by), c.uid) };
@@ -80,14 +80,14 @@ H['clip.add'] = (c, p) => {
   const u = me(c), m = p.media || {};
   need(isUpload(m.url) && VIDEO_EXT.has(extOf(m.url)), 'Нужно видео: mp4, webm или mov');
   const dur = Math.round(Number(m.dur) || 0); need(dur <= CLIP_MAX_SEC, `Клип — это до ${CLIP_MAX_SEC / 60} минут. Остальное называется фильм.`);
-  perDay(u, 'clips', 30, 'На сегодня хватит клипов. Оставьте что-нибудь на завтра.');
-  const k = { id: id(), by: u.id, url: m.url, w: int(m.w, 0, 20000), h: int(m.h, 0, 20000), dur, size: int(m.size, 0, 2e9), text: str(p.text, 300), ts: now(), likes: {}, views: 0, cm: [] };
+  const imp = C.canImport(u); if (!imp) perDay(u, 'clips', 30, 'На сегодня хватит клипов. Оставьте что-нибудь на завтра.');
+  const k = { id: id(), by: u.id, url: m.url, w: int(m.w, 0, 20000), h: int(m.h, 0, 20000), dur, size: int(m.size, 0, 2e9), text: str(p.text, 300), ts: imp && Number(p.ts) > 0 ? Math.min(now() + 31 * 864e5, Math.round(Number(p.ts))) : now(), likes: {}, views: 0, cm: [] };
   db.clips[k.id] = k; clipOrder = null; save();
   return clipView(k, u.id);
 };
 H['clip.feed'] = (c, p) => {
   const off = int(p.off, 0, 1e6), by = str(p.user, 32);
-  let ids = order(); if (by) ids = ids.filter(i => db.clips[i].by === by);
+  const t = now(); let ids = order().filter(i => db.clips[i].ts <= t); if (by) ids = ids.filter(i => db.clips[i].by === by);      // клип с датой в будущем ждёт своего часа
   const page = ids.slice(off, off + 8).map(i => db.clips[i]);
   return { clips: page.map(k => clipView(k, c.uid)), more: off + page.length < ids.length, mb: upMb(me(c)), users: usersOf(page.map(k => k.by), c.uid) };
 };
