@@ -111,7 +111,7 @@ export function StarsModal({ id }) {
     <div class=${cx('prem', prem && 'on')}><h3><${Icon} n="leaf" /> Нудист Голый Премиум</h3>${prem ? html`<p>Активен до ${new Date(u.premiumUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>` : html`<p>Всё то же самое, только с позолотой. ${price} 🍃 за 30 дней.</p>`}
       <ul>${PERKS.map(([i, t]) => html`<li><${Icon} n=${i} s=${16} /> ${t}</li>`)}</ul>
       <button class="btn warn" onClick=${buy}>${prem ? 'Продлить на 30 дней' : 'Оформить'} · ${price} 🍃</button></div>
-    <p class="hint">Откуда берутся листики: ежедневный бонус ${lf.dailyMin === lf.dailyMax ? lf.dailyMin : lf.dailyMin + '–' + lf.dailyMax} 🍃, «Листопад» — листик за каждые ${lf.per} тапов, не больше ${lf.limit} 🍃 в день, и 50 🍃 за приглашённого друга. Деревья не резиновые.</p>
+    <p class="hint">Откуда берутся листики: ежедневный бонус ${lf.dailyMin === lf.dailyMax ? lf.dailyMin : lf.dailyMin + '–' + lf.dailyMax} 🍃, «Листопад» — листик за каждые ${lf.per} тапов, не больше ${lf.limit} 🍃 в день, листики за игры «2048» и «Сапёр» (до 60 и 50 🍃 в день) и 50 🍃 за приглашённого друга. Деревья не резиновые.</p>
     <p class="hint">На что ещё тратить: буст сервера (${(S.prices || {}).boost || 200} 🍃), платные каналы, подарки друзьям.</p><//>`;
 }
 
@@ -309,6 +309,7 @@ export function InfoPanel({ chat }) {
       ${u && u.status && (u.status.e || u.status.t) && html`<div class="pf-row"><small>Статус</small><p>${u.status.e} ${u.status.t}</p></div>`}
       ${u && u.bio && html`<div class="pf-row"><small>О себе</small><p>${u.bio}</p></div>`}
       ${u && u.username && html`<button class="pf-row click" onClick=${() => { copyText('@' + u.username); toast('Скопировано'); }}><small>Username</small><p>@${u.username}</p></button>`}
+      ${u && chat.type === 'dm' && !u.bot && !u.deleted && html`<${GiftShelf} user=${u.id} />`}
       ${grp && chat.about && html`<div class="pf-row"><small>Описание</small><p>${chat.about}</p></div>`}
       ${grp && chat.rules && html`<div class="pf-row"><small>Правила</small><p class="pre">${chat.rules}</p></div>`}
       ${name && html`<button class="pf-row click" onClick=${() => openModal(QrModal, { title: 'Ссылка и QR', text: name, hint: 'Ссылка-приглашение в «' + i.title + '»' })}><small>Ссылка</small><p>@${chat.username} <${Icon} n="qr-code" s=${14} /></p></button>`}

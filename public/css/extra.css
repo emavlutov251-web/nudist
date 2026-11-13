@@ -169,4 +169,4 @@ input.share-n { font: 800 1.9em/1.2 var(--display); text-align: center; letter-s
 .gs-i { width: 42px; height: 42px; border-radius: 12px; background: var(--hover); font-size: 1.5em; line-height: 1; display: grid; place-items: center; transition: transform .12s; } .gs-i:hover { transform: scale(1.08); } .gs-i.hid { opacity: .45; } .gs-i.more { font-size: .82em; font-weight: 700; color: var(--ink2); }
 .gift-view { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 6px 0 4px; } .gv-e { font-size: 5.2em; line-height: 1.1; } .gift-view q { margin-top: 4px; quotes: '«' '»'; overflow-wrap: anywhere; } .gv-a { justify-content: center; margin-top: 14px; }
 @media (prefers-reduced-motion: reduce) { .pres-e { animation: none; } }
-
+.gs-i.give { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); }

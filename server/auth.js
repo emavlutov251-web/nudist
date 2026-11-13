@@ -49,6 +49,7 @@ setInterval(() => { const t = now(); for (const [k, a] of buckets) if (!a.length
 const AVA_COLORS = 8;
 // Приглашения: новичок пришёл по ссылке друга — обоим листики, сразу в контактах друг у друга и готовый чат.
 const REF_BONUS = 50, REF_DAILY = 5;      // бонус за приглашённого и за скольких в день его платят пригласившему
+const START_LEAVES = (() => { const n = Number(process.env.LEAF_START); return process.env.LEAF_START !== undefined && Number.isInteger(n) && n >= 0 && n <= 1e6 ? n : 500; })();      // сколько листиков у нового аккаунта
 function invitedBy(u, ref) {
   const inv = db.users[C.byName.get(String(ref).replace(/^@/, '').toLowerCase())];
   if (!inv || inv.bot || inv.deleted || inv.banned || inv.id === u.id) return;
@@ -68,7 +69,7 @@ function invitedBy(u, ref) {
 let humans = false;
 function hasHuman() { if (humans) return true; for (const k in db.users) if (!db.users[k].bot) { humans = true; break; } return humans; }
 function createUser(f) {
-  const u = { id: id(), name: f.name || 'Нудист', last: f.last || '', username: f.username, phone: f.phone, color: Math.floor(Math.random() * AVA_COLORS), created: now(), seen: now(), stars: 100, chats: [], servers: [], contacts: [], blocked: [], privacy: {}, ...f.extra };
+  const u = { id: id(), name: f.name || 'Нудист', last: f.last || '', username: f.username, phone: f.phone, color: Math.floor(Math.random() * AVA_COLORS), created: now(), seen: now(), stars: START_LEAVES, chats: [], servers: [], contacts: [], blocked: [], privacy: {}, ...f.extra };
   if (f.hash) u.pass = f.hash; else if (f.password) u.pass = hashPass(f.password);
   if (!f.bot && !hasHuman()) { u.admin = 'superadmin'; u.badges = ['staff']; }
   if (!f.bot) humans = true;

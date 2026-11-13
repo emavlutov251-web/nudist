@@ -194,11 +194,24 @@ function iceServers() {
 // ───────────────────────────── мини-приложения
 const APPS = [
   { id: 'listopad', title: 'Листопад', about: 'Тапайте по листу и зарабатывайте листики 🍃', cat: 'games', emoji: '🍃', bot: 'listopad' },
-  { id: 'g2048', title: '2048', about: 'Складывайте плитки до 2048. Затягивает сильнее ленты', cat: 'games', emoji: '🔢', url: '/miniapps/2048.html' },
-  { id: 'saper', title: 'Сапёр', about: 'Классика из Windows. Одна ошибка — и вы голый', cat: 'games', emoji: '💣', url: '/miniapps/saper.html' },
+  { id: 'g2048', title: '2048', about: 'Складывайте плитки до 2048. За крупные плитки дают листики 🍃', cat: 'games', emoji: '🔢', url: '/miniapps/2048.html' },
+  { id: 'saper', title: 'Сапёр', about: 'Классика из Windows. За победу — 10 🍃, за ошибку вы голый', cat: 'games', emoji: '💣', url: '/miniapps/saper.html' },
   { id: 'lot', title: 'Жребий', about: 'Монетка, кубик и «кто идёт за пиццей»', cat: 'tools', emoji: '🎲', url: '/miniapps/lot.html' },
   { id: 'split', title: 'Скинемся', about: 'Делит счёт на компанию с чаевыми', cat: 'tools', emoji: '🧾', url: '/miniapps/split.html' },
 ];
+// Листики за игры. Игры идут в браузере, и проверить честность партии сервер не может,
+// поэтому главный предохранитель — потолок на день по каждой игре (как у «Листопада»).
+const EARN = { g2048: { cap: 60, what: { 128: 2, 256: 4, 512: 8, 1024: 15, 2048: 30 } }, saper: { cap: 50, what: { win: 10 } } };
+const earnRate = new Map();      // пользователь → { t, n }: не больше 20 наград в минуту
+H['apps.earn'] = (c, p) => {
+  const u = me(c), aid = str(p.app, 16), app = Object.prototype.hasOwnProperty.call(EARN, aid) ? EARN[aid] : null; need(db.flags.stars, 'Листики временно отключены'); need(app, 'В этом приложении листики не выдают');
+  const key = str(String(p.what), 8), base = Object.prototype.hasOwnProperty.call(app.what, key) ? app.what[key] : 0; need(base, 'Такой награды нет');
+  const t = now(); let r = earnRate.get(u.id); if (!r || t - r.t > 60000) { if (earnRate.size > 50000) earnRate.clear(); earnRate.set(u.id, r = { t, n: 0 }); } need(++r.n <= 20, 'Слишком быстро. Листики не успевают расти.');
+  const d = C.today(); if (!u.earn || u.earn.d !== d) u.earn = { d, a: {} };
+  const got = u.earn.a[aid] || 0, n = Math.max(0, Math.min(base, app.cap - got));
+  if (n) { u.earn.a[aid] = got + n; u.stars = (u.stars || 0) + n; save(); R.selfUpdate(u); }
+  return { n, stars: u.stars || 0, left: app.cap - got - n, cap: app.cap };
+};
 H['apps.list'] = c => {
   const apps = APPS.map(a => { const b = a.bot && db.users[C.byName.get(a.bot)]; return { ...a, bot: b ? b.id : undefined }; }).filter(a => a.url || a.bot);
   const builtin = new Set(apps.map(a => a.bot).filter(Boolean));

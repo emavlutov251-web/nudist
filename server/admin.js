@@ -106,6 +106,32 @@ for (const oid of C.OWNERS) {
   if (u.admin !== 'superadmin' || !(u.badges || []).includes('staff')) { u.admin = 'superadmin'; u.badges = [...(u.badges || []).filter(b => b !== 'staff'), 'staff']; save(); console.log('[owners] главный админ:', R.uname(u), '@' + (u.username || u.id)); }
 }
 
+// Разовые работы по базе без входа в админку: MAINT="<метка>:<действие>,<действие>". Каждая метка выполняется один раз.
+//   unmute   — снять все муты: от администрации, в группах и каналах, на серверах;
+//   stars=N  — у каждого человека (не бота) становится ровно N листиков.
+(function maint() {
+  const raw = String(process.env.MAINT || '').trim(); if (!raw) return;
+  const i = raw.indexOf(':'), tag = raw.slice(0, i).trim(), acts = raw.slice(i + 1).split(',').map(s => s.trim()).filter(Boolean);
+  if (i < 1 || !acts.length || !acts.every(a => a === 'unmute' || /^stars=\d{1,7}$/.test(a))) return console.error('[maint] не понял MAINT, ничего не делаю:', raw);
+  db.meta.maint = db.meta.maint || []; if (db.meta.maint.includes(tag)) return;
+  const out = [];
+  for (const a of acts) {
+    if (a === 'unmute') {
+      let n = 0;
+      for (const u of Object.values(db.users)) if (u.muted) { delete u.muted; n++; }
+      for (const ch of Object.values(db.chats)) if (ch.mutes) { n += Object.keys(ch.mutes).length; delete ch.mutes; }
+      for (const s of Object.values(db.servers || {})) for (const m of Object.values(s.members || {})) if (m.muted) { delete m.muted; n++; }
+      out.push('снято мутов: ' + n);
+    } else {
+      const v = Number(a.slice(6)); let n = 0;
+      for (const u of Object.values(db.users)) if (!u.bot && !u.deleted && (u.stars || 0) !== v) { u.stars = v; n++; }
+      out.push(`листики = ${v} у ${n} чел.`);
+    }
+  }
+  db.meta.maint.push(tag); db.audit.push({ ts: now(), by: 'сервер', act: 'maint', d: `${tag}: ${out.join('; ')}` }); save();
+  console.log('[maint]', tag + ':', out.join('; '));
+})();
+
 H['admin.user.set'] = (c, p) => {
   const roleOnly = p.admin !== undefined && C.isOwner(db.users[c.uid]);   // владелец может менять роль и у равных по рангу
   const u = roleOnly ? db.users[p.id] : target(c, p.id, 'admin'); const ch = []; need(u && !u.deleted, 'Пользователь не найден');

@@ -257,6 +257,7 @@ function AppFrame({ id, app, chat }) {
         if (!(await confirmDlg({ title: `Отправить в чат?`, text, ok: 'Отправить' }))) return;
         try { await sendPayload(cid, { text }); reply({ nudist: 'sent' }); } catch (x) { reply({ nudist: 'error', text: x.message }); }
       }
+      if (d.nudist === 'earn') { try { reply({ nudist: 'earned', ...(await rpc('apps.earn', { app: app.id, what: String(d.what) })) }); } catch (x) { reply({ nudist: 'error', text: x.message }); } }
       if (d.nudist === 'close') closeModal(id);
     };
     addEventListener('message', onMsg); return () => removeEventListener('message', onMsg);

@@ -1,4 +1,4 @@
-import { ready, share, $, store } from '/miniapps/kit.js';
+import { ready, share, $, store, earn } from '/miniapps/kit.js';
 const W = 9, MINES = 10, field = $('#field'); let cells, mines, open, flags, state, t0, timer, dig = true, firstClick;
 const around = i => { const x = i % W, y = (i - x) / W, out = []; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; if ((dx || dy) && nx >= 0 && ny >= 0 && nx < W && ny < W) out.push(ny * W + nx); } return out; };
 function start() {
@@ -14,7 +14,7 @@ function draw() {
   $('#left').textContent = MINES - flags.size;
 }
 function reveal(i) { const q = [i]; while (q.length) { const c = q.pop(); if (open.has(c) || flags.has(c)) continue; open.add(c); if (!mines.has(c) && !around(c).some(j => mines.has(j))) q.push(...around(c)); } }
-function end(won) { state = won ? 'won' : 'lost'; clearInterval(timer); $('#new').textContent = won ? '🥳' : '😵'; const sec = Math.round((Date.now() - t0) / 1000); if (won) { const best = store.get('saper.best', 0); if (!best || sec < best) store.set('saper.best', sec); } $('#hint').textContent = won ? `Чисто! ${sec} с. Рекорд: ${store.get('saper.best', sec)} с.` : 'Бабах. Вы остались без штанов. Смайлик — заново.'; }
+function end(won) { state = won ? 'won' : 'lost'; clearInterval(timer); $('#new').textContent = won ? '🥳' : '😵'; const sec = Math.round((Date.now() - t0) / 1000); if (won) { earn('win'); const best = store.get('saper.best', 0); if (!best || sec < best) store.set('saper.best', sec); } $('#hint').textContent = won ? `Чисто! ${sec} с. Рекорд: ${store.get('saper.best', sec)} с.` : 'Бабах. Вы остались без штанов. Смайлик — заново.'; }
 function click(i, flag) {
   if (state !== 'play' || open.has(i)) return;
   if (flag) { flags.has(i) ? flags.delete(i) : flags.size < MINES && flags.add(i); return draw(); }
