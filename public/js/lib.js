@@ -264,7 +264,11 @@ export function ChatAvatar({ chat, s = 44, online = true }) {
   return html`<${Avatar} src=${i.avatar} name=${i.title} color=${i.color} s=${s} saved=${i.saved} deleted=${i.user && i.user.deleted} online=${online && i.user && i.user.online && !i.user.bot} />`;
 }
 const BADGES = { verified: ['badge-check', 'Подтверждённый аккаунт', 'var(--sea)'], premium: ['leaf', 'Нудист Голый Премиум', 'var(--warn)'], bot: ['bot', 'Бот', 'var(--ink3)'], staff: ['shield', 'Команда «Нудиста»', 'var(--accent)'], developer: ['wrench', 'Разработчик', 'var(--ink2)'] };
-export function Badges({ list, s = 15 }) { return (list || []).filter(b => BADGES[b]).map(b => html`<span class="badge" title=${BADGES[b][1]} style=${'color:' + BADGES[b][2]}><${Icon} n=${BADGES[b][0]} s=${s} /></span>`); }
+// Особый статус — плашка от администрации; сервер кладёт его в список значков объектом { t, e, c }
+export const LABEL_COLORS = ['Зелёный', 'Синий', 'Фиолетовый', 'Розовый', 'Красный', 'Оранжевый', 'Золотой', 'Графит'];
+export const userLabel = u => ((u && u.badges) || []).find(b => b && typeof b === 'object') || null;
+export function UserLabel({ l, s = 15 }) { return html`<span class=${'utag utag' + (((l.c | 0) % 8 + 8) % 8) + (s <= 14 ? ' sm' : s >= 17 ? ' lg' : '')} title="Особый статус от администрации">${l.e && html`<i>${l.e}</i>`}${l.t}</span>`; }
+export function Badges({ list, s = 15 }) { return (list || []).map(b => b && typeof b === 'object' ? html`<${UserLabel} l=${b} s=${s} />` : BADGES[b] ? html`<span class="badge" title=${BADGES[b][1]} style=${'color:' + BADGES[b][2]}><${Icon} n=${BADGES[b][0]} s=${s} /></span>` : null); }
 export function Toggle({ on, onChange, label, hint, disabled }) {
   return html`<label class=${cx('toggle', disabled && 'dis')}><span class="tg-l">${label}${hint && html`<small>${hint}</small>`}</span><input type="checkbox" checked=${!!on} disabled=${disabled} onChange=${e => onChange(e.target.checked)} /><i></i></label>`;
 }

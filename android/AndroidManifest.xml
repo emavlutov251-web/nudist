@@ -39,6 +39,12 @@
             </intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
+        <!-- Телевизор: встроенный браузер для официальных страниц прямого эфира -->
+        <activity
+            android:name=".TvActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|smallestScreenSize|screenLayout|uiMode"
+            android:hardwareAccelerated="true" />
         <service
             android:name=".PushService"
             android:exported="false"

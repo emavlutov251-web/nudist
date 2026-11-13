@@ -1,5 +1,5 @@
 // Панель информации, профили, создание чатов, контакты, листики, папки и прочие диалоги.
-import { html, useState, useEffect, useRef, useMemo, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, Badges, cx, showMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtFull, fmtShort, fmtDur, fmtNum, fmtSize, userName, lastSeen, copyText, download, confirmDlg, promptDlg, addUsers, Empty, Spinner, plural, TTL_OPTS, ttlLabel, isMuted, setSetting, debounce, Toggle, Tabs, uploadAvatar, esc } from './lib.js';
+import { html, useState, useEffect, useRef, useMemo, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, Badges, UserLabel, userLabel, LABEL_COLORS, cx, showMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtFull, fmtShort, fmtDur, fmtNum, fmtSize, userName, lastSeen, copyText, download, confirmDlg, promptDlg, addUsers, Empty, Spinner, plural, TTL_OPTS, ttlLabel, isMuted, setSetting, debounce, Toggle, Tabs, uploadAvatar, esc } from './lib.js';
 import { openChat, openUser, safetyCode, e2eeAvailable, ensureKey } from './store.js';
 import { NOTIF_SOUNDS, sfx, confetti } from './fun.js';
 import { GiftShelf, GiftGrid, openGiftShop } from './gifts.js';
@@ -55,10 +55,11 @@ function Profile({ id, userId, username, tab: tab0 }) {
         S.flags.stars && !u.bot && { emoji: '🍃', label: 'Поделиться листиками', run: () => shareLeaves(u.id) },
         u.username && { icon: 'qr-code', label: 'QR-код профиля', run: () => openModal(QrModal, { title: 'QR профиля', text: link('u=' + u.username), hint: 'Наведите камеру — откроется профиль @' + u.username }) },
         S.me.admin === 'superadmin' && !u.bot && { icon: 'shield', label: 'Роль администратора…', run: () => openModal(AdminRoleDlg, { user: u }) },
+        ['admin', 'superadmin'].includes(S.me.admin) && { icon: 'tag', label: userLabel(u) ? 'Изменить особый статус…' : 'Выдать особый статус…', run: () => openModal(LabelDlg, { user: u.id }) },
         '-', { icon: 'ban', label: blocked ? 'Разблокировать' : 'Заблокировать', danger: !blocked, run: () => call('me.block', { id: u.id, on: !blocked }) },
         { icon: 'flag', label: 'Пожаловаться', danger: true, run: async () => { const t = await promptDlg({ title: 'Жалоба на пользователя', label: 'Что случилось?', area: true, ok: 'Отправить' }); if (t !== null) { const r = await call('report', { type: 'user', target: u.id, reason: 'other', text: t }); if (r) toast('Жалоба отправлена модераторам'); } } },
       ], { anchor: e.currentTarget })}><${Icon} n="ellipsis" /><span>Ещё</span></button></div>`}
-      ${me && html`<div class="pf-acts"><button onClick=${() => go(() => openSettings('profile'))}><${Icon} n="pencil" /><span>Изменить</span></button><button onClick=${() => go(() => openModal(StatusDlg))}><${Icon} n="smile" /><span>Статус</span></button>${u.username && html`<button onClick=${() => openModal(QrModal, { title: 'Мой QR', text: link('u=' + u.username), hint: 'Покажите этот код — и вас найдут. Даже если вы прикрылись.' })}><${Icon} n="qr-code" /><span>Мой QR</span></button>`}</div>`}
+      ${me && html`<div class="pf-acts"><button onClick=${() => go(() => openSettings('profile'))}><${Icon} n="pencil" /><span>Изменить</span></button><button onClick=${() => go(() => openModal(StatusDlg))}><${Icon} n="smile" /><span>Статус</span></button>${['admin', 'superadmin'].includes(S.me.admin) && html`<button onClick=${() => openModal(LabelDlg, { user: u.id })} title="Особый статус: плашка рядом с именем, выдаёт администрация"><${Icon} n="tag" /><span>Плашка</span></button>`}${u.username && html`<button onClick=${() => openModal(QrModal, { title: 'Мой QR', text: link('u=' + u.username), hint: 'Покажите этот код — и вас найдут. Даже если вы прикрылись.' })}><${Icon} n="qr-code" /><span>Мой QR</span></button>`}</div>`}
       ${!u.bot && !u.deleted && html`<div class="tabs pf-tabs" role="tablist"><button role="tab" aria-selected=${tab === 'info'} class=${cx(tab === 'info' && 'on')} onClick=${() => setTab('info')}>Профиль</button><button role="tab" aria-selected=${tab === 'gifts'} class=${cx(tab === 'gifts' && 'on')} onClick=${() => setTab('gifts')}>🎁 Подарки${gn > 0 && html`<b>${gn}</b>`}</button></div>`}
       ${tab === 'gifts' && !u.bot && !u.deleted ? html`<${GiftGrid} user=${u.id} onTotal=${setGn} />` : html`
       ${u.private && html`<p class="hint">🔒 Закрытый профиль: подробности видят только контакты.</p>`}
@@ -71,6 +72,20 @@ function Profile({ id, userId, username, tab: tab0 }) {
       ${u.bot && (u.cmds || []).length > 0 && html`<div class="pf-row"><small>Команды бота</small>${u.cmds.map(c => html`<p><code class="mono">/${c.c}</code> — ${c.d}</p>`)}</div>`}
       ${(d.common || []).length > 0 && html`<div class="pf-row"><small>Общие группы</small>${d.common.map(c => html`<button class="link" onClick=${() => go(() => openChat(c.id))}>${c.title}</button>`)}</div>`}`}
     </div><//>`;
+}
+// Особый статус: выдаёт администратор, виден всем рядом с именем человека
+export function LabelDlg({ id, user }) {
+  const u = S.users[user] || (S.me.id === user ? S.me : null) || { id: user, name: 'Человек', color: 0 }, cur = userLabel(u);
+  const [t, setT] = useState(cur ? cur.t : ''), [e, setE] = useState(cur ? cur.e : ''), [c, setC] = useState(cur ? cur.c | 0 : 0), [busy, setBusy] = useState(false);
+  const PRE = [['👑', 'Легенда', 6], ['🔥', 'Старожил', 5], ['🛡', 'Хранитель', 1], ['🎨', 'Творец', 2], ['🤡', 'Главный клоун', 3], ['🍃', 'Первый лист', 0], ['💀', 'Душнила', 7], ['⭐', 'Звезда чата', 4]];
+  const send = async clear => { if (busy) return; setBusy(true); const r = await call('admin.user.label', clear ? { id: user, text: '', emoji: '' } : { id: user, text: t, emoji: e, color: c }); setBusy(false); if (r) { toast(clear ? 'Особый статус снят' : 'Особый статус выдан'); closeModal(id); } };
+  const empty = !t.trim() && !e.trim();
+  return html`<${Modal} id=${id} title="Особый статус" icon="tag" cls="small" footer=${html`${cur && html`<button class="btn ghost danger" disabled=${busy} onClick=${() => send(true)}>Снять</button>`}<button class="btn" disabled=${busy || empty} onClick=${() => send(false)}>${cur ? 'Сохранить' : 'Выдать'}</button>`}>
+    <div class="lbl-prev"><${Avatar} src=${u.avatar} name=${userName(u)} color=${u.color} s=${40} /><b>${userName(u)}</b>${empty ? html`<span class="hint">плашки нет</span>` : html`<${UserLabel} l=${{ t: t.trim(), e: e.trim(), c }} s=${15} />`}</div>
+    <div class="row"><input class="emoji-in" maxlength="8" value=${e} placeholder="👑" onInput=${x => setE(x.target.value)} aria-label="Эмодзи особого статуса" /><input maxlength="24" value=${t} placeholder="Например: Легенда" onInput=${x => setT(x.target.value)} aria-label="Текст особого статуса" autofocus /></div>
+    <div class="lbl-colors" role="radiogroup" aria-label="Цвет плашки">${LABEL_COLORS.map((name, i) => html`<button role="radio" aria-checked=${c === i} class=${cx('utag-sw utag' + i, c === i && 'on')} title=${name} aria-label=${name} onClick=${() => setC(i)}></button>`)}</div>
+    <div class="chips">${PRE.map(([a, b, col]) => html`<button class=${cx('chip', e === a && t === b && 'on')} onClick=${() => { setE(a); setT(b); setC(col); }}>${a} ${b}</button>`)}</div>
+    <p class="hint">Плашку видят все: рядом с именем в чатах, списках и профиле. До 24 знаков. Человеку придёт сообщение, кто её выдал. Свой обычный статус («На пляже») каждый по-прежнему ставит себе сам.</p><//>`;
 }
 export function StatusDlg({ id }) {
   const u = S.me, [e, setE] = useState((u.status || {}).e || ''), [t, setT] = useState((u.status || {}).t || ''), [play, setPlay] = useState(u.playing || '');

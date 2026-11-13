@@ -69,7 +69,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 14;      // 1.4: «Поделиться» музыкой из других программ, плеер Яндекс Музыки
+    private static final int APP_VERSION = 15;      // 1.5: телевизор — встроенный браузер для сайтов каналов
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -162,6 +162,23 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public int version() {
             return APP_VERSION;
+        }
+
+        /** Телевизор: открыть страницу эфира канала во встроенном браузере. list — JSON-массив { n, name, url }, i — с какого канала начать. */
+        @JavascriptInterface
+        public boolean tv(final String list, final int i) {
+            if (list == null || list.length() > 20000 || !list.contains("https://")) return false;
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        startActivity(new Intent(MainActivity.this, TvActivity.class).putExtra(TvActivity.X_LIST, list).putExtra(TvActivity.X_INDEX, i));
+                    } catch (Throwable e) {
+                        toast("Телевизор не включился");
+                    }
+                }
+            });
+            return true;
         }
 
         /** Страница загрузилась и спрашивает: не ждут ли файлы, которыми поделились. Ответ придёт событием nudist-share. */
@@ -492,7 +509,7 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setSupportMultipleWindows(false);
-        s.setUserAgentString(s.getUserAgentString() + " NudistAndroid/1.4");
+        s.setUserAgentString(s.getUserAgentString() + " NudistAndroid/1.5");
         CookieManager.getInstance().setAcceptCookie(true);
         web.addJavascriptInterface(new Bridge(), "NudistApp");
 

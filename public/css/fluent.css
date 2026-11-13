@@ -144,3 +144,5 @@
 @media (prefers-reduced-transparency: reduce) {
   [data-style='fluent'] { --acr: var(--panel); --acr-strong: var(--panel); --acr-rail: var(--rail); --acr-chat: var(--bg); --acr-f: none; --acr-f2: none; --noise: none; }
 }
+
+[data-style='fluent'] .utag { border-radius: 2px; } [data-style='fluent'] .utag-sw { border-radius: 0; }

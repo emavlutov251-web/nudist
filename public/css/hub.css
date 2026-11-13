@@ -159,3 +159,4 @@ article.post footer { font-size: inherit; color: inherit; }
 .tv-ch > .ic { flex: none; margin-left: 8px; color: var(--ink3); } .tv-ch:not(.out) > .ic { color: var(--accent); }
 @media (max-width: 480px) { .tv-grid { grid-template-columns: 1fr 1fr; gap: 6px; } .tv-ch { padding: 6px 8px 6px 6px; } .tv-n { width: 36px; height: 36px; margin-right: 8px; font-size: 1em; } .tv-ch > .ic { display: none; } }
 .has-dock .toasts { bottom: 66px; }
+.tv-upd { justify-content: space-between; } .tv-upd .btn { flex: none; text-decoration: none; }

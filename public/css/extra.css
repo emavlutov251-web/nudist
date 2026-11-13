@@ -198,3 +198,13 @@ video.sticker-img { background: none; pointer-events: auto; }
 /* панель значков слева: скруглённая «плавающая» панель и скруглённые кнопки — в любом оформлении, включая «Windows 10» */
 .shell > .rail { margin: 6px 0 6px 6px; border-radius: 18px; }
 .rail .rail-b .pill { left: -8px; }
+
+/* особый статус: плашка от администрации рядом с именем */
+.utag { display: inline-flex; align-items: center; flex: none; max-width: 11em; margin-left: 5px; padding: 1px 7px; overflow: hidden; vertical-align: .08em; font: 600 11.5px/1.5 var(--font); font-style: normal; letter-spacing: .01em; white-space: nowrap; text-overflow: ellipsis; color: #fff; background: #178046; border-radius: 999px; }
+.utag i { flex: none; margin-right: 3px; font-style: normal; } .utag.sm { font-size: 10.5px; padding: 0 6px; } .utag.lg { font-size: 12.5px; padding: 2px 9px; }
+.utag0 { background: #178046; } .utag1 { background: #1F6FC4; } .utag2 { background: #7446CF; } .utag3 { background: #C62A63; } .utag4 { background: #C9302C; } .utag5 { background: #B85000; } .utag6 { background: #8F6800; } .utag7 { background: #4A5560; }
+.ci-t .utag { max-width: 7em; } .msg-n .utag { vertical-align: middle; } .pf-head .utag { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .55); vertical-align: middle; }
+.lbl-prev { display: flex; align-items: center; min-height: 56px; margin-bottom: 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--card); } .lbl-prev b { margin-left: 10px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .lbl-prev .hint { margin-left: 8px; }
+.lbl-colors { display: flex; flex-wrap: wrap; margin: 12px -4px 4px; } .utag-sw { width: 30px; height: 30px; margin: 4px; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px var(--line); } .utag-sw.on { border-color: var(--panel); box-shadow: 0 0 0 2px var(--ink); }
+.modal-b > .lbl-colors + .chips { margin-top: 8px; }
+.modal-b > .chips + .hint { margin-top: 12px; }

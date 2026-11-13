@@ -22,6 +22,22 @@ function uploadsSize() {
   try { for (const f of fs.readdirSync(C.UPLOADS)) { size += fs.statSync(path.join(C.UPLOADS, f)).size; files++; } } catch (e) { /* пусто */ }
   return (dirCache = { at: now(), size, files });
 }
+// Особый статус — цветная плашка рядом с именем, которую выдаёт администрация: «👑 Легенда», «🔥 Старожил».
+// Это не тот статус, который человек ставит себе сам («На пляже»): свой меняет каждый, особый — только администратор.
+const seg = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('ru', { granularity: 'grapheme' }) : null;
+const cut = (v, n) => { const s = str(v, 400).replace(/[\u0000-\u001f\u007f\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim(); return (seg ? [...seg.segment(s)].map(x => x.segment) : Array.from(s)).slice(0, n).join('').trim(); };
+H['admin.user.label'] = (c, p) => {
+  const by = guard(c, 'admin'), u = db.users[p.id]; need(u && !u.deleted, 'Пользователь не найден');
+  need(u.id === by.id || C.isOwner(by) || rank(by) > rank(u), 'Особый статус можно выдать себе и тем, кто младше вас по роли');
+  const t = cut(p.text, 24), e = cut(p.emoji, 2), had = !!u.label;
+  if (!t && !e) { need(had, 'У человека и так нет особого статуса'); delete u.label; }
+  else u.label = { t, e, c: int(p.color, 0, 7), by: by.id, ts: now() };
+  const shown = u.label ? [e, t].filter(Boolean).join(' ') : '';
+  save(); R.selfUpdate(u); C.broadcastUser(u); log(c, 'user.label', `${R.uname(u)}: ${shown || 'снят'}`);
+  const sysBot = db.users[db.meta.sys];      // человеку приходит служебное сообщение: статус появился не сам собой
+  if (sysBot && !u.bot && u.id !== by.id) C.postMessage(C.openDm(sysBot.id, u.id), sysBot.id, { text: shown ? `🏷 Администратор ${R.uname(by)} выдал вам особый статус: **${shown}**. Он виден всем рядом с вашим именем.` : `🏷 Администратор ${R.uname(by)} снял ваш особый статус.` }, { quiet: true });
+  return { label: u.label ? { t, e, c: u.label.c } : null };
+};
 function stats() {
   const users = Object.values(db.users).filter(u => !u.deleted), people = users.filter(u => !u.bot), t = now();
   const days = []; for (let i = 13; i >= 0; i--) { const k = today(t - i * 864e5), d = db.daily[k] || { msgs: 0, regs: 0, dau: [] }; days.push({ d: k, msgs: d.msgs, regs: d.regs, dau: d.dau.length }); }
@@ -53,7 +69,7 @@ H['admin.users'] = (c, p) => {
   if (p.filter === 'banned') list = list.filter(u => u.banned); if (p.filter === 'premium') list = list.filter(C.isPremium); if (p.filter === 'bots') list = list.filter(u => u.bot); if (p.filter === 'staff') list = list.filter(u => u.admin); if (p.filter === 'online') list = list.filter(u => C.isOnline(u.id));
   list.sort((a, b) => (b.seen || 0) - (a.seen || 0));
   const off = int(p.offset, 0, 1e7);
-  return { total: list.length, users: list.slice(off, off + 50).map(u => { const ss = Object.values(db.sessions).filter(s => s.user === u.id); return { id: u.id, username: u.username, name: R.uname(u), phone: u.phone, avatar: u.avatar, color: u.color, created: u.created, seen: u.seen, online: C.isOnline(u.id), sessions: ss.length, ip: (ss.sort((a, b) => b.seen - a.seen)[0] || {}).ip, banned: !!u.banned, banReason: u.banReason, muted: u.muted > now() ? u.muted : 0, admin: u.admin, premiumUntil: u.premiumUntil, stars: u.stars || 0, bot: !!u.bot, owner: u.owner, badges: u.badges || [], chats: (u.chats || []).length, servers: (u.servers || []).length, totp: !!u.totpOn }; }) };
+  return { total: list.length, users: list.slice(off, off + 50).map(u => { const ss = Object.values(db.sessions).filter(s => s.user === u.id); return { id: u.id, username: u.username, name: R.uname(u), phone: u.phone, avatar: u.avatar, color: u.color, created: u.created, seen: u.seen, online: C.isOnline(u.id), sessions: ss.length, ip: (ss.sort((a, b) => b.seen - a.seen)[0] || {}).ip, banned: !!u.banned, banReason: u.banReason, muted: u.muted > now() ? u.muted : 0, admin: u.admin, premiumUntil: u.premiumUntil, stars: u.stars || 0, bot: !!u.bot, owner: u.owner, badges: u.badges || [], label: u.label ? { t: u.label.t, e: u.label.e, c: u.label.c || 0 } : null, chats: (u.chats || []).length, servers: (u.servers || []).length, totp: !!u.totpOn }; }) };
 };
 function target(c, uid, min = 'moderator') { const me = guard(c, min); const u = db.users[uid]; need(u && !u.deleted, 'Пользователь не найден'); need(u.id === me.id || rank(u) < rank(me) || (C.isOwner(me) && !C.isOwner(u)), C.isOwner(u) ? 'Владельцем сервиса управлять нельзя' : 'Нельзя управлять администратором своего или более высокого ранга'); return u; }
 H['admin.user.ban'] = (c, p) => {

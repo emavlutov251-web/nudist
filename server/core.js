@@ -109,6 +109,7 @@ function badges(u) {
   const b = [...(u.badges || [])];
   if (isPremium(u)) b.push('premium');
   if (u.bot || ROBOTS.has(u.id)) b.push('bot');
+  if (u.label && (u.label.t || u.label.e)) b.push({ t: u.label.t, e: u.label.e, c: u.label.c || 0 });      // особый статус от администрации — плашка рядом с именем
   return b;
 }
 function pubUser(u, vid) {
