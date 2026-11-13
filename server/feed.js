@@ -22,7 +22,7 @@ function perDay(u, key, max, msg) {
 }
 let order = null;      // id записей от новых к старым; сбрасывается при добавлении и удалении
 const sorted = () => order || (order = Object.values(db.posts).sort((a, b) => b.ts - a.ts).map(p => p.id));
-const view = (p, u) => ({ id: p.id, by: p.by, ts: p.ts, text: p.text, media: p.media || [], likes: count(p.likes), liked: !!p.likes[u.id], comments: (p.cm || []).length, own: p.by === u.id || isMod(u) });
+const view = (p, u) => ({ id: p.id, by: p.by, ts: p.ts, text: p.text, media: p.media || [], likes: count(p.likes), liked: !!p.likes[u.id], comments: (p.cm || []).length, views: p.views || 0, own: p.by === u.id || isMod(u) });
 const post = p => { const x = db.posts[str(p.id, 32)]; need(x, 'Запись не найдена. Возможно, автор передумал.'); return x; };
 // Автор виден, если он существует, не удалён и никто из двоих не заблокировал другого
 function visible(by, u) { const a = db.users[by]; return !!a && !a.deleted && !(a.blocked || []).includes(u.id) && !(u.blocked || []).includes(by); }
@@ -36,22 +36,95 @@ function channelItems(u) {
       const m = arr[i]; if (m.type === 'service' || m.enc || m.once || m.thread || !(m.text || m.media)) continue;
       const url = m.media && m.media.url, img = url && isUpload(url) && IMG_EXT.has(extOf(url)) ? [url] : [];
       if (!m.text && !img.length) continue;
-      out.push({ id: 'ch.' + cid + '.' + m.id, kind: 'channel', chat: cid, title: ch.title, avatar: ch.avatar, color: ch.color || 0, ts: m.ts, text: (m.text || '').replace(/\*\*|__|~~|\|\||`/g, ''), media: img });      // разметку чата лента не понимает: убираем звёздочки n++;
+      out.push({ id: 'ch.' + cid + '.' + m.id, kind: 'channel', chat: cid, title: ch.title, avatar: ch.avatar, color: ch.color || 0, ts: m.ts, text: (m.text || '').replace(/\*\*|__|~~|\|\||`/g, ''), media: img });      // разметку чата лента не понимает: убираем звёздочки
+      n++;
     }
   }
   return out;
 }
 
+// ───── «Для вас»: рекомендации. Без нейросетей: каждая запись получает оценку, лента сортируется по ней.
+// Что учитывается: свежесть (старое не тонет насовсем), отклик (лайки и комментарии), ваш интерес к автору
+// (подписка, ваши лайки и комментарии под его записями), наличие картинки или видео. Уже просмотренное уходит в хвост.
+// Чтобы один плодовитый автор не занял всю ленту, каждая его следующая запись получает штраф.
+// Небольшой случайный разброс меняется раз в день: лента не одинаковая изо дня в день, но не прыгает при листании.
+const recCache = new Map();      // id человека → { at, list }: порядок считается при открытии ленты и держится, пока её листают
+const noise = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; };
+function diversify(scored) {      // scored: [{ ref, by, s }] → ссылки по убыванию оценки с учётом штрафа за повтор автора
+  const byAuthor = new Map();
+  for (const x of scored) { let a = byAuthor.get(x.by); if (!a) byAuthor.set(x.by, a = []); a.push(x); }
+  for (const a of byAuthor.values()) { a.sort((p, q) => q.s - p.s); a.forEach((x, k) => { x.s /= 1 + 0.6 * k; }); }
+  return scored.sort((p, q) => q.s - p.s).map(x => x.ref);
+}
+function recommend(u) {
+  const t = now(), fol = new Set(u.follows || []), day = C.today(), near = {}, cand = [];
+  for (const x of Object.values(db.posts)) {
+    if (x.ts > t || !visible(x.by, u)) continue;
+    if (x.by === u.id) continue;
+    let mine = x.likes[u.id] ? 1 : 0; for (const k of x.cm || []) if (k.by === u.id) { mine++; break; }
+    if (mine) near[x.by] = (near[x.by] || 0) + mine;
+    cand.push(x);
+  }
+  const scored = cand.map(x => {
+    const ageH = (t - x.ts) / 36e5, likes = count(x.likes), cm = (x.cm || []).length, hasMedia = x.media && x.media.length > 0;
+    let s = 0.15 + 0.85 / (1 + ageH / 48);                                   // свежесть
+    s *= 1 + 0.5 * Math.log2(1 + 2 * likes + 3 * cm);                        // отклик
+    s *= (fol.has(x.by) ? 2 : 1) * (1 + 0.3 * Math.min(3, near[x.by] || 0)); // интерес к автору
+    s *= hasMedia ? 1.15 : (x.text || '').length < 20 ? 0.7 : 1;
+    s *= 0.8 + 0.4 * noise(u.id + day + x.id);
+    if (x.seen && x.seen[u.id]) s *= 0.03;                                   // уже видели — в хвост
+    return { ref: x.id, by: x.by, s };
+  });
+  for (const it of channelItems(u)) scored.push({ ref: it, by: 'ch.' + it.chat, s: (0.15 + 0.85 / (1 + (t - it.ts) / 36e5 / 48)) * (0.8 + 0.4 * noise(u.id + day + it.id)) });
+  return diversify(scored);
+}
+
 H['feed.list'] = (c, p) => {
-  const u = me(c), tab = ['all', 'subs', 'user'].includes(p.tab) ? p.tab : 'all', off = int(p.off, 0, 1e6), who = str(p.user, 32), fol = new Set(u.follows || []);
-  const t = now(); let items = sorted().map(i => db.posts[i]).filter(x => x.ts <= t && visible(x.by, u));
+  const u = me(c), tab = ['rec', 'all', 'subs', 'user'].includes(p.tab) ? p.tab : 'all', off = int(p.off, 0, 1e6), who = str(p.user, 32), fol = new Set(u.follows || []);
+  const t = now();
+  if (tab === 'rec') {
+    let rc = recCache.get(u.id);
+    if (!off || !rc || t - rc.at > 30 * 60e3) { if (recCache.size > 3000) recCache.clear(); rc = { at: t, list: recommend(u) }; recCache.set(u.id, rc); }
+    const page = rc.list.slice(off, off + 15).map(r => (typeof r === 'string' ? db.posts[r] && view(db.posts[r], u) : r)).filter(Boolean);
+    return { items: page, more: off + 15 < rc.list.length, next: off + 15, now: t, users: usersOf(page.map(x => x.by), u.id), follows: [...fol] };
+  }
+  let items = sorted().map(i => db.posts[i]).filter(x => x.ts <= t && visible(x.by, u));
   if (tab === 'subs') items = items.filter(x => x.by === u.id || fol.has(x.by));
   else if (tab === 'user') items = items.filter(x => x.by === (who || u.id));
   items = items.map(x => view(x, u));
   if (tab === 'all') items = items.concat(channelItems(u)).sort((a, b) => b.ts - a.ts);
   const page = items.slice(off, off + 15);
-  return { items: page, more: off + page.length < items.length, users: usersOf(page.map(x => x.by), u.id), follows: [...fol] };
+  return { items: page, more: off + page.length < items.length, next: off + page.length, now: t, users: usersOf(page.map(x => x.by), u.id), follows: [...fol] };
 };
+// Обновление открытой ленты без перезагрузки: что появилось после момента after и что изменилось у уже загруженных записей.
+H['feed.fresh'] = (c, p) => {
+  const u = me(c), t = now(), after = int(p.after, 0, t, t), tab = ['subs', 'user'].includes(p.tab) ? p.tab : 'all', fol = new Set(u.follows || []);
+  let items = [];
+  if (tab !== 'user') {
+    for (const i of sorted()) {
+      const x = db.posts[i]; if (x.ts <= after) break;
+      if (x.ts > t || x.by === u.id || !visible(x.by, u) || (tab === 'subs' && !fol.has(x.by))) continue;
+      items.push(view(x, u)); if (items.length >= 30) break;
+    }
+    if (tab === 'all') items = items.concat(channelItems(u).filter(x => x.ts > after && x.ts <= t)).sort((a, b) => b.ts - a.ts);
+  }
+  const stats = {}, gone = [];
+  for (const i of (Array.isArray(p.ids) ? p.ids : []).slice(0, 100)) {
+    const k = str(i, 32), x = db.posts[k]; if (!k) continue;
+    if (!x) gone.push(k); else stats[k] = { likes: count(x.likes), liked: !!x.likes[u.id], comments: (x.cm || []).length, views: x.views || 0 };
+  }
+  return { items, stats, gone, now: t, users: usersOf(items.map(x => x.by), u.id) };
+};
+// Просмотры: приложение сообщает пачкой, какие записи человек действительно увидел на экране.
+H['feed.seen'] = (c, p) => {
+  const u = me(c), t = now(); let n = 0;
+  for (const i of (Array.isArray(p.ids) ? p.ids : []).slice(0, 40)) {
+    const x = db.posts[str(i, 32)]; if (!x || x.by === u.id || x.ts > t) continue;
+    if (C.markSeen(x, u.id)) { x.views = (x.views || 0) + 1; n++; }
+  }
+  if (n) save();
+};
+H['feed.viewers'] = (c, p) => { const x = post(p); need(x.by === c.uid, 'Кто смотрел запись, видит только её автор'); return { ...C.viewersOf(x, c.uid), total: x.views || 0 }; };
 H['feed.post'] = (c, p) => {
   const u = me(c), imp = C.canImport(u), text = str(p.text, imp ? 4096 : 2000).trim();
   const media = (Array.isArray(p.media) ? p.media : []).slice(0, imp ? 10 : 4).map(x => str(x, 200)).filter(x => isUpload(x) && (IMG_EXT.has(extOf(x)) || (imp && AV_EXT.has(extOf(x)))));

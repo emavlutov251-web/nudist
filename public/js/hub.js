@@ -3,7 +3,7 @@ import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avata
 import { openChat, sendPayload } from './store.js';
 import { playAudio, AudioBar } from './media.js';
 import { openMiniApp } from './panels.js';
-import { Feed } from './feed.js';
+import { Feed, Viewers } from './feed.js';
 
 const TABS = [['feed', 'list', 'Лента'], ['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['apps', 'layout-grid', 'Приложения'], ['help', 'life-buoy', 'Поддержка']];
 const isStaff = () => ['moderator', 'admin', 'superadmin'].includes((S.me || {}).admin);
@@ -58,6 +58,7 @@ function Music() {
     S.ui.chat && S.chats[S.ui.chat] && S.chats[S.ui.chat].type !== 'secret' && { icon: 'send', label: 'Отправить в открытый чат', run: () => sendPayload(S.ui.chat, { type: 'audio', media: { url: t.url, size: t.size, dur: t.dur, name: trackMsg(t).media.name + '.' + t.url.split('.').pop(), mime: 'audio/mpeg' } }).then(() => toast('Трек отправлен в чат')).catch(err) },
     !t.own && (t.mine ? { icon: 'x', label: 'Убрать из моей музыки', run: () => rpc('music.save', { id: t.id, on: false }).then(() => (tab === 'my' ? load() : patch(t, { mine: false }))).catch(err) } : { icon: 'plus', label: 'Добавить в мою музыку', run: () => rpc('music.save', { id: t.id }).then(() => { patch(t, { mine: true }); toast('Добавлено в вашу музыку'); }).catch(err) }),
     t.own && { icon: 'pencil', label: 'Название и исполнитель', run: async () => { const title = await promptDlg({ title: 'Название трека', label: 'Название', value: t.title }); if (!title) return; const artist = await promptDlg({ title: 'Исполнитель', label: 'Исполнитель', value: t.artist }); rpc('music.edit', { id: t.id, title, artist: artist == null ? t.artist : artist }).then(r => patch(t, r)).catch(err); } },
+    t.own && { icon: 'eye', label: 'Кто слушал', run: () => openModal(Viewers, { title: 'Кто слушал трек', method: 'music.listeners', target: t.id, none: 'Пока никто не слушал. Выложите трек в «Общую волну», если он ещё не там.' }) },
     t.own && { icon: t.pub ? 'lock' : 'globe', label: t.pub ? 'Скрыть из общей волны' : 'Выложить в общую волну', run: () => rpc('music.edit', { id: t.id, pub: !t.pub }).then(r => patch(t, r)).catch(err) },
     (t.own || isStaff()) && '-', (t.own || isStaff()) && { icon: 'trash-2', label: 'Удалить трек', danger: true, run: async () => { if (await confirmDlg({ title: 'Удалить трек?', text: `«${t.title}» исчезнет у всех, кто его добавил, а файл сотрётся с сервера.`, ok: 'Удалить', danger: true })) rpc('music.del', { id: t.id }).then(load).catch(err); } },
   ].filter(Boolean), { anchor: e.currentTarget });
@@ -87,7 +88,7 @@ const CL = { list: null, more: false, sound: true, seen: new Set() };      // л
 
 function Clips() {
   const [act, setAct] = useState(0), [busy, setBusy] = useState(null), box = useRef(), [paused, setPaused] = useState(false), loading = useRef(false);
-  const load = async reset => { if (loading.current) return; loading.current = true; try { const r = await rpc('clip.feed', { off: reset ? 0 : (CL.list || []).length }); addUsers(r.users); if (r.mb) MB = r.mb; CL.list = reset ? r.clips : (CL.list || []).concat(r.clips.filter(k => !CL.list.some(x => x.id === k.id))); CL.more = r.more; bump(); } catch (e) { err(e); if (!CL.list) { CL.list = []; bump(); } } loading.current = false; };
+  const load = async reset => { if (loading.current) return; loading.current = true; try { const r = await rpc('clip.feed', { off: reset ? 0 : CL.next || (CL.list || []).length }); CL.next = r.next != null ? r.next : (reset ? 0 : CL.next || 0) + r.clips.length; addUsers(r.users); if (r.mb) MB = r.mb; CL.list = reset ? r.clips : (CL.list || []).concat(r.clips.filter(k => !CL.list.some(x => x.id === k.id))); CL.more = r.more; bump(); } catch (e) { err(e); if (!CL.list) { CL.list = []; bump(); } } loading.current = false; };
   useEffect(() => { load(true); }, []);
   const list = CL.list || [];
   // Какой клип сейчас на экране: тот, чья середина ближе всего к середине ленты.
@@ -122,7 +123,7 @@ function Clips() {
       <div class="clip-act">
         <button class=${cx(k.liked && 'on')} onClick=${() => like(k)} title="Нравится"><${Icon} n="heart" s=${26} /><small>${fmtNum(k.likes)}</small></button>
         <button onClick=${() => openModal(ClipComments, { clip: k })} title="Комментарии"><${Icon} n="message-circle" s=${26} /><small>${fmtNum(k.comments)}</small></button>
-        <button title="Просмотры" disabled><${Icon} n="eye" s=${24} /><small>${fmtNum(k.views)}</small></button>
+        <button title=${k.own ? 'Кто посмотрел' : 'Просмотры'} disabled=${!k.own} onClick=${() => k.own && openModal(Viewers, { title: 'Кто посмотрел клип', method: 'clip.viewers', target: k.id })}><${Icon} n="eye" s=${24} /><small>${fmtNum(k.views)}</small></button>
         <button onClick=${() => { CL.sound = !CL.sound; bump(); }} title=${CL.sound ? 'Выключить звук' : 'Включить звук'}><${Icon} n=${CL.sound ? 'volume-2' : 'volume-x'} s=${24} /></button>
         ${(k.own || isStaff()) && html`<button onClick=${() => del(k)} title="Удалить клип"><${Icon} n="trash-2" s=${22} /></button>`}
       </div></article>`; })}</div>`}

@@ -140,7 +140,7 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x'), p = url.pathname;
     if (p.startsWith('/u/')) return serveUpload(req, res, p.slice(3));
     if (p === '/api/upload' && req.method === 'POST') return handleUpload(req, res);
-    if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined, files: (u => u ? { mb: Math.round(u.bytes / 1048576), maxMb: Math.round(u.max / 1048576), count: u.files } : undefined)(Cloud.usage()) });
+    if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined, mirror: Cloud.mirrorStatus(), files: (u => u ? { mb: Math.round(u.bytes / 1048576), maxMb: Math.round(u.max / 1048576), count: u.files } : undefined)(Cloud.usage()) });
     if (p === '/api/config') return json(res, 200, { flags: db.flags, name: 'Нудист', version: '1.0.0' });
     if (p === '/api/clientlog' && req.method === 'POST') {      // телефон сообщает, почему приложение не запустилось
       try { A.limit('clog:' + ipOf(req), 20, 600e3); const b = (await readBody(req, 6000)).toString('utf8').replace(/[\r\n]+/g, ' ').slice(0, 1500); console.log('[client]', (req.headers['user-agent'] || '').slice(0, 200), '|', b); } catch (e) { /* лимит или мусор */ }
@@ -264,6 +264,7 @@ server.listen(PORT, HOST, () => console.log(`🍃 «Нудист» запуще�
 let stopping = false;
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => {
   if (stopping) return; stopping = true;
+  if (db.meta) db.meta.savedAt = Date.now();
   C.flushSync();
   Cloud.final(JSON.stringify(db)).catch(e => console.error('[cloud]', e.message)).finally(() => process.exit(0));
 });

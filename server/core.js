@@ -23,6 +23,9 @@ if (fs.existsSync(DB_FILE) || fs.existsSync(BAK_FILE)) {
 }
 const DEFAULT_FLAGS = { registration: true, phoneAuth: true, stories: true, calls: true, bots: true, stars: true, linkPreview: true, discovery: true, uploads: true };
 db.flags = { ...DEFAULT_FLAGS, ...db.flags };
+// У каждой базы свой номер. По нему копия в S3 отличает «свою» базу от чужой: тестовый сервер с теми же ключами не затрёт боевую копию.
+db.meta = db.meta || {}; if (!db.meta.dbId) db.meta.dbId = require('crypto').randomBytes(9).toString('base64url');
+Cloud.setDbId(db.meta.dbId);
 
 // Сохранение — это сериализация всей базы. Пока она маленькая, пишем раз в полсекунды; когда растёт — реже,
 // чтобы запись занимала не больше ~5% времени процесса и не тормозила переписку.
@@ -34,7 +37,8 @@ function flush() {
   if (saving) { saveTimer = setTimeout(flush, 200); return; }
   if (!dirty) return;
   dirty = false; saving = true;
-  const t0 = Date.now(), text = JSON.stringify(db);
+  const t0 = Date.now(); if (db.meta) db.meta.savedAt = t0;      // по этой метке при запуске выбирается более свежая из двух копий базы
+  const text = JSON.stringify(db);
   saveCost = Date.now() - t0; metrics.dbBytes = text.length; metrics.saveMs = saveCost;
   Cloud.queue(text);
   fs.writeFile(DB_FILE + '.tmp', text, err => {
@@ -409,4 +413,18 @@ function usernameTaken(n, exceptId) {
 }
 
 const isRobot = uid => ROBOTS.has(uid);
-module.exports = { isRobot, canImport, setOfflineHook, audience, size, dropUpload, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+// «Кто посмотрел»: у записи, клипа или трека лежит «кто → когда», не больше VIEWERS_MAX последних человек,
+// чтобы база не пухла годами. Общий счётчик просмотров идёт отдельно и не обрезается.
+const VIEWERS_MAX = 300;
+function markSeen(o, uid, key = 'seen') {
+  const m = o[key] || (o[key] = {}); if (m[uid]) return false;
+  m[uid] = now(); const ks = Object.keys(m); if (ks.length > VIEWERS_MAX) delete m[ks[0]];
+  return true;
+}
+function viewersOf(o, viewerId, key = 'seen') {
+  const m = o[key] || {}, users = {};
+  const list = Object.keys(m).filter(u => db.users[u] && !db.users[u].deleted).map(u => ({ u, ts: m[u] })).sort((a, b) => b.ts - a.ts);
+  for (const v of list) users[v.u] = pubUser(db.users[v.u], viewerId);
+  return { list, users };
+}
+module.exports = { isRobot, markSeen, viewersOf, canImport, setOfflineHook, audience, size, dropUpload, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

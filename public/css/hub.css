@@ -112,4 +112,9 @@ article.post footer { font-size: inherit; color: inherit; }
 .feed-new-f { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .feed-pre { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; } .feed-pre span { position: relative; } .feed-pre img { display: block; width: 76px; height: 76px; object-fit: cover; border-radius: 4px; }
 .feed-pre button { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(0, 0, 0, .65); color: #fff; }
-.feed-more { align-self: center; width: 100%; }
+.feed-tail { min-height: 1px; } .feed-tail .hint { padding: 10px 0 4px; }
+.feed-fresh { position: sticky; top: 6px; z-index: 6; display: flex; align-items: center; gap: 6px; width: max-content; max-width: 100%; margin: 12px auto 0; min-height: 36px; padding: 0 14px; border-radius: 18px; background: var(--accent); color: #fff; font-weight: 600; box-shadow: 0 4px 14px rgba(0, 0, 0, .25); }
+.post-f .post-v { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 6px; color: var(--ink3); font-size: 13px; } .post-f button.post-v { padding: 0 10px; color: var(--ink2); font-size: inherit; }
+.feed-tabs button { padding-left: 6px; padding-right: 6px; }
+.vw-list { display: flex; flex-direction: column; } .vw { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 8px; border-radius: 4px; text-align: left; } .vw:hover { background: var(--hover); }
+.vw b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; } .vw small { flex: none; color: var(--ink3); } .vw b .badge { vertical-align: -2px; }

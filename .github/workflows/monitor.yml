@@ -1,6 +1,8 @@
 # Сторож: раз в 15 минут проверяет, что сайт отвечает. Если нет — запуск падает, и GitHub присылает письмо владельцу репозитория.
 # Ночью (02:00–06:00 по Москве) не проверяет: бесплатный Render в это время спит, чтобы хватило бесплатных часов на месяц.
 # Адрес берётся из переменной репозитория SITE_URL (Settings → Secrets and variables → Actions → Variables).
+# Заодно смотрит, сохраняются ли данные (основное хранилище и вторая копия в S3), и раз в сутки продлевает само себя:
+# GitHub отключает расписания в репозиториях, где 60 дней не было изменений.
 name: Сторож
 
 on:
@@ -8,7 +10,8 @@ on:
     - cron: '7,22,37,52 3-22 * * *'
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  actions: write      # только чтобы продлевать собственное расписание
 
 jobs:
   ping:
@@ -23,7 +26,25 @@ jobs:
           [ -n "$SITE_URL" ] || { echo "::warning::Переменная SITE_URL не задана"; exit 0; }
           # Спящий бесплатный сервер просыпается до минуты, поэтому несколько попыток.
           for i in 1 2 3 4 5 6; do
-            if curl -fsS --max-time 45 "$SITE_URL/api/health"; then echo; echo "Сайт жив."; exit 0; fi
+            if curl -fsS --max-time 45 -o health.json "$SITE_URL/api/health"; then cat health.json; echo; echo "Сайт жив."; break; fi
             echo "Попытка $i: нет ответа"; sleep 20
+            [ "$i" = 6 ] && { echo "::error::$SITE_URL не отвечает уже несколько минут"; exit 1; }
           done
-          echo "::error::$SITE_URL не отвечает уже несколько минут"; exit 1
+          # Данные должны сохраняться хотя бы в одно из двух мест. Если не работает ни одно — это авария, одно — предупреждение.
+          python3 - <<'PY'
+          import json, sys
+          h = json.load(open('health.json')); c, m = h.get('cloud'), h.get('mirror')
+          bad = [n for n, x in (('основное хранилище (Supabase)', c), ('вторая копия (S3)', m)) if x is not None and not x.get('ok')]
+          if m and m.get('primary'): print('::warning::Сервер работает на копии из S3: основное хранилище было недоступно при запуске')
+          places = [x for x in (c, m) if x is not None]
+          if places and len(bad) == len(places): print('::error::Данные не сохраняются ни в одно хранилище: ' + ', '.join(bad)); sys.exit(1)
+          for n in bad: print('::warning::Не сохраняется: ' + n)
+          PY
+      - name: Не дать GitHub отключить расписание
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Достаточно раза в сутки: в остальные запуски шаг ничего не делает.
+          [ "$(date -u +%H)" = "04" ] || exit 0
+          gh api -X PUT "repos/${{ github.repository }}/actions/workflows/monitor.yml/enable" && echo "Расписание продлено." || echo "::warning::Не удалось продлить расписание"

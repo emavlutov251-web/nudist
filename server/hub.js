@@ -66,7 +66,8 @@ H['music.del'] = (c, p) => {
   const u = me(c), t = db.tracks[str(p.id, 32)]; need(t && (t.by === u.id || isMod(u)), 'Удалять можно только свои треки');
   delete db.tracks[t.id]; u.music = (u.music || []).filter(i => i !== t.id); C.dropUpload(t.url); save();
 };
-H['music.play'] = (c, p) => { const t = db.tracks[str(p.id, 32)]; if (t) { t.plays = (t.plays || 0) + 1; save(); } };
+H['music.play'] = (c, p) => { const t = db.tracks[str(p.id, 32)]; if (t) { t.plays = (t.plays || 0) + 1; if (t.by !== c.uid) C.markSeen(t, c.uid, 'heard'); save(); } };
+H['music.listeners'] = (c, p) => { const t = db.tracks[str(p.id, 32)]; need(t && t.by === c.uid, 'Кто слушал трек, видит только тот, кто его загрузил'); return { ...C.viewersOf(t, c.uid, 'heard'), total: t.plays || 0 }; };
 
 // ───────────────────────────── клипы (короткие вертикальные видео)
 const VIDEO_EXT = new Set(['mp4', 'webm', 'mov']);
@@ -85,11 +86,35 @@ H['clip.add'] = (c, p) => {
   db.clips[k.id] = k; clipOrder = null; save();
   return clipView(k, u.id);
 };
+// Порядок клипов — рекомендации: сначала то, что человек ещё не видел; выше свежее, с откликом и от тех, на кого он подписан.
+// Соседние клипы одного автора разводятся штрафом. Порядок считается при открытии и держится, пока ленту листают.
+const clipRec = new Map();      // id человека → { at, ids }
+const noise = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; };
+function clipRank(u) {
+  const t = now(), fol = new Set(u.follows || []), day = C.today(), byAuthor = new Map(), all = [];
+  for (const i of order()) {
+    const k = db.clips[i]; if (k.ts > t) continue;      // клип с датой в будущем ждёт своего часа
+    const a = db.users[k.by]; if (!a || a.deleted || (a.blocked || []).includes(u.id) || (u.blocked || []).includes(k.by)) continue;
+    let s = 0.2 + 0.8 / (1 + (t - k.ts) / 36e5 / 72);
+    s *= 1 + 0.5 * Math.log2(1 + 2 * count(k.likes) + 3 * (k.cm || []).length);
+    s *= (fol.has(k.by) ? 1.8 : 1) * (0.8 + 0.4 * noise(u.id + day + k.id));
+    if (k.by === u.id) s *= t - k.ts < 10 * 60e3 ? 100 : 0.03;      // только что выложенный свой клип — первым, остальные свои — в хвост
+    else if (k.seen && k.seen[u.id]) s *= 0.03;
+    const x = { id: k.id, s }; all.push(x); let arr = byAuthor.get(k.by); if (!arr) byAuthor.set(k.by, arr = []); arr.push(x);
+  }
+  for (const arr of byAuthor.values()) { arr.sort((p, q) => q.s - p.s); arr.forEach((x, n) => { x.s /= 1 + 0.5 * n; }); }
+  return all.sort((p, q) => q.s - p.s).map(x => x.id);
+}
 H['clip.feed'] = (c, p) => {
-  const off = int(p.off, 0, 1e6), by = str(p.user, 32);
-  const t = now(); let ids = order().filter(i => db.clips[i].ts <= t); if (by) ids = ids.filter(i => db.clips[i].by === by);      // клип с датой в будущем ждёт своего часа
-  const page = ids.slice(off, off + 8).map(i => db.clips[i]);
-  return { clips: page.map(k => clipView(k, c.uid)), more: off + page.length < ids.length, mb: upMb(me(c)), users: usersOf(page.map(k => k.by), c.uid) };
+  const off = int(p.off, 0, 1e6), by = str(p.user, 32), t = now(), u = me(c); let ids;
+  if (by) ids = order().filter(i => db.clips[i].ts <= t && db.clips[i].by === by);
+  else {
+    let rc = clipRec.get(u.id);
+    if (!off || !rc || t - rc.at > 30 * 60e3) { if (clipRec.size > 3000) clipRec.clear(); rc = { at: t, ids: clipRank(u) }; clipRec.set(u.id, rc); }
+    ids = rc.ids;
+  }
+  const page = ids.slice(off, off + 8).map(i => db.clips[i]).filter(Boolean);
+  return { clips: page.map(k => clipView(k, c.uid)), more: off + 8 < ids.length, next: off + 8, mb: upMb(u), users: usersOf(page.map(k => k.by), c.uid) };
 };
 const clip = p => { const k = db.clips[str(p.id, 32)]; need(k, 'Клип не найден. Возможно, автор одумался.'); return k; };
 H['clip.like'] = (c, p) => { const k = clip(p); if (p.on === false) delete k.likes[c.uid]; else k.likes[c.uid] = 1; save(); return { likes: count(k.likes), liked: !!k.likes[c.uid] }; };
@@ -97,8 +122,10 @@ const seenClips = new Map();      // кто что уже смотрел с мо
 H['clip.view'] = (c, p) => {
   const k = db.clips[str(p.id, 32)]; if (!k || k.by === c.uid) return;
   let set = seenClips.get(c.uid); if (!set) { if (seenClips.size > 50000) seenClips.clear(); seenClips.set(c.uid, set = new Set()); }
-  if (set.has(k.id)) return; if (set.size > 2000) set.clear(); set.add(k.id); k.views = (k.views || 0) + 1; save();
+  if (set.has(k.id)) return; if (set.size > 2000) set.clear(); set.add(k.id);
+  if (C.markSeen(k, c.uid)) { k.views = (k.views || 0) + 1; save(); }      // кто смотрел, хранится в самом клипе: автор видит список
 };
+H['clip.viewers'] = (c, p) => { const k = clip(p); need(k.by === c.uid, 'Кто смотрел клип, видит только его автор'); return { ...C.viewersOf(k, c.uid), total: k.views || 0 }; };
 H['clip.del'] = (c, p) => { const k = clip(p), u = me(c); need(k.by === u.id || isMod(u), 'Удалять можно только свои клипы'); delete db.clips[k.id]; clipOrder = null; C.dropUpload(k.url); save(); };
 H['clip.comments'] = (c, p) => { const k = clip(p), list = (k.cm || []).slice(-200); return { list, users: usersOf(list.map(x => x.by), c.uid) }; };
 H['clip.comment'] = (c, p) => {
