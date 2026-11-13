@@ -207,9 +207,16 @@ export function PushSetup({ id }) {
 }
 export const openPush = () => openModal(PushSetup);
 
-// ───── «Вышло обновление» для приложения на Android
-// Сайт обновляется сам, а APK — нет: у кого стоит старая сборка, тому при каждом входе показываем просьбу поставить новую.
-// Какая сборка последняя, написано в /apk.json (code сверяется с тем, что отвечает приложение: NudistApp.version(); у сборок до 1.3 моста нет — это 0).
+// ───── Обновления: просьба обновиться выскакивает всегда, пока человек не обновится
+// Обновляются две вещи. Интерфейс (сайт) — после каждой выкладки: достаточно нажать «Обновить», страница перезагрузится с новым кодом.
+// Приложение для Android (APK) — реже: его нужно скачать и поставить поверх. Что выложено сейчас, отвечает сервер: GET /api/version.
+// Проверяем при запуске, при каждом подключении к серверу, при возвращении в приложение и каждые пять минут.
+// «Позже» закрывает окно ненадолго: оно вернётся при следующем заходе в приложение или через несколько минут.
+const SITE_AGAIN = 5 * 60e3, APK_AGAIN = 10 * 60e3, CHECK_EVERY = 5 * 60e3;
+const U = { build: '', apk: null, siteLater: 0, apkLater: 0, at: 0, hard: 0, told: false };      // siteLater, apkLater — когда окно показывали в последний раз
+const inApp = () => / NudistAndroid\//.test(navigator.userAgent);
+const appVer = () => { try { return window.NudistApp && window.NudistApp.version ? Number(window.NudistApp.version()) || 0 : 0; } catch (e) { return 0; } };
+const inCall = async () => { try { return !!(await import('./rtc.js')).RTC.chat; } catch (e) { return false; } };      // во время звонка окнами не мешаем
 function UpdateDlg({ id, info }) {
   const [step, setStep] = useState(0);
   return html`<${Modal} id=${id} title="Вышло обновление" icon="download">
@@ -217,18 +224,52 @@ function UpdateDlg({ id, info }) {
       <p><b>«Нудист» ${info.name} для Android.</b> У вас стоит старая версия. Обновление ставится поверх: вход и переписка сохранятся.</p>
       ${(info.news || []).length > 0 && html`<ul class="upd-news">${info.news.map(n => html`<li>${n}</li>`)}</ul>`}
       ${step === 1 && html`<ol class="steps"><li>Дождитесь загрузки файла nudist.apk (${info.size || 'он маленький'}).</li><li>Откройте его из шторки или из папки «Загрузки».</li><li>Нажмите «Обновить». Если телефон спросит про установку из этого источника — разрешите.</li></ol><p class="hint">Не скачивается? Откройте в браузере телефона адрес ${location.host}/start и скачайте оттуда.</p>`}
-      <div class="ask-btns"><a class="btn" href="/nudist.apk" download="nudist.apk" onClick=${() => setStep(1)}><${Icon} n="download" s=${16} /> ${step ? 'Скачать ещё раз' : 'Скачать и установить'}</a><button class="btn ghost" onClick=${() => { local.set('apk.later', Date.now()); closeModal(id); }}>Позже</button></div>
+      <div class="ask-btns"><a class="btn" href="/nudist.apk" download="nudist.apk" onClick=${() => setStep(1)}><${Icon} n="download" s=${16} /> ${step ? 'Скачать ещё раз' : 'Скачать и установить'}</a><button class="btn ghost" onClick=${() => closeModal(id)}>Позже</button></div>
+      <p class="hint">Пока стоит старая версия, это окно будет появляться при каждом заходе в приложение.</p>
     </div>
   <//>`;
 }
-let updAsked = false;
-export async function checkUpdate() {
-  if (updAsked || !/ NudistAndroid\//.test(navigator.userAgent)) return; updAsked = true;
-  let have = 0; try { have = window.NudistApp && window.NudistApp.version ? Number(window.NudistApp.version()) || 0 : 0; } catch (e) { /* старая сборка */ }
-  try {
-    const info = await (await fetch('/apk.json', { cache: 'no-store' })).json();
-    if (!(Number(info.code) > have) || Date.now() - (local.get('apk.later') || 0) < 3 * 3600e3) return;      // «Позже» откладывает на три часа
-    openModal(UpdateDlg, { info });
-  } catch (e) { updAsked = false; }
+function SiteUpdateDlg({ id }) {
+  const [busy, setBusy] = useState(false);
+  return html`<${Modal} id=${id} title="Вышло обновление" icon="refresh-cw" cls="small">
+    <div class="ask">
+      <p><b>«Нудист» обновился.</b> Нажмите «Обновить» — приложение перезапустится за пару секунд. Вход и переписка сохранятся.</p>
+      <div class="ask-btns"><button class="btn" disabled=${busy} onClick=${() => { setBusy(true); const run = S.ui.update; if (run) run(); else location.reload(); }}><${Icon} n="refresh-cw" s=${16} /> ${busy ? 'Обновляемся…' : 'Обновить'}</button><button class="btn ghost" disabled=${busy} onClick=${() => closeModal(id)}>Позже</button></div>
+    </div>
+  <//>`;
 }
-on('init', () => { setTimeout(checkUpdate, 2500); });
+// Жёсткое обновление: забыть сохранённую на устройстве копию интерфейса и загрузить всё заново
+async function hardReload() {
+  try { if ('serviceWorker' in navigator) { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); } if (window.caches) { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } } catch (e) { /* перезагрузимся и так */ }
+  location.reload();
+}
+/** Новая версия интерфейса готова. run — как её включить (по умолчанию — жёсткая перезагрузка). */
+export function offerSiteUpdate(run) { clearTimeout(U.hard); S.ui.update = run || hardReload; bump(); ask(true); }
+const shown = () => S.modals.some(m => m.c === UpdateDlg || m.c === SiteUpdateDlg);
+async function ask(fresh) {
+  if (shown() || !S.ready || !S.me || await inCall() || shown()) return;
+  const t = Date.now(), apk = U.apk;
+  if (inApp() && apk && Number(apk.code) > appVer()) { if (fresh === 'apk' || t - U.apkLater > APK_AGAIN) { U.apkLater = t; openModal(UpdateDlg, { info: apk }); } return; }      // сначала сборка: с ней обновится и всё остальное
+  if (S.ui.update && (fresh === true || t - U.siteLater > SITE_AGAIN)) { U.siteLater = t; openModal(SiteUpdateDlg); }
+}
+/** Спросить сервер, что выложено, и показать просьбу обновиться, если есть что. */
+export async function checkUpdate() {
+  const t = Date.now(); if (t - U.at < 20e3) return ask(); U.at = t;
+  let v; try { v = await (await fetch('/api/version', { cache: 'no-store' })).json(); } catch (e) { U.at = 0; return; }
+  const newer = !U.apk || Number(v.apk && v.apk.code) > Number(U.apk.code); if (v.apk && v.apk.code) U.apk = v.apk;
+  if (inApp() && !U.told) { U.told = true; rpc('app.hello', { v: appVer() }).catch(() => { U.told = false; }); }      // сервер запомнит сборку и напомнит об обновлении в шторке
+  if (v.build) {
+    if (!U.build) U.build = v.build;
+    else if (v.build !== U.build && !S.ui.update) {      // пока приложение было открыто, выложили новый интерфейс
+      let sw = null; try { sw = 'serviceWorker' in navigator && navigator.serviceWorker.controller ? await navigator.serviceWorker.getRegistration() : null; } catch (e) { /* нет так нет */ }
+      if (sw) { sw.update().catch(() => {}); clearTimeout(U.hard); U.hard = setTimeout(() => { if (!S.ui.update) offerSiteUpdate(); }, 45e3); }      // копия на устройстве докачает новую версию и сама позовёт offerSiteUpdate
+      else offerSiteUpdate();
+    }
+  }
+  ask(newer ? 'apk' : undefined);
+}
+on('init', d => { if (d && d.build) { if (!U.build) U.build = d.build; else if (d.build !== U.build) U.at = 0; } setTimeout(checkUpdate, 2500); });
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(checkUpdate, 800); });
+  setInterval(() => { if (document.visibilityState === 'visible') checkUpdate(); }, CHECK_EVERY);
+}

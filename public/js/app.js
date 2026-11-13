@@ -12,18 +12,19 @@ import { hashFromHistory } from './back.js';
 import './fluent.js';
 import { Hub, openHub, openApps } from './hub.js';
 import { Dock, foldDock } from './dock.js';
-import { takeRef, pendingRef, clearRef } from './growth.js';
+import { takeRef, pendingRef, clearRef, offerSiteUpdate } from './growth.js';
 takeRef();
 // Офлайн-кеш оболочки: со второго захода приложение открывается с диска. Вышла новая версия — докачается в фоне и предложит обновиться.
 function swSetup() {
   if (!('serviceWorker' in navigator) || !/^https:|^http:\/\/(localhost|127\.)/.test(location.href)) return;
   let reloading = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (reloading) location.reload(); });
-  const offer = w => { S.ui.update = () => { reloading = true; w.postMessage('skip'); }; bump(); };
+  const offer = w => offerSiteUpdate(() => { reloading = true; w.postMessage('skip'); setTimeout(() => location.reload(), 5000); });      // окно «Вышло обновление»; если новая копия не включилась за 5 секунд — просто перезагружаемся
   navigator.serviceWorker.register('/sw.js').then(reg => {
     if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
     reg.addEventListener('updatefound', () => { const w = reg.installing; if (w) w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w); }); });
-    setInterval(() => reg.update().catch(() => {}), 30 * 60e3);
+    setInterval(() => reg.update().catch(() => {}), 10 * 60e3);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });      // вернулись в приложение — сразу проверяем, не вышла ли новая версия
   }).catch(() => { /* без кеша тоже работает */ });
 }
 if (document.readyState === 'complete') swSetup(); else addEventListener('load', swSetup);
@@ -132,7 +133,7 @@ function Welcome() {
     <div class="tip"><b>Подсказка дня</b><span>${fact}</span></div>
     <div class="row"><button class="btn ghost" onClick=${() => { const c = Object.values(S.chats).find(x => x.type === 'saved'); c ? openChat(c.id) : openUser(S.me.id); }}><${Icon} n="bookmark" s=${16} /> Избранное</button><button class="btn ghost" onClick=${() => { S.ui.boss = true; bump(); }}><${Icon} n="table" s=${16} /> Прикрыться</button></div></div>`;
 }
-function Toasts() { return html`<div class="toasts" aria-live="polite">${S.toasts.map(t => html`<div key=${t.id} class=${cx('toast', t.kind)}>${t.text}</div>`)}</div>${S.ui.update && html`<div class="upd-bar" role="status"><span>Вышла новая версия «Нудиста»</span><button class="btn sm" onClick=${S.ui.update}>Обновить</button></div>`}`; }
+function Toasts() { return html`<div class="toasts" aria-live="polite">${S.toasts.map(t => html`<div key=${t.id} class=${cx('toast', t.kind)}>${t.text}</div>`)}</div>${S.ui.update && !S.modals.length && html`<div class="upd-bar" role="status"><span>Вышла новая версия «Нудиста»</span><button class="btn sm" onClick=${S.ui.update}>Обновить</button></div>`}`; }
 function Menu() {
   const m = S.menu, ref = useRef(); const [sub, setSub] = useState(null);
   useEffect(() => { setSub(null); }, [m]);

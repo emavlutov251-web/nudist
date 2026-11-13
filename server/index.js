@@ -86,12 +86,15 @@ function serveStatic(req, res, rel) {
 // Браузер один раз скачивает все файлы интерфейса и дальше открывает приложение с диска, без единого запроса за кодом.
 // Версия — хеш содержимого: после выкладки новой версии браузер сам докачает её в фоне и предложит обновиться.
 const SW_SKIP = /^\/(admin\.html|ask\.html|start\.html|start-phone\.jpg|css\/admin\.css|js\/admin\.js|js\/ask\.js|js\/start\.js|js\/start-qr\.js|nudist\.apk|og\.png|sw\.js)$/;
-let swBody = null;
+let swBody = null, swVer = '';
+// Версия интерфейса — хеш всех его файлов. По ней открытое приложение узнаёт, что вышло обновление, и просит обновиться.
+function buildVer() { if (!swBody) swBody = buildSw(); return swVer; }
 function buildSw() {
   const files = [], hash = crypto.createHash('sha1');
   const walk = dir => { for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) { const f = path.join(dir, e.name); if (e.isDirectory()) walk(f); else { const rel = '/' + path.relative(PUBLIC, f).split(path.sep).join('/'); if (!SW_SKIP.test(rel)) { files.push(rel); hash.update(rel).update(fs.readFileSync(f)); } } } };
   walk(PUBLIC);
-  const v = hash.digest('hex').slice(0, 12);
+  if (process.env.BUILD_SALT) hash.update(process.env.BUILD_SALT);      // для тестов: «выложить новую версию», не меняя файлов
+  const v = swVer = hash.digest('hex').slice(0, 12);
   if (process.env.NO_SW) return `self.addEventListener('install',function(){self.skipWaiting()});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}).then(function(){return self.registration.unregister()}))});`;
   return `// Нудист: кеш оболочки, версия ${v}
 var V='nudist-${v}',FILES=${JSON.stringify(files)},SET={};FILES.forEach(function(f){SET[f]=1});
@@ -176,6 +179,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/upload' && req.method === 'POST') return handleUpload(req, res);
     if (p === '/api/notify' && req.method === 'GET') { const a = sessionOf(req); if (a) { try { A.limit('notify:' + a.u.id, 90, 60000); } catch (e) { return json(res, 429, { error: 'Слишком часто' }); } } return Push.poll(req, res, url, a, json); }      // лента уведомлений для приложения на Android
     if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined, mirror: Cloud.mirrorStatus(), files: (u => u ? { mb: Math.round(u.bytes / 1048576), maxMb: Math.round(u.max / 1048576), count: u.files } : undefined)(Cloud.usage()) });
+    if (p === '/api/version') return json(res, 200, { build: buildVer(), apk: Push.apkInfo() });      // что сейчас выложено: интерфейс и сборка для Android
     if (p === '/api/config') return json(res, 200, { flags: db.flags, name: 'Нудист', version: '1.0.0' });
     if (p === '/api/clientlog' && req.method === 'POST') {      // телефон сообщает, почему приложение не запустилось
       try { A.limit('clog:' + ipOf(req), 20, 600e3); const b = (await readBody(req, 6000)).toString('utf8').replace(/[\r\n]+/g, ' ').slice(0, 1500); console.log('[client]', (req.headers['user-agent'] || '').slice(0, 200), '|', b); } catch (e) { /* лимит или мусор */ }
@@ -235,7 +239,7 @@ function onConnect(ws, tok, sess, u, ip) {
   sess.seen = now(); sess.ip = ip; u.seen = now(); C.touchDau(u.id);
   // отметка «доставлено» для личных чатов
   for (const cid of u.chats || []) { const ch = db.chats[cid]; if (ch && (ch.type === 'dm' || ch.type === 'secret') && ch.members[u.id]) { const s = C.st(ch, u.id); if ((s.deliv || 0) < ch.seq) { s.deliv = ch.seq; for (const o in ch.members) if (o !== u.id) emit(o, 'deliv', { chat: ch.id, seq: ch.seq }); } } }
-  c.send('init', initData(c));
+  c.send('init', { ...initData(c), build: buildVer() });
   if (first) presence(u, true);
   save();
   ws.on('pong', () => { c.alive = true; });

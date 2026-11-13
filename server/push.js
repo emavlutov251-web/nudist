@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const C = require('./core');
 const R = require('./rpc');
+const fs = require('fs'), path = require('path');
 const { db, save, now, need, str } = C;
 const H = R.H;
 
@@ -67,12 +68,34 @@ function feedAdd(uid, p) {
   f.q.push(it); if (f.q.length > FEED_KEEP) f.q.splice(0, f.q.length - FEED_KEEP);
   for (const w of [...f.waiters]) w.done([it]);
 }
+// ───── Обновление приложения для Android. Какая сборка последняя, написано в public/apk.json.
+// Страница при запуске сообщает, какая сборка стоит на телефоне (app.hello); если она старее — раз в сутки напоминаем в шторке,
+// пока человек не обновится. В самом приложении просьба обновиться выскакивает при каждом запуске (public/js/growth.js).
+let apkCache = null;
+function apkInfo() {
+  if (apkCache) return apkCache;
+  try { const j = JSON.parse(fs.readFileSync(path.join(C.ROOT, 'public', 'apk.json'), 'utf8')); apkCache = { code: Number(j.code) || 0, name: String(j.name || ''), size: String(j.size || ''), news: Array.isArray(j.news) ? j.news.slice(0, 8).map(String) : [] }; } catch (e) { apkCache = { code: 0, name: '', size: '', news: [] }; }
+  return apkCache;
+}
+const UPD_EVERY = 20 * 3600e3;
+H['app.hello'] = (c, p) => {
+  const u = db.users[c.uid], v = Math.min(999, Math.max(1, Math.floor(Number(p.v)) || 1));      // 1 — сборка без моста (до 1.3)
+  if (u.appVer !== v) { u.appVer = v; save(); }
+  return { apk: apkInfo() };
+};
+function updateItem(u) {      // напоминание об обновлении для ленты телефона или null
+  const apk = apkInfo(); if (!apk.code || !u.appVer || u.appVer >= apk.code) return null;
+  const t = u.updTold; if (t && t.c === apk.code && now() - t.at < UPD_EVERY) return null;
+  u.updTold = { c: apk.code, at: now() }; save();
+  return { id: nextId(), title: 'Вышло обновление «Нудиста» ' + apk.name, body: (apk.news[0] ? apk.news[0] + '. ' : '') + 'Откройте приложение — оно предложит обновиться.', tag: 'update', ts: now() };
+}
 function poll(req, res, url, a, json) {
   if (!a) return json(res, 401, { error: 'Нужна авторизация' });
   const uid = a.u.id; let f = feeds.get(uid); if (!f) { if (feeds.size > 20000) return json(res, 503, { error: 'Слишком много устройств' }); feeds.set(uid, f = { q: [], waiters: new Set(), at: 0 }); }
   f.at = now(); const tz = Number(url.searchParams.get('tz')); if (Number.isFinite(tz) && Math.abs(tz) <= 900) f.tz = Math.round(tz);
   const raw = url.searchParams.get('since'), since = Number(raw);
   if (raw === null || !Number.isFinite(since) || since <= 0) return json(res, 200, { last: nextId(), items: [] });      // первое обращение: старое не пересказываем
+  const upd = updateItem(a.u); if (upd) f.q.push(upd);
   const ready = f.q.filter(x => x.id > since); if (ready.length) return json(res, 200, { last: ready[ready.length - 1].id, items: ready });
   if (f.waiters.size >= 5) return json(res, 429, { error: 'Слишком много ожидающих запросов' });
   const w = { done(items) { if (w.over) return; w.over = true; clearTimeout(w.t); f.waiters.delete(w); f.at = now(); try { json(res, 200, { last: items.length ? items[items.length - 1].id : since, items }); } catch (e) { /* телефон уже отключился */ } } };
@@ -133,4 +156,4 @@ H['push.test'] = async (c, p) => { const u = db.users[c.uid];
   }
   need(u.push && u.push.length, 'На этом аккаунте уведомления ещё не включены'); return push(u, { title: 'Нудист', body: 'Уведомления работают. Теперь вы ничего не пропустите.', tag: 'test', url: '/' }); };
 
-module.exports = { notify, poll, encrypt, vapid, keys };
+module.exports = { notify, poll, encrypt, vapid, keys, apkInfo };
