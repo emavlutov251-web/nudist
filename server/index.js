@@ -287,7 +287,7 @@ setInterval(() => {
 setInterval(() => {
   C.metrics.perMin.push(minuteCount); minuteCount = 0; if (C.metrics.perMin.length > 60) C.metrics.perMin.shift();
   G.eventReminders(); Seed.factJob();
-  try { Streak.remind(); } catch (e) { console.error('[streak]', e.message); }
+  try { Streak.remind(); require('./retain').digest(); } catch (e) { console.error('[streak]', e.message); }
   const t = now();
   for (const u of Object.values(db.users)) if (u.status && u.status.until && u.status.until < t) { u.status = undefined; C.broadcastUser(u); save(); }
   // истёкшие опросы — разослать финальное состояние

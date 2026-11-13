@@ -223,7 +223,7 @@ H['chat.update'] = (c, p) => {
       if (p.captcha !== undefined) ch.captcha = !!p.captcha;
       if (p.price !== undefined && ch.type === 'channel') ch.price = int(p.price, 0, 100000) || undefined;
       if (p.automod !== undefined) ch.automod = { words: (Array.isArray(p.automod.words) ? p.automod.words : []).map(w => str(w, 40).toLowerCase()).filter(Boolean).slice(0, 200), flood: !!p.automod.flood, links: !!p.automod.links };
-      if (p.rss !== undefined && ch.type === 'channel') ch.rss = (Array.isArray(p.rss) ? p.rss : []).slice(0, 5).map(r => ({ url: str(r.url || r, 300), seen: r.seen })).filter(r => /^https?:\/\//.test(r.url));
+      if (p.rss !== undefined && ch.type === 'channel') ch.rss = (Array.isArray(p.rss) ? p.rss : []).slice(0, 5).map(r => { const url = str(r.url || r, 300), was = (ch.rss || []).find(x => x.url === url); return was || { url }; }).filter(r => /^https?:\/\//.test(r.url));
       audit(ch, c.uid, 'update', Object.keys(p).filter(k => k !== 'id').join(', ') + (before.title !== ch.title ? ` («${before.title}» → «${ch.title}»)` : ''));
     }
   }
@@ -790,6 +790,7 @@ H['story.post'] = (c, p) => {
   if (p.ts && C.canImport(me)) s.ts = int(p.ts, 1, now() + 31 * 864e5, now());      // отложенная история редакции: появится в своё время
   db.stories[s.id] = s; save();
   if (s.ts <= now()) for (const uid of C.conns.keys()) { const v = db.users[uid]; if (v && storyVisible(s, v)) emit(uid, 'story', { story: storyView(s, uid), user: pubUser(me, uid) }); }
+  if (s.ts <= now()) { try { require('./retain').story(s, me, v => storyVisible(s, v)); } catch (e) { console.error('[retain]', e.message); } }
   return storyView(s, c.uid);
 };
 H['story.view'] = (c, p) => { const s = db.stories[p.id]; if (!s || !storyVisible(s, user(c)) || s.user === c.uid) return; if (!s.views.some(v => v.u === c.uid)) { s.views.push({ u: c.uid, ts: now() }); save(); emit(s.user, 'story.views', { id: s.id, views: s.views.length }); } };
@@ -813,16 +814,20 @@ const LEAF = {
   per: envInt('LEAF_TAPS', 10, 1, 1000),                 // тапов в «Листопаде» на один листик
   limit: envInt('LEAF_DAY_LIMIT', 150, 0, 100000),       // листиков в день за тапы
   dailyMin: envInt('LEAF_DAILY_MIN', 10, 0, 100000),     // ежедневный бонус, от
-  dailyMax: envInt('LEAF_DAILY_MAX', 20, 0, 100000),     // и до
+  dailyMax: envInt('LEAF_DAILY_MAX', 50, 0, 100000),     // потолок бонуса при ежедневных заходах
+  dailyStep: envInt('LEAF_DAILY_STEP', 5, 0, 100000),    // прибавка за каждый следующий день подряд
 };
 if (LEAF.dailyMax < LEAF.dailyMin) LEAF.dailyMax = LEAF.dailyMin;
 // Тапы принимаем не быстрее, чем их может настучать человек: скрипт, который шлёт «300 тапов» раз за разом, получит столько же, сколько живой палец.
 const TAP_RATE = 15, TAP_BURST = 150, tapBucket = new Map();      // тапов в секунду, запас, пользователь → { t, left }
 const tapsToday = u => (u.tapDay === today() ? u.taps || 0 : 0);
-const leafInfo = u => { const t = tapsToday(u); return { stars: u.stars || 0, per: LEAF.per, prog: t % LEAF.per, left: Math.max(0, LEAF.limit - Math.floor(t / LEAF.per)), limit: LEAF.limit, daily: u.lastDaily !== today(), dailyMin: LEAF.dailyMin, dailyMax: LEAF.dailyMax }; };
+const leafInfo = u => { const t = tapsToday(u); return { stars: u.stars || 0, per: LEAF.per, prog: t % LEAF.per, left: Math.max(0, LEAF.limit - Math.floor(t / LEAF.per)), limit: LEAF.limit, daily: u.lastDaily !== today(), dailyMin: LEAF.dailyMin, dailyMax: LEAF.dailyMax, dailyStep: LEAF.dailyStep, dailyRun: dailyRun(u), dailyNext: dailyFor(dailyRun(u) + 1) }; };
 H['stars.info'] = c => leafInfo(user(c));
 function spend(u, n, why) { need(db.flags.stars, 'Листики временно отключены'); need((u.stars || 0) >= n, `Не хватает листиков: нужно ${n} 🍃, у вас ${u.stars || 0}. ${why || ''}`); u.stars -= n; }
-H['stars.daily'] = c => { const u = user(c); need(db.flags.stars, 'Листики отключены'); need(u.lastDaily !== today(), 'Сегодняшний бонус уже собран. Листья растут до завтра.'); u.lastDaily = today(); const n = LEAF.dailyMin + crypto.randomInt(0, LEAF.dailyMax - LEAF.dailyMin + 1); u.stars = (u.stars || 0) + n; save(); selfUpdate(u); return { n, stars: u.stars }; };
+// Ежедневный бонус растёт, если заходить каждый день: 10, 15, 20 … 50 листиков. Пропущенный день начинает счёт заново.
+const dailyRun = u => (u.lastDaily === today() || u.lastDaily === today(now() - 864e5) ? u.dailyRun || 1 : 0);      // сколько дней подряд уже собрано
+const dailyFor = run => Math.min(LEAF.dailyMax, LEAF.dailyMin + LEAF.dailyStep * Math.max(0, run - 1));
+H['stars.daily'] = c => { const u = user(c); need(db.flags.stars, 'Листики отключены'); need(u.lastDaily !== today(), 'Сегодняшний бонус уже собран. Листья растут до завтра.'); const run = dailyRun(u) + 1, n = dailyFor(run); u.lastDaily = today(); u.dailyRun = run; u.stars = (u.stars || 0) + n; save(); selfUpdate(u); return { n, stars: u.stars, run, next: dailyFor(run + 1) }; };
 H['stars.tap'] = (c, p) => {
   const u = user(c); need(db.flags.stars, 'Листики отключены');
   if (u.tapDay !== today()) { u.tapDay = today(); u.taps = 0; }      // u.taps — тапы за сегодня, листик капает за каждые LEAF.per

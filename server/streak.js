@@ -43,7 +43,7 @@ function seedAll() {
 
 // Вечернее напоминание: раз в день после 18:00 по Москве тем, у кого огонёк сегодня ещё не продлён и кто сам сегодня в этом чате не писал.
 // Одно уведомление на человека, сколько бы огоньков ни гасло. Только личные и секретные чаты; чаты с выключенным звуком пропускаем.
-const HOUR = /^\d{1,2}$/.test(process.env.STREAK_REMIND_HOUR || '') ? Math.min(23, Number(process.env.STREAK_REMIND_HOUR)) : 18;      // час по Москве
+const HOUR = /^\d{1,2}$/.test(process.env.STREAK_REMIND_HOUR || '') ? Math.min(23, Number(process.env.STREAK_REMIND_HOUR)) : 19;      // час по Москве
 const plural = (n, f) => f[n % 10 === 1 && n % 100 !== 11 ? 0 : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 1 : 2];
 function remind(force) {
   const d = C.dayMsk(); if (!force && (db.meta.streakRemind === d || new Date(now() + 3 * 3600e3).getUTCHours() < HOUR)) return 0;

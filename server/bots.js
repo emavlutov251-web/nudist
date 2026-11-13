@@ -272,11 +272,13 @@ async function pollRss() {
     const owner = Object.keys(ch.members).find(u => ch.members[u].role === 'owner'); if (!owner) continue;
     for (const feed of ch.rss) {
       try {
-        const items = await N.rssItems(feed.url); feed.err = undefined;
+        if (!feed.src) feed.src = await N.feedUrl(feed.url);      // ссылка на канал YouTube → адрес его ленты (узнаём один раз)
+        const items = await N.rssItems(feed.src); feed.err = undefined;
         const seen = new Set(feed.seen || []);
         const fresh = items.filter(i => !seen.has(i.guid));
         const toPost = feed.seen ? fresh.slice(0, 3).reverse() : fresh.slice(0, 1);
-        for (const it of toPost) postMessage(ch, owner, { text: `**${it.title}**\n${it.link}`, as: 'chan', via: 'RSS' });
+        const yt = /youtube\.com\/feeds\//.test(feed.src);
+        for (const it of toPost) postMessage(ch, owner, { text: `${yt ? '▶️ ' : ''}**${it.title}**\n${it.link}`, as: 'chan', via: yt ? 'YouTube' : 'RSS' });
         feed.seen = items.slice(0, 100).map(i => i.guid);
       } catch (e) { feed.err = e.message; }
       save();

@@ -148,6 +148,7 @@ function msgMenu(e, m, chat, { thread, onJump }) {
     text && { icon: 'copy', label: quote ? 'Копировать выделенное' : 'Копировать текст', run: () => { copyText(quote || text); toast('Скопировано'); } },
     (priv || can.pin) && !m.thread && { icon: (chat.pinned || []).includes(m.id) ? 'pin-off' : 'pin', label: (chat.pinned || []).includes(m.id) ? 'Открепить' : 'Закрепить', run: () => call('msg.pin', { chat: chat.id, id: m.id, on: !(chat.pinned || []).includes(m.id) }) },
     chat.type !== 'secret' && m.type !== 'call' && { icon: 'forward', label: 'Переслать', run: () => openModal(ForwardModal, { from: chat.id, ids: [m.id] }) },
+    text && chat.type !== 'secret' && { icon: 'send', label: 'Поделиться в Telegram', run: () => { const link = (text.match(/https?:\/\/[^\s<>"]+/) || [])[0] || '', rest = (link ? text.replace(link, '') : text).replace(/\*\*|__|~~|`/g, '').trim().slice(0, 900); window.open('https://t.me/share/url?url=' + encodeURIComponent(link || rest) + (link && rest ? '&text=' + encodeURIComponent(rest) : ''), '_blank', 'noopener'); } },
     { icon: 'circle-check', label: 'Выбрать', run: () => { S.ui.sel = [m.id]; bump(); } },
     '-',
     text && { icon: 'languages', label: 'Перевести', sub: [{ emoji: '🔤', label: 'На транслит', run: () => { m._tr = translit(text); bump(); } }, { emoji: '🐸', label: 'На олбанский', run: () => { m._tr = olban(text); bump(); } }, m._tr && { icon: 'x', label: 'Убрать перевод', run: () => { delete m._tr; bump(); } }] },

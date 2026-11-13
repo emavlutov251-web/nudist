@@ -115,19 +115,19 @@ function MiniApp({ id, bot, url, initData, builtin }) {
 
 // ═════ Листики и Премиум ═════
 export function StarsModal({ id }) {
-  const u = S.me, prem = (u.premiumUntil || 0) > Date.now(), price = (S.prices || {}).premium || 500, [busy, setBusy] = useState(false), lf = (S.prices || {}).leaf || { per: 10, limit: 150, dailyMin: 10, dailyMax: 20 };
-  const daily = async () => { setBusy(true); const r = await call('stars.daily'); setBusy(false); if (r) { toast(`+${r.n} 🍃 Ежедневный урожай собран`); confetti(); sfx('coin'); } };
+  const u = S.me, prem = (u.premiumUntil || 0) > Date.now(), price = (S.prices || {}).premium || 500, [busy, setBusy] = useState(false), lf = { per: 10, limit: 150, dailyMin: 10, dailyMax: 50, ...((S.prices || {}).leaf || {}) };
+  const daily = async () => { setBusy(true); const r = await call('stars.daily'); setBusy(false); if (r) { toast(r.run > 1 ? `+${r.n} 🍃 День ${r.run} подряд. Завтра будет +${r.next}` : `+${r.n} 🍃 Ежедневный урожай собран. Завтра будет +${r.next || r.n}`); confetti(); sfx('coin'); } };
   const game = async () => { try { const r = await rpc('user.get', { username: 'listopad' }); S.users[r.user.id] = r.user; openMiniApp(r.user.id); } catch (e) { toast(e.message, 'err'); } };
   const buy = async () => { if (!(await confirmDlg({ title: 'Нудист Голый Премиум', text: `Спишется ${price} 🍃 за 30 дней. Настоящие деньги не нужны и не принимаются.`, ok: 'Оформить' }))) return; const r = await call('premium.buy'); if (r) { toast('Премиум активирован. Теперь вы голый, но с привилегиями.'); confetti(); sfx('fanfare'); } };
   const PERKS = [['sticker', 'Набор стикеров «Мемные реакции»'], ['smile-plus', 'До 3 реакций на одно сообщение'], ['film', 'Анимированный аватар (видео или GIF)'], ['upload', 'Файлы до 400 МБ вместо 100'], ['leaf', 'Золотой листок рядом с именем'], ['megaphone-off', 'Без рекламы (её и так нет, но приятно)']];
   return html`<${Modal} id=${id} title="Листики и Премиум" icon="leaf">
     <div class="stars-hero"><span class="sh-n">${fmtNum(u.stars || 0)} 🍃</span><p>Листики — внутренняя валюта «Нудиста». Игрушечная: купить за деньги нельзя, зато можно заработать, подарить и потратить.</p>
-      <div class="row"><button class="btn" disabled=${busy || u.lastDaily === new Date().toISOString().slice(0, 10)} onClick=${daily}><${Icon} n="gift" s=${16} /> ${u.lastDaily === new Date().toISOString().slice(0, 10) ? 'Бонус уже собран' : 'Ежедневный бонус'}</button><button class="btn ghost" onClick=${game}><${Icon} n="gamepad-2" s=${16} /> Играть в «Листопад»</button><button class="btn ghost" onClick=${() => shareLeaves()}><${Icon} n="send" s=${16} /> Поделиться</button></div></div>
+      <div class="row"><button class="btn" disabled=${busy || u.lastDaily === new Date().toISOString().slice(0, 10)} onClick=${daily}><${Icon} n="gift" s=${16} /> ${u.lastDaily === new Date().toISOString().slice(0, 10) ? 'Бонус уже собран' : 'Ежедневный бонус'}${u.dailyRun > 1 ? ` · ${u.dailyRun} дн.` : ''}</button><button class="btn ghost" onClick=${game}><${Icon} n="gamepad-2" s=${16} /> Играть в «Листопад»</button><button class="btn ghost" onClick=${() => shareLeaves()}><${Icon} n="send" s=${16} /> Поделиться</button></div></div>
     <${LeafHistory} />
     <div class=${cx('prem', prem && 'on')}><h3><${Icon} n="leaf" /> Нудист Голый Премиум</h3>${prem ? html`<p>Активен до ${new Date(u.premiumUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>` : html`<p>Всё то же самое, только с позолотой. ${price} 🍃 за 30 дней.</p>`}
       <ul>${PERKS.map(([i, t]) => html`<li><${Icon} n=${i} s=${16} /> ${t}</li>`)}</ul>
       <button class="btn warn" onClick=${buy}>${prem ? 'Продлить на 30 дней' : 'Оформить'} · ${price} 🍃</button></div>
-    <p class="hint">Откуда берутся листики: ежедневный бонус ${lf.dailyMin === lf.dailyMax ? lf.dailyMin : lf.dailyMin + '–' + lf.dailyMax} 🍃, «Листопад» — листик за каждые ${lf.per} тапов, не больше ${lf.limit} 🍃 в день, листики за игры «2048» и «Сапёр» (до 60 и 50 🍃 в день) и 50 🍃 за приглашённого друга. Деревья не резиновые.</p>
+    <p class="hint">Откуда берутся листики: ежедневный бонус ${lf.dailyMin === lf.dailyMax ? lf.dailyMin : `от ${lf.dailyMin} до ${lf.dailyMax}`} 🍃 (растёт на 5 за каждый день подряд, пропуск начинает заново), «Листопад» — листик за каждые ${lf.per} тапов, не больше ${lf.limit} 🍃 в день, листики за игры «2048» и «Сапёр» (до 60 и 50 🍃 в день) и 50 🍃 за приглашённого друга. Деревья не резиновые.</p>
     <p class="hint">На что ещё тратить: буст сервера (${(S.prices || {}).boost || 200} 🍃), платные каналы, подарки друзьям.</p><//>`;
 }
 
@@ -359,7 +359,7 @@ function CsMain({ chat }) {
     ${!ch && html`<label class="fld"><span>Медленный режим</span><select value=${f.slow} onChange=${e => set({ slow: e.target.value })}>${[[0, 'Выключен'], [5, '5 секунд'], [15, '15 секунд'], [60, '1 минута'], [300, '5 минут'], [3600, '1 час']].map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select></label>`}
     ${ch && html`<${Toggle} label="Подписывать посты" hint="Имя автора под каждым постом" on=${f.sign} onChange=${v => set({ sign: v })} />
       <label class="fld"><span>Платная подписка, 🍃 в месяц (0 — бесплатно)</span><input type="number" min="0" max="100000" value=${f.price} onInput=${e => set({ price: e.target.value })} /></label>
-      <label class="fld"><span>Автопостинг из RSS (по одной ссылке в строке, до 5)</span><textarea rows="2" value=${f.rss} placeholder="https://example.com/feed.xml" onInput=${e => set({ rss: e.target.value })}></textarea></label>`}
+      <label class="fld"><span>Автопостинг: ленты RSS и каналы YouTube (по одной ссылке в строке, до 5)</span><textarea rows="3" value=${f.rss} placeholder=${"https://example.com/feed.xml\nhttps://www.youtube.com/@имя_канала"} onInput=${e => set({ rss: e.target.value })}></textarea></label>`}
     <button class="btn" onClick=${save}>Сохранить</button></div>`;
 }
 function CsPerms({ chat }) {

@@ -67,6 +67,20 @@ async function linkPreview(url) {
   let img = meta('og:image'); if (img) { try { img = new URL(img, r.url).href; if (!/^https:/.test(img)) img = ''; } catch (e) { img = ''; } }
   return { url, title: title.slice(0, 200), desc: (meta('og:description') || meta('description')).slice(0, 300), img: img || undefined, site: meta('og:site_name').slice(0, 60) || new URL(r.url).hostname.replace(/^www\./, '') };
 }
+// Ссылку на канал YouTube превращаем в его ленту: у каждого канала есть открытая лента последних видео.
+// Понимаем youtube.com/channel/UC…, youtube.com/@имя, /c/имя и /user/имя; остальные адреса возвращаем как есть.
+async function feedUrl(url) {
+  let u; try { u = new URL(url); } catch (e) { return url; }
+  if (!/(^|\.)youtube\.com$/i.test(u.hostname) || u.pathname.startsWith('/feeds/')) return url;
+  const feed = id => 'https://www.youtube.com/feeds/videos.xml?channel_id=' + id;
+  const direct = u.pathname.match(/^\/channel\/(UC[\w-]{22})/); if (direct) return feed(direct[1]);
+  if (!/^\/(@[^/]+|c\/[^/]+|user\/[^/]+)/.test(u.pathname)) throw new Error('Нужна ссылка на канал YouTube: youtube.com/@имя или youtube.com/channel/UC…');
+  const r = await safeFetch('https://www.youtube.com' + u.pathname.match(/^\/(@[^/]+|c\/[^/]+|user\/[^/]+)/)[0], { accept: 'text/html', max: 1500000 });
+  const html = r.status === 200 ? decode(r.body, r.headers['content-type']) : '';
+  const m = html.match(/feeds\/videos\.xml\?channel_id=(UC[\w-]{22})/) || html.match(/youtube\.com\/channel\/(UC[\w-]{22})/) || html.match(/"(?:externalId|channelId)":"(UC[\w-]{22})"/);
+  if (!m) throw new Error('Не удалось узнать номер канала YouTube. Вставьте ссылку вида youtube.com/channel/UC…');
+  return feed(m[1]);
+}
 async function rssItems(url) {
   const r = await safeFetch(url, { accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml', max: 600000 });
   if (r.status !== 200) throw new Error('HTTP ' + r.status);
@@ -81,4 +95,4 @@ async function rssItems(url) {
   }
   return items;
 }
-module.exports = { safeFetch, linkPreview, rssItems, isPrivate };
+module.exports = { safeFetch, linkPreview, rssItems, feedUrl, isPrivate };
