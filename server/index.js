@@ -170,6 +170,7 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x'), p = url.pathname;
     if (p.startsWith('/u/')) return serveUpload(req, res, p.slice(3));
     if (p === '/api/upload' && req.method === 'POST') return handleUpload(req, res);
+    if (p === '/api/notify' && req.method === 'GET') { const a = sessionOf(req); if (a) { try { A.limit('notify:' + a.u.id, 90, 60000); } catch (e) { return json(res, 429, { error: 'Слишком часто' }); } } return Push.poll(req, res, url, a, json); }      // лента уведомлений для приложения на Android
     if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined, mirror: Cloud.mirrorStatus(), files: (u => u ? { mb: Math.round(u.bytes / 1048576), maxMb: Math.round(u.max / 1048576), count: u.files } : undefined)(Cloud.usage()) });
     if (p === '/api/config') return json(res, 200, { flags: db.flags, name: 'Нудист', version: '1.0.0' });
     if (p === '/api/clientlog' && req.method === 'POST') {      // телефон сообщает, почему приложение не запустилось

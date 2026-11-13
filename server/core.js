@@ -76,7 +76,8 @@ function emit(uid, ev, d) {
 }
 function emitAll(ev, d) { const s = JSON.stringify({ ev, d }); for (const set of conns.values()) for (const c of set) c.raw(s); }
 const isOnline = uid => conns.has(uid);
-let offlineHook = null; const setOfflineHook = f => { offlineHook = f; };      // куда сообщать о письме человеку без открытых соединений (уведомления)
+let offlineHook = null; const setOfflineHook = f => { offlineHook = f; };
+let msgHook = null; const setMsgHook = f => { msgHook = f; };      // о каждом новом сообщении каждому получателю, в сети он или нет (уведомления в приложении для Android)      // куда сообщать о письме человеку без открытых соединений (уведомления)
 // Число ключей в большом объекте (участники сообщества). Object.keys(…).length на 100 тысячах участников — это миллисекунды,
 // а считается оно на каждое сообщение каждому получателю. Большие объекты пересчитываем не чаще раза в 3 секунды.
 const sizeCache = new WeakMap();
@@ -370,6 +371,7 @@ function postMessage(chat, from, p, o = {}) {
     }
     if (isOnline(uid)) { s.deliv = m.seq; emit(uid, 'msg', { chat: chatView(chat, uid), msg: msgView(m, uid), root: root ? msgView(root, uid) : undefined, mention }); }
     else if (offlineHook && m.type !== 'service') { try { offlineHook(uid, chat, m, mention, s); } catch (e) { console.error('[push]', e.message); } }
+    if (msgHook && m.type !== 'service') { try { msgHook(uid, chat, m, mention, s); } catch (e) { console.error('[notify]', e.message); } }
   }
   if (isOnline(from)) emit(from, 'msg', { chat: chatView(chat, from), msg: msgView(m, from), root: root ? msgView(root, from) : undefined });
   save();
@@ -458,4 +460,4 @@ function viewersOf(o, viewerId, key = 'seen') {
   for (const v of list) users[v.u] = pubUser(db.users[v.u], viewerId);
   return { list, users };
 }
-module.exports = { POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

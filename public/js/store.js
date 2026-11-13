@@ -187,7 +187,8 @@ function notify(chat, m, mention) {
   if (!cat && !mention) return;
   const focused = !document.hidden && document.hasFocus();
   if (focused && S.ui.chat === chat.id && !S.ui.thread) return;
-  if (s.sound && !m.silent) sfx((chat.notif && chat.notif.sound) || s.notifSound);
+  const shade = document.hidden && nativeApp() && local.get('app.push') !== false;      // приложение свёрнуто: звук даст уведомление в шторке, второй не нужен
+  if (s.sound && !m.silent && !shade) sfx((chat.notif && chat.notif.sound) || s.notifSound);
   if (s.notif && !focused && 'Notification' in window && Notification.permission === 'granted') {
     try {
       const info = chatInfo(chat), who = userName(S.users[m.from]);
@@ -263,11 +264,16 @@ export function login(token) {
   S.token = token; S.ready = false; connect(); bump();
 }
 onReady(() => { const acc = accounts(); const a = acc.find(x => x.token === S.token); if (a) { a.id = S.me.id; a.name = userName(S.me); a.username = S.me.username; a.avatar = S.me.avatar; a.color = S.me.color; local.set('accounts', acc); } });
+// Приложение для Android (APK 1.3+) само показывает уведомления в шторке. Ключ сеанса оно читает из хранилища страницы,
+// от нас нужен только сигнал «перечитай»: после входа, выхода и переключения. Выключатель: local 'app.push' === false.
+export const nativeApp = () => { const n = typeof window !== 'undefined' && window.NudistApp; return n && typeof n.sync === 'function' ? n : null; };
+export function nativePush() { const n = nativeApp(); if (!n) return; try { n.sync(); } catch (e) { /* приложение не ответило */ } }
+onReady(nativePush);
 export function resetState() { S.ready = false; S.me = null; S.chats = {}; S.msgs = {}; S.hist = {}; S.servers = {}; S.rooms = {}; S.stories = []; S.modals = []; S.ui = { ...S.ui, chat: null, thread: null, server: null, list: true, panel: false }; keyCache.clear(); }
 export function logout(silent) {
   if (!silent && S.token) rpc('me.logout').catch(() => {});
   const acc = accounts().filter(a => a.token !== S.token); local.set('accounts', acc);
-  disconnect(); resetState(); S.token = null; local.set('token', null);
+  disconnect(); resetState(); S.token = null; local.set('token', null); nativePush();
   if (acc.length) login(acc[0].token); else bump();
 }
 export function switchAccount(token) { if (token === S.token) return; disconnect(); resetState(); login(token); }

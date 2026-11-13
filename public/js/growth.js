@@ -1,6 +1,7 @@
 // Рост и удержание: приглашения друзей, «огонёк» серии переписки, одноразовые фото и видео, установка как приложения.
 import { html, useState, useEffect, S, bump, rpc, on, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, copyText, local, Spinner, plural, fmtNum, Toggle, upload, download, fmtShort } from './lib.js';
 import { QR } from './panels.js';
+import { nativeApp, nativePush } from './store.js';
 
 // ───── приглашения
 // Ссылка вида https://…/?ref=username. Открыл не вошедший человек — запоминаем, кто позвал, и показываем регистрацию.
@@ -164,7 +165,27 @@ async function pushOff() {
 }
 // После входа молча обновляем подписку, если человек её уже включал на этом устройстве
 on('init', () => { setTimeout(() => { if (pushOk() && Notification.permission === 'granted' && local.get('push.on')) pushSub().catch(() => {}); }, 4000); });
+// Приложение для Android: уведомления показывает само приложение (фоновая служба), браузерный механизм не нужен
+function AppPush({ id, app }) {
+  const read = () => { try { return JSON.parse(app.state()); } catch (e) { return { allowed: true, battery: true, on: false }; } };
+  const [st, setSt] = useState(read), [busy, setBusy] = useState(false), enabled = local.get('app.push') !== false;
+  useEffect(() => { const t = setInterval(() => setSt(read()), 1500); return () => clearInterval(t); }, []);      // человек возвращается из настроек телефона — статус обновится сам
+  const sw = v => { local.set('app.push', v ? null : false); nativePush(); setTimeout(() => setSt(read()), 400); toast(v ? 'Уведомления включены' : 'Уведомления выключены'); };
+  const test = async () => { setBusy(true); try { await rpc('push.test', { app: true }); toast('Сверните приложение. Уведомление придёт через 10 секунд.'); } catch (e) { toast(e.message || 'Не получилось', 'err'); } finally { setBusy(false); } };
+  return html`<${Modal} id=${id} title="Уведомления" icon="bell">
+    <div class="ask">
+      <p>Когда «Нудист» свёрнут или закрыт, новые личные сообщения, сообщения в группах, подарки и звонки приходят в шторку телефона. Каналы и серверы присылают только упоминания, чаты с выключенным звуком молчат.</p>
+      <${Toggle} label="Уведомления в шторке" hint="На этом телефоне" on=${enabled} onChange=${sw} />
+      ${enabled && !st.allowed && html`<div class="note warn"><span>Телефон запрещает «Нудисту» показывать уведомления.</span><button class="btn sm" onClick=${() => app.askNotify()}>Разрешить</button></div>`}
+      ${enabled && !st.battery && html`<div class="note"><span>Телефон экономит батарею и может усыплять приложение: уведомления будут опаздывать. Снимите ограничение.</span><button class="btn sm" onClick=${() => app.askBattery()}>Снять</button></div>`}
+      ${enabled && html`<p class="hint">Пока уведомления включены, в шторке висит тихая строка «Нудист на связи»: так Android разрешает приложению ждать сообщения. Её можно скрыть: долгое нажатие на неё → выключить «Связь с сервером». На Xiaomi, Huawei, Honor и Samsung дополнительно включите приложению «Автозапуск» в настройках телефона.</p>
+        <div class="ask-btns"><button class="btn" disabled=${busy || !st.allowed} onClick=${test}><${Icon} n="bell-ring" s=${16} /> Проверить</button></div>`}
+    </div>
+  <//>`;
+}
 export function PushSetup({ id }) {
+  const app = nativeApp(); if (app) return html`<${AppPush} id=${id} app=${app} />`;
+  const oldApk = / NudistAndroid\//.test(navigator.userAgent);
   const [st, setSt] = useState(!pushOk() ? 'none' : Notification.permission === 'denied' ? 'denied' : Notification.permission === 'granted' && local.get('push.on') ? 'on' : 'off'), [busy, setBusy] = useState(false);
   const run = async f => { setBusy(true); try { await f(); } catch (e) { toast(e.message || 'Не получилось', 'err'); } finally { setBusy(false); } };
   const enable = () => run(async () => {
@@ -176,7 +197,7 @@ export function PushSetup({ id }) {
   return html`<${Modal} id=${id} title="Уведомления" icon="bell">
     <div class="ask">
       <p>Когда «Нудист» закрыт, новые личные сообщения, сообщения в группах, анонимные вопросы и звонки будут приходить уведомлениями. Каналы и серверы присылают только упоминания, чаты с выключенным звуком молчат.</p>
-      ${st === 'none' && html`<p><b>Здесь уведомления недоступны.</b> В приложении для Android (APK) и в старых браузерах такого механизма нет. Откройте сайт в Chrome или Яндекс Браузере, нажмите в меню «Установить приложение» и включите уведомления там.</p>`}
+      ${st === 'none' && (oldApk ? html`<p><b>Нужна новая версия приложения.</b> Уведомления в шторке появились в версии 1.3. Скачайте её и установите поверх старой: переписка и вход сохранятся.</p><a class="btn" href="/nudist.apk" download="nudist.apk"><${Icon} n="download" s=${16} /> Скачать версию 1.3</a>` : html`<p><b>Здесь уведомления недоступны.</b> Этот браузер их не поддерживает. Откройте сайт в Chrome или Яндекс Браузере, нажмите в меню «Установить приложение» и включите уведомления там. На Android проще поставить приложение со страницы /start.</p>`)}
       ${st === 'denied' && html`<p><b>Браузер запретил уведомления для этого сайта.</b> Откройте настройки сайта (значок слева от адреса) и разрешите уведомления, потом вернитесь сюда.</p>`}
       ${st === 'off' && html`<button class="btn" disabled=${busy} onClick=${enable}><${Icon} n="bell-ring" s=${16} /> Включить уведомления</button>`}
       ${st === 'on' && html`<p><b>На этом устройстве включено.</b> На каждом телефоне и компьютере уведомления включаются отдельно.</p>

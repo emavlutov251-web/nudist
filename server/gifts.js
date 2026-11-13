@@ -35,7 +35,7 @@ H['gift.send'] = (c, p) => {
   db.gifts[x.id] = x; save(); R.selfUpdate(u);
   const ch = C.openDm(u.id, o.id);
   const m = C.postMessage(ch, u.id, { type: 'service', text: `подарил(а) подарок: ${g.e} ${g.name}`, present: { id: x.id, g: g.id, e: g.e, name: g.name, price: g.price }, note: text }, { quiet: true });
-  if (!C.isOnline(o.id)) { try { require('./push').notify(o.id, { title: R.uname(u), body: `Дарит вам подарок: ${g.e} ${g.name}${text ? ' — ' + text : ''}`.slice(0, 140), tag: ch.id, url: '/' }); } catch (e) { console.error('[push]', e.message); } }
+  try { require('./push').notify(o.id, { title: R.uname(u), body: `Дарит вам подарок: ${g.e} ${g.name}${text ? ' — ' + text : ''}`.slice(0, 140), tag: ch.id, url: '/' }, C.isOnline(o.id)); } catch (e) { console.error('[push]', e.message); }
   return { id: x.id, stars: u.stars, chat: ch.id, msg: m.id };
 };
 H['gift.list'] = (c, p) => {

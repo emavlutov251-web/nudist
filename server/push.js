@@ -1,5 +1,5 @@
 // Уведомления при закрытом приложении (Web Push). Без сторонних библиотек: подпись VAPID (RFC 8292) и шифрование aes128gcm (RFC 8291) на встроенном crypto.
-// Работает в браузерах и в установленном из браузера приложении (PWA). В APK на WebView механизма push нет, там уведомлений при закрытом приложении не будет.
+// Работает в браузерах и в установленном из браузера приложении (PWA). В APK на WebView механизма push нет: для него ниже отдельная лента (GET /api/notify), которую опрашивает фоновая служба приложения.
 const crypto = require('crypto');
 const C = require('./core');
 const R = require('./rpc');
@@ -51,21 +51,71 @@ async function push(u, payload) {
 }
 const rate = new Map();      // не больше 20 уведомлений в минуту на человека
 function allowed(uid) { const t = now(), r = rate.get(uid); if (!r || t - r.t > 60000) { rate.set(uid, { t, n: 1 }); return true; } return ++r.n <= 20; }
-function notify(uid, payload) { const u = db.users[uid]; if (!u || u.deleted || !u.push || !u.push.length || !allowed(uid)) return; push(u, payload).catch(e => console.warn('[push]', e.message)); }
+// online = true: человек сейчас с открытым приложением или вкладкой, браузерный push не нужен, но в ленту телефона событие кладём:
+// приложение для Android само решает, показывать ли его (на экране оно или свёрнуто).
+function notify(uid, payload, online) { const u = db.users[uid]; if (!u || u.deleted) return; feedAdd(uid, payload); if (online || !u.push || !u.push.length || !allowed(uid)) return; push(u, payload).catch(e => console.warn('[push]', e.message)); }
+
+// ───── Лента уведомлений для приложения на Android (без сервисов Google).
+// Фоновая служба приложения держит долгий запрос GET /api/notify?since=N: сервер отвечает сразу, как только для человека
+// появилось событие, или пустым ответом через 40 секунд. Лента живёт в памяти и только у тех, чей телефон недавно спрашивал.
+const feeds = new Map();      // пользователь → { q: [{ id, title, body, tag, ts }], waiters: Set, at, tz }
+let feedSeq = 0; const nextId = () => (feedSeq = Math.max(feedSeq + 1, Date.now()));      // растёт и после перезапуска сервера
+const FEED_KEEP = 50, FEED_IDLE = 5 * 60000, FEED_WAIT = 40000;
+function feedAdd(uid, p) {
+  const f = feeds.get(uid); if (!f) return;
+  const it = { id: nextId(), title: String(p.title || 'Нудист').slice(0, 80), body: String(p.body || '').slice(0, 200), tag: String(p.tag || ''), ts: now() };
+  f.q.push(it); if (f.q.length > FEED_KEEP) f.q.splice(0, f.q.length - FEED_KEEP);
+  for (const w of [...f.waiters]) w.done([it]);
+}
+function poll(req, res, url, a, json) {
+  if (!a) return json(res, 401, { error: 'Нужна авторизация' });
+  const uid = a.u.id; let f = feeds.get(uid); if (!f) { if (feeds.size > 20000) return json(res, 503, { error: 'Слишком много устройств' }); feeds.set(uid, f = { q: [], waiters: new Set(), at: 0 }); }
+  f.at = now(); const tz = Number(url.searchParams.get('tz')); if (Number.isFinite(tz) && Math.abs(tz) <= 900) f.tz = Math.round(tz);
+  const raw = url.searchParams.get('since'), since = Number(raw);
+  if (raw === null || !Number.isFinite(since) || since <= 0) return json(res, 200, { last: nextId(), items: [] });      // первое обращение: старое не пересказываем
+  const ready = f.q.filter(x => x.id > since); if (ready.length) return json(res, 200, { last: ready[ready.length - 1].id, items: ready });
+  if (f.waiters.size >= 5) return json(res, 429, { error: 'Слишком много ожидающих запросов' });
+  const w = { done(items) { if (w.over) return; w.over = true; clearTimeout(w.t); f.waiters.delete(w); f.at = now(); try { json(res, 200, { last: items.length ? items[items.length - 1].id : since, items }); } catch (e) { /* телефон уже отключился */ } } };
+  w.t = setTimeout(() => w.done([]), FEED_WAIT); f.waiters.add(w);
+  req.on('close', () => { if (!w.over) { w.over = true; clearTimeout(w.t); f.waiters.delete(w); } });
+}
+setInterval(() => { const t = now(); for (const [uid, f] of feeds) if (!f.waiters.size && t - f.at > FEED_IDLE) feeds.delete(uid); }, 60000).unref();
+
 
 const KIND = { photo: 'Фото', video: 'Видео', voice: 'Голосовое сообщение', round: 'Кружочек', file: 'Файл', sticker: 'Стикер', gif: 'GIF', poll: 'Опрос', geo: 'Геопозиция', contact: 'Контакт', music: 'Музыка' };
 const plain = t => String(t).replace(/\*\*|__|~~|\|\||`/g, '').replace(/\s+/g, ' ').trim();
-// Сообщение человеку, у которого сейчас нет ни одного открытого соединения
-C.setOfflineHook((uid, chat, m, mention, s) => {
-  const u = db.users[uid]; if (!u || !u.push || !u.push.length || m.from === uid || (u.blocked || []).includes(m.from)) return;
-  if (s && s.mute > now() && !mention) return;
-  if ((chat.type === 'channel' || chat.server) && !mention) return;      // каналы и серверы шумные: только упоминания
-  if (m.type === 'call' && !(m.call && m.call.missed)) return;      // запись о состоявшемся звонке не повод будить телефон
+// Что написать в уведомлении о сообщении; null — уведомлять не о чем
+function describe(uid, chat, m, mention, s) {
+  const u = db.users[uid]; if (!u || m.from === uid || (u.blocked || []).includes(m.from)) return null;
+  if (s && s.mute > now() && !mention) return null;
+  if ((chat.type === 'channel' || chat.server) && !mention) return null;      // каналы и серверы шумные: только упоминания
+  if (m.type === 'call' && !(m.call && m.call.missed)) return null;      // запись о состоявшемся звонке не повод будить телефон
   const from = db.users[m.from], who = from ? from.name : 'Нудист', group = chat.type !== 'dm' && chat.type !== 'secret';
   let body = m.enc || chat.type === 'secret' ? 'Новое сообщение' : m.once ? 'Одноразовое фото или видео' : m.type === 'call' ? 'Пропущенный звонок' : m.text ? plain(m.text) : KIND[m.type] || 'Новое сообщение';
   if (group && !m.enc) body = who + ': ' + body;
-  notify(uid, { title: group ? chat.title || 'Группа' : who, body: body.slice(0, 140), tag: m.type === 'call' ? 'call' : chat.id, url: '/' });
+  return { title: group ? chat.title || 'Группа' : who, body: body.slice(0, 140), tag: m.type === 'call' ? 'call' : chat.id, url: '/' };
+}
+// Сообщение человеку, у которого сейчас нет ни одного открытого соединения: браузерный push
+C.setOfflineHook((uid, chat, m, mention, s) => {
+  const u = db.users[uid]; if (!u || !u.push || !u.push.length || !allowed(uid)) return;
+  const p = describe(uid, chat, m, mention, s); if (p) push(u, p).catch(e => console.warn('[push]', e.message));
 });
+// Любое новое сообщение: в ленту телефона, если его приложение на связи
+C.setMsgHook((uid, chat, m, mention, s) => {
+  const f = feeds.get(uid); if (!f || m.silent || m.thread) return;
+  const set = (db.users[uid] || {}).settings || {};      // те же переключатели, что в «Настройки → Уведомления»
+  if (!mention && (chat.type === 'group' ? set.notifGroup === false : (chat.type === 'dm' || chat.type === 'secret') && set.notifDm === false)) return;
+  if (quiet(set.dnd, f.tz)) return;
+  const p = describe(uid, chat, m, mention, s); if (!p) return;
+  if (set.preview === false) p.body = 'Новое сообщение';
+  feedAdd(uid, p);
+});
+// Тихие часы человека. Сервер не знает его часового пояса, поэтому телефон присылает смещение от UTC в минутах.
+function quiet(d, tz) {
+  if (!d || !d.on || !/^\d\d:\d\d$/.test(d.from || '') || !/^\d\d:\d\d$/.test(d.to || '')) return false;
+  const t = new Date(now() + (tz || 0) * 60000), cur = t.getUTCHours() * 60 + t.getUTCMinutes(), [fh, fm] = d.from.split(':').map(Number), [th, tm] = d.to.split(':').map(Number), a = fh * 60 + fm, b = th * 60 + tm;
+  return a <= b ? cur >= a && cur < b : cur >= a || cur < b;
+}
 
 H['push.key'] = () => ({ key: keys().pub });
 H['push.sub'] = (c, p) => {
@@ -76,6 +126,11 @@ H['push.sub'] = (c, p) => {
   save(); return { devices: u.push.length };
 };
 H['push.unsub'] = (c, p) => { const u = db.users[c.uid], e = str(p.endpoint, 600); u.push = (u.push || []).filter(x => x.endpoint !== e); save(); return { devices: u.push.length }; };
-H['push.test'] = async c => { const u = db.users[c.uid]; need(u.push && u.push.length, 'На этом аккаунте уведомления ещё не включены'); return push(u, { title: 'Нудист', body: 'Уведомления работают. Теперь вы ничего не пропустите.', tag: 'test', url: '/' }); };
+H['push.test'] = async (c, p) => { const u = db.users[c.uid];
+  if (p && p.app) {      // приложение для Android: уведомление уйдёт через 10 секунд, чтобы человек успел свернуть приложение
+    need(feeds.has(c.uid), 'Приложение ещё не связалось с сервером. Подождите минуту и попробуйте снова.'); require('./auth').limit('pushtest:' + c.uid, 5, 60000);
+    setTimeout(() => feedAdd(c.uid, { title: 'Нудист', body: 'Уведомления работают. Теперь вы ничего не пропустите.', tag: 'test' }), 10000).unref(); return { sent: 1, app: true };
+  }
+  need(u.push && u.push.length, 'На этом аккаунте уведомления ещё не включены'); return push(u, { title: 'Нудист', body: 'Уведомления работают. Теперь вы ничего не пропустите.', tag: 'test', url: '/' }); };
 
-module.exports = { notify, encrypt, vapid, keys };
+module.exports = { notify, poll, encrypt, vapid, keys };

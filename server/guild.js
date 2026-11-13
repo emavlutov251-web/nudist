@@ -336,7 +336,7 @@ H['call.start'] = (c, p) => {
   }
   const res = H['rtc.join'](c, p);
   const r = rooms.get(ch.id);
-  if (r.peers.size === 1) for (const u of C.membersOf(ch)) if (u !== c.uid) { emit(u, 'call.ring', { chat: ch.id, from: c.uid, video: !!p.video, user: pubUser(me, u), title: ch.title }); if (!C.conns.has(u)) require('./push').notify(u, { title: me.name, body: p.video ? 'Входящий видеозвонок' : 'Входящий звонок', tag: 'call', url: '/' }); }
+  if (r.peers.size === 1) for (const u of C.membersOf(ch)) if (u !== c.uid) { emit(u, 'call.ring', { chat: ch.id, from: c.uid, video: !!p.video, user: pubUser(me, u), title: ch.title }); require('./push').notify(u, { title: me.name, body: p.video ? 'Входящий видеозвонок' : 'Входящий звонок', tag: 'call', url: '/' }, C.conns.has(u)); }
   return res;
 };
 H['call.decline'] = (c, p) => {

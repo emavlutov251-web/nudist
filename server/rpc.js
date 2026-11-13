@@ -860,7 +860,7 @@ H['stars.send'] = (c, p) => {
   save(); selfUpdate(u); selfUpdate(o);
   const ch = C.openDm(u.id, o.id);
   const m = postMessage(ch, u.id, { type: 'service', text: `подарил(а) ${n} 🍃`, gift: n, note }, { quiet: true });
-  if (!C.isOnline(o.id)) { try { require('./push').notify(o.id, { title: uname(u), body: `Делится с вами: ${n} 🍃${note ? ' — ' + note : ''}`.slice(0, 140), tag: ch.id, url: '/' }); } catch (e) { console.error('[push]', e.message); } }
+  try { require('./push').notify(o.id, { title: uname(u), body: `Делится с вами: ${n} 🍃${note ? ' — ' + note : ''}`.slice(0, 140), tag: ch.id, url: '/' }, C.isOnline(o.id)); } catch (e) { console.error('[push]', e.message); }
   return { stars: u.stars, chat: ch.id, msg: m.id };
 };
 H['stars.history'] = c => { const u = user(c), list = (u.leafLog || []).slice(0, SHARE.keep); return { list, users: usersFor(c, list.map(r => r.to || r.from)), max: SHARE.max }; };

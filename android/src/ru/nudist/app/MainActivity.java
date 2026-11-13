@@ -16,6 +16,9 @@ import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.PowerManager;
+import android.provider.Settings;
+import android.app.NotificationManager;
 import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -23,6 +26,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.SslErrorHandler;
 import android.webkit.URLUtil;
@@ -53,7 +57,10 @@ import java.util.List;
  */
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
-    private static final int REQ_FILE = 1, REQ_PERM = 2;
+    private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
+    private static final int APP_VERSION = 13;      // 1.3: уведомления в шторке
+    /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
+    static volatile boolean visible;
     private static final int C_BG = 0xFF14251C, C_INK = 0xFFEAF3EC, C_DIM = 0xFF9DB8A8, C_LEAF = 0xFF2BB36A, C_WARN = 0xFFF0A04B;
 
     private SharedPreferences prefs;
@@ -81,14 +88,163 @@ public class MainActivity extends Activity {
                 prefs.edit().putString("server", server).apply();
             }
         }
-        if (server != null) open(server);
+        if (server != null) open(server, chatFrom(getIntent()));
         if (server == null || ACTION_CHANGE_SERVER.equals(getIntent().getAction())) showSetup(null);
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        visible = true;
+        PushService.clearShown(this);
+        PushService.start(this);      // если систему пришлось перезапустить службу или она ещё не поднята
+    }
+
+    @Override
+    protected void onStop() {
+        visible = false;
+        syncSession();      // на случай, если страница не успела сообщить о входе
+        super.onStop();
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         if (ACTION_CHANGE_SERVER.equals(intent.getAction())) showSetup(null);
+        final String chat = chatFrom(intent);
+        if (chat != null && web != null) {
+            // Нажали на уведомление, приложение уже открыто: просим мессенджер перейти в нужный чат.
+            try {
+                web.evaluateJavascript("(function(){try{var h='#c=" + chat + "';if(location.hash===h)window.dispatchEvent(new HashChangeEvent('hashchange'));else location.hash=h;}catch(e){}})()", null);
+            } catch (Throwable e) { /* страница ещё не загрузилась */ }
+        }
+    }
+
+    /** Чат из нажатого уведомления. Идентификатор проверяем: он попадает в адрес страницы. */
+    private static String chatFrom(Intent intent) {
+        if (intent == null || !PushService.ACTION_OPEN.equals(intent.getAction())) return null;
+        String chat = intent.getStringExtra(PushService.EXTRA_CHAT);
+        return chat != null && chat.matches("[A-Za-z0-9_-]{1,80}") ? chat : null;
+    }
+
+    // ───── мост для страницы: window.NudistApp
+
+    /** Через этот объект мессенджер сообщает приложению, что человек вошёл или вышел, и просит разрешения. */
+    private class Bridge {
+        @JavascriptInterface
+        public int version() {
+            return APP_VERSION;
+        }
+
+        /**
+         * Страница сообщает: человек вошёл, вышел или переключил уведомления. Ключ сеанса сюда не передаётся:
+         * приложение само читает его из главной страницы (см. syncSession). Так посторонняя вставка
+         * (мини-приложение, карта) не может подсунуть чужой ключ.
+         */
+        @JavascriptInterface
+        public void sync() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    syncSession();
+                }
+            });
+        }
+
+        /** {"version":13,"allowed":true,"battery":false}: разрешены ли уведомления и снято ли ограничение батареи. */
+        @JavascriptInterface
+        public String state() {
+            boolean allowed = true, battery = true;
+            try {
+                allowed = ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).areNotificationsEnabled();
+                battery = ((PowerManager) getSystemService(POWER_SERVICE)).isIgnoringBatteryOptimizations(getPackageName());
+            } catch (Throwable e) { /* считаем, что всё разрешено */ }
+            return "{\"version\":" + APP_VERSION + ",\"allowed\":" + allowed + ",\"battery\":" + battery + ",\"on\":" + (prefs.getString(PushService.K_TOKEN, null) != null) + "}";
+        }
+
+        @JavascriptInterface
+        public void askNotify() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    requestNotify(true);
+                }
+            });
+        }
+
+        /** Просит не усыплять приложение: иначе на спящем телефоне уведомления приходят с опозданием. */
+        @JavascriptInterface
+        public void askBattery() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())));
+                    } catch (Throwable e) {
+                        try {
+                            startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                        } catch (Throwable e2) {
+                            Toast.makeText(MainActivity.this, "Откройте настройки телефона → Батарея → Нудист → Без ограничений", Toast.LENGTH_LONG).show();
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    /** Читает ключ сеанса из хранилища главной страницы и включает или выключает службу уведомлений. */
+    private void syncSession() {
+        final String server = prefs.getString("server", null);
+        String at = web == null ? null : web.getUrl();
+        if (server == null || at == null || !(at.equals(server) || at.startsWith(server + "/"))) return;      // открыта не страница мессенджера
+        try {
+            web.evaluateJavascript(
+                "(function(){try{var t=JSON.parse(localStorage.getItem('nudist.token'));return JSON.stringify({t:typeof t==='string'?t:'',off:localStorage.getItem('nudist.app.push')==='false'})}catch(e){return ''}})()",
+                new ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String v) {
+                        try {
+                            Object raw = new org.json.JSONTokener(v).nextValue();
+                            if (!(raw instanceof String) || ((String) raw).length() == 0) return;
+                            org.json.JSONObject o = new org.json.JSONObject((String) raw);
+                            String token = o.optString("t", "");
+                            if (!server.equals(prefs.getString("server", null))) return;
+                            if (o.optBoolean("off", false) || token.length() < 8 || token.length() > 400) {
+                                prefs.edit().remove(PushService.K_TOKEN).remove(PushService.K_SINCE).apply();
+                                PushService.stop(MainActivity.this);
+                                return;
+                            }
+                            if (!token.equals(prefs.getString(PushService.K_TOKEN, null))) {
+                                prefs.edit().putString(PushService.K_TOKEN, token).remove(PushService.K_SINCE).apply();
+                                PushService.stop(MainActivity.this);      // служба прежнего аккаунта, если была
+                            }
+                            PushService.channels(MainActivity.this);
+                            if (!prefs.getBoolean("askedNotify", false)) {
+                                prefs.edit().putBoolean("askedNotify", true).apply();
+                                requestNotify(false);
+                            }
+                            PushService.start(MainActivity.this);
+                        } catch (Throwable e) { /* страница ответила не тем: оставляем как было */ }
+                    }
+                });
+        } catch (Throwable e) { /* страница ещё не готова */ }
+    }
+
+    /** Разрешение на уведомления (Android 13+). Если человек уже отказал насовсем, открываем настройки приложения. */
+    private void requestNotify(boolean openSettings) {
+        boolean allowed = ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).areNotificationsEnabled();
+        if (allowed) return;
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED
+                && (!openSettings || shouldShowRequestPermissionRationale("android.permission.POST_NOTIFICATIONS") || !prefs.getBoolean("notifyDenied", false))) {
+            requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, REQ_NOTIFY);
+            return;
+        }
+        if (!openSettings) return;
+        try {
+            startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()));
+        } catch (Throwable e) {
+            Toast.makeText(this, "Откройте настройки телефона → Приложения → Нудист → Уведомления", Toast.LENGTH_LONG).show();
+        }
     }
 
     // ───── WebView
@@ -104,8 +260,9 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setSupportMultipleWindows(false);
-        s.setUserAgentString(s.getUserAgentString() + " NudistAndroid/1.0");
+        s.setUserAgentString(s.getUserAgentString() + " NudistAndroid/1.3");
         CookieManager.getInstance().setAcceptCookie(true);
+        web.addJavascriptInterface(new Bridge(), "NudistApp");
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -259,6 +416,11 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(code, permissions, results);
+        if (code == REQ_NOTIFY) {
+            boolean ok = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
+            prefs.edit().putBoolean("notifyDenied", !ok).apply();
+            return;
+        }
         if (code != REQ_PERM || pendingRequest == null) return;
         PermissionRequest r = pendingRequest;
         pendingRequest = null;
@@ -377,10 +539,14 @@ public class MainActivity extends Activity {
 
     /** Открывает сервер и, пока страница грузится, показывает заставку: спящий сервер отвечает до минуты. */
     private void open(String server) {
+        open(server, null);
+    }
+
+    private void open(String server, String chat) {
         LinearLayout box = newPanel("loading");
         box.addView(text("🍃 Нудист", 34, C_INK, true));
         box.addView(text("Открываю…\nЕсли сервер спал, первое открытие занимает до минуты.", 16, C_DIM, false));
-        web.loadUrl(server + "/");
+        web.loadUrl(server + "/" + (chat == null ? "" : "#c=" + chat));
     }
 
     private void showSetup(String problem) {
@@ -428,6 +594,10 @@ public class MainActivity extends Activity {
                             status.setTextColor(C_WARN);
                             status.setText(error);
                             return;
+                        }
+                        if (!url.equals(prefs.getString("server", null))) {      // другой сервер — ключ сеанса от прежнего ему не отдаём
+                            prefs.edit().remove(PushService.K_TOKEN).remove(PushService.K_SINCE).apply();
+                            PushService.stop(MainActivity.this);
                         }
                         prefs.edit().putString("server", url).apply();
                         hidePanel();
