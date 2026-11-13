@@ -182,7 +182,7 @@ C.hooks.afterPost.push((chat, m) => {
   }
   // превью ссылки
   const url = (text.match(/https?:\/\/[^\s<>"')\]]+/) || [])[0];
-  if (url && db.flags.linkPreview && chat.type !== 'secret') N.linkPreview(url).then(l => { if (l && C.findMsg(chat.id, m.id) === m) { m.link = l; C.updateMsg(chat, m); } }).catch(() => {});
+  if (url && !m.link && m.via !== 'RSS' && db.flags.linkPreview && chat.type !== 'secret') N.linkPreview(url).then(l => { if (l && C.findMsg(chat.id, m.id) === m) { m.link = l; C.updateMsg(chat, m); } }).catch(() => {});
 });
 H['msg.cb'] = (c, p) => {
   const chat = R.getChat(c, p.chat), m = C.findMsg(chat.id, p.id); need(m && m.btn, 'Кнопка устарела');
@@ -266,6 +266,20 @@ async function botApi(tok, method, q) {
 }
 
 // ───── RSS → канал
+//   RSS_MAX_TEXT=30000 — сколько знаков текста новости помещается в один пост (0 — только заголовок и ссылка)
+//   RSS_KEEP=400       — сколько последних автопостов хранит канал: более старые удаляются, чтобы база не разрасталась
+const RSS_MAX_TEXT = /^\d+$/.test(process.env.RSS_MAX_TEXT || '') ? Number(process.env.RSS_MAX_TEXT) : 30000;
+const RSS_KEEP = Math.max(20, Number(process.env.RSS_KEEP) || 400);
+function rssText(it) {
+  let body = RSS_MAX_TEXT ? String(it.body || '') : '', tail = '';
+  if (body.length > RSS_MAX_TEXT) { const cut = body.lastIndexOf('\n', RSS_MAX_TEXT); body = body.slice(0, cut > RSS_MAX_TEXT * 0.6 ? cut : RSS_MAX_TEXT).trim() + '…'; tail = '\n\nОкончание — в источнике.'; }
+  return `**${it.title}**` + (body ? '\n\n' + body : '') + tail + `\n\nИсточник: ${it.link}`;
+}
+function rssCard(it, img) { let site = ''; try { site = new URL(it.link).hostname.replace(/^www\./, ''); } catch (e) { /* без подписи */ } return { url: it.link, title: it.title.slice(0, 200), site, img }; }
+function rssTrim(ch) {
+  const auto = (db.msgs[ch.id] || []).filter(m => m.via === 'RSS' || m.via === 'YouTube');
+  if (auto.length > RSS_KEEP) C.deleteMessages(ch, auto.slice(0, auto.length - RSS_KEEP).filter(m => !(ch.pinned || []).includes(m.id)).map(m => m.id));
+}
 async function pollRss() {
   for (const ch of Object.values(db.chats)) {
     if (ch.type !== 'channel' || !ch.rss || !ch.rss.length) continue;
@@ -278,7 +292,14 @@ async function pollRss() {
         const fresh = items.filter(i => !seen.has(i.guid));
         const toPost = feed.seen ? fresh.slice(0, 3).reverse() : fresh.slice(0, 1);
         const yt = /youtube\.com\/feeds\//.test(feed.src);
-        for (const it of toPost) postMessage(ch, owner, { text: `${yt ? '▶️ ' : ''}**${it.title}**\n${it.link}`, as: 'chan', via: yt ? 'YouTube' : 'RSS' });
+        for (const it of toPost) {
+          if (yt) { postMessage(ch, owner, { text: `▶️ **${it.title}**\n${it.link}`, as: 'chan', via: 'YouTube' }); continue; }
+          // новость целиком: заголовок, текст из самой ленты и ссылка на источник — читать можно прямо в канале
+          // карточка источника под текстом: картинка из ленты, а если её там нет — со страницы материала
+          const m = postMessage(ch, owner, { text: rssText(it), as: 'chan', via: 'RSS', link: it.img ? rssCard(it, it.img) : undefined });
+          if (!it.img && db.flags.linkPreview) N.linkPreview(it.link).then(l => { if (l && l.img && C.findMsg(ch.id, m.id) === m) { m.link = rssCard(it, l.img); C.updateMsg(ch, m); } }).catch(() => {});
+        }
+        rssTrim(ch);
         feed.seen = items.slice(0, 100).map(i => i.guid);
       } catch (e) { feed.err = e.message; }
       save();

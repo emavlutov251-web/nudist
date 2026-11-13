@@ -50,10 +50,10 @@ function decode(buf, ct = '') {
   if (!cs) cs = (buf.slice(0, 2048).toString('latin1').match(/charset=["']?([\w-]+)/i) || [])[1];
   try { return new TextDecoder(cs || 'utf-8').decode(buf); } catch (e) { return buf.toString('utf8'); }
 }
-const ent = s => s.replace(/&(#x?[0-9a-f]+|amp|lt|gt|quot|apos|nbsp|laquo|raquo|mdash|ndash);/gi, (m, e) => {
+const ent = s => s.replace(/&(#x?[0-9a-f]+|amp|lt|gt|quot|apos|nbsp|laquo|raquo|mdash|ndash|hellip|bdquo|ldquo|rdquo|lsquo|rsquo|shy|minus|times|thinsp|ensp|emsp|copy|deg|euro);/gi, (m, e) => {
   e = e.toLowerCase();
   if (e[0] === '#') { const n = e[1] === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10); return n > 0 && n < 0x10ffff ? String.fromCodePoint(n) : ''; }
-  return { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', laquo: '«', raquo: '»', mdash: '—', ndash: '–' }[e];
+  return { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', laquo: '«', raquo: '»', mdash: '—', ndash: '–', hellip: '…', bdquo: '„', ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', shy: '', minus: '−', times: '×', thinsp: ' ', ensp: ' ', emsp: ' ', copy: '©', deg: '°', euro: '€' }[e];
 });
 const strip = s => ent(String(s || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
 
@@ -81,6 +81,27 @@ async function feedUrl(url) {
   if (!m) throw new Error('Не удалось узнать номер канала YouTube. Вставьте ссылку вида youtube.com/channel/UC…');
   return feed(m[1]);
 }
+// Текст записи из ленты: разметку сайта превращаем в простой текст с абзацами, списками, цитатами и жирными подзаголовками.
+// Берём только то, что издание само положило в ленту, — страницу статьи не открываем и не переписываем.
+function htmlText(src) {
+  let s = String(src || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+  if (!/<[a-z!/]/i.test(s) && /&lt;\/?[a-z]/i.test(s)) s = ent(s);      // разметка, спрятанная в &lt;p&gt;
+  const inner = t => t.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  s = s.replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(script|style|figcaption|iframe|svg|noscript|form|button|video|audio|picture)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, (m, t) => { t = inner(t).replace(/\*/g, ''); return t ? `\n\n**${t}**\n\n` : '\n\n'; })
+    .replace(/<(?:strong|b)\b[^>]*>([\s\S]*?)<\/(?:strong|b)>/gi, (m, t) => { const x = inner(t); return x && !/[*<]/.test(x) && x.length < 300 ? `${/^\s/.test(t) ? ' ' : ''}**${x}**${/\s$/.test(t) ? ' ' : ''}` : t; })
+    .replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (m, t) => { const x = inner(t.replace(/<\/p>|<br\s*\/?>/gi, ' ')); return x ? `\n\n> ${x}\n\n` : '\n\n'; })
+    .replace(/<li[^>]*>/gi, '\n• ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|ul|ol|figure|section|article|tr|table|header|footer)>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '');
+  s = ent(s).replace(/\]\]>|<!\[CDATA\[/g, ' ').replace(/[ \t\u00a0\u2028]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').replace(/\*\*\s*\*\*/g, ' ').replace(/(^|\n)Блок поддержки(?=\n|$)/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+  if (!s.includes('\n\n') && s.includes('\n')) s = s.replace(/\n(?!• )/g, '\n\n');      // абзацы через одиночный перенос — раздвигаем
+  return s.replace(/\n*(?:The post .{0,300} appeared first on .{0,120}|Запись .{0,300} впервые появилась .{0,120}|Сообщение .{0,300} появились сначала на .{0,120})\.?\s*$/i, '').replace(/\n*(?:Читать (?:далее|дальше|полностью)|Read more|Continue reading)[^\n]{0,80}$/i, '').trim();
+}
+const tagBody = (b, name) => { const m = b.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, 'i')); return m ? m[1] : ''; };
 async function rssItems(url) {
   const r = await safeFetch(url, { accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml', max: 600000 });
   if (r.status !== 200) throw new Error('HTTP ' + r.status);
@@ -91,8 +112,14 @@ async function rssItems(url) {
     const title = strip((b.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1]);
     const link = strip((b.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1]) || ((b.match(/<link[^>]+href=["']([^"']+)["']/i) || [])[1] || '');
     const guid = strip((b.match(/<(?:guid|id)[^>]*>([\s\S]*?)<\/(?:guid|id)>/i) || [])[1]) || link || title;
-    if (title && /^https?:\/\//.test(link)) items.push({ title: title.slice(0, 300), link, guid });
+    if (!title || !/^https?:\/\//.test(link)) continue;
+    // текст: самый полный из того, что есть в ленте (content:encoded, content, description, summary)
+    let body = ''; for (const n of ['content:encoded', 'content', 'description', 'summary', 'media:description']) { const t = htmlText(tagBody(b, n)); if (t.length > body.length) body = t; }
+    if (body.toLowerCase().startsWith(title.toLowerCase())) body = body.slice(title.length).replace(/^[\s.:—-]+/, '');
+    const raw = ent(b.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1'));
+    const img = ((b.match(/<enclosure[^>]+url=["'](https:\/\/[^"']+)["'][^>]*type=["']image\//i) || b.match(/<enclosure[^>]+type=["']image\/[^>]+url=["'](https:\/\/[^"']+)["']/i) || b.match(/<media:(?:content|thumbnail)[^>]+url=["'](https:\/\/[^"']+\.(?:jpe?g|png|webp)[^"']*)["']/i) || raw.match(/<img[^>]+src=["'](https:\/\/[^"']+)["']/i) || [])[1] || '').replace(/&amp;/g, '&');
+    items.push({ title: title.slice(0, 300), link, guid, body, img: img.length < 500 ? img : '' });
   }
   return items;
 }
-module.exports = { safeFetch, linkPreview, rssItems, feedUrl, isPrivate };
+module.exports = { safeFetch, linkPreview, rssItems, feedUrl, htmlText, isPrivate };

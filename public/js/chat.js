@@ -9,6 +9,7 @@ import { Composer, EmojiPicker, ForwardModal } from './composer.js';
 import { GiftCard } from './gifts.js';
 import { memberOf } from './guildui.js';
 import { startCall, VoiceRoom, joinVoice, RTC } from './rtc.js';
+import { openDock, ytFind, ytDock, oldShell } from './dock.js';
 
 const KIND_LABEL = { text: 'текстовый канал', announce: 'объявления', rules: 'правила', forum: 'форум', voice: 'голосовой канал', stage: 'трибуна' };
 const TYPING = { text: 'печатает', voice: 'записывает голосовое', round: 'записывает кружочек', file: 'отправляет файл', sticker: 'выбирает стикер' };
@@ -166,6 +167,11 @@ function EditHistory({ id, chat, m }) {
   return html`<${Modal} id=${id} title="История правок" icon="history" cls="small">${!d ? html`<${Spinner} />` : html`${d.map(h => html`<div class="hist-i"><small>${fmtFull(h.ts)}</small><p>${h.text || html`<i>без текста</i>`}</p></div>`)}<div class="hist-i cur"><small>${fmtFull(m.edited)} · сейчас</small><p>${m.text}</p></div>`}<//>`;
 }
 
+// Начало длинного текста: режем по границе абзаца, чтобы не рвать разметку посреди строки
+const clipText = t => { const cut = t.lastIndexOf('\n', 1100); return t.slice(0, cut > 500 ? cut : 1000).replace(/[\s.…,;:]+$/, '') + '…'; };
+const readMin = t => { const n = Math.max(1, Math.round(t.length / 1200)); return n + ' мин чтения'; };
+// Название ролика для окна плеера: первая строка сообщения без разметки и самой ссылки
+const ytTitle = text => String(text || '').split('\n').map(l => l.replace(/https?:\/\/\S+/g, '').replace(/\*\*|__|~~|`|^▶️\s*/g, '').trim()).find(Boolean) || 'Видео с YouTube';
 function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const u = S.users[m.from], mine = m.from === S.me.id, sel = S.ui.sel;
   if (m.type === 'service' && m.present) return html`<${GiftCard} m=${m} />`;
@@ -181,6 +187,8 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const showAva = !chan || flat ? (flat ? !grouped : multi && !out && !grouped) : false, showName = !grouped && (flat || (multi && !out) || m.hook);
   const bare = (m.type === 'sticker' || m.type === 'round') && !m.reply && !m.fwd;
   const rx = m.rx ? Object.entries(m.rx) : [], text = m.type !== 'sticker' && m.type !== 'call' ? m.text : '';
+  const long = !!text && text.length > 1600;      // длинный текст (новость целиком) показываем началом, остальное — по кнопке
+  const yt = text && chat.type !== 'secret' && !oldShell() ? ytFind(text) : null;      // ролик YouTube играет прямо здесь, в окне плеера
   const onClick = e => { if (!sel) return; e.preventDefault(); e.stopPropagation(); S.ui.sel = sel.includes(m.id) ? sel.filter(x => x !== m.id) : [...sel, m.id]; bump(); };
   const menu = e => { if (e.target.closest('a[href],input,textarea') && !e.shiftKey) return; msgMenu(e, m, chat, { thread, onJump }); };
   const canThread = !thread && !m.tmp && (chat.type === 'channel' || m.tcount > 0);
@@ -194,10 +202,12 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
       ${m.title && html`<h4 class="post-t">${m.title}</h4>`}
       ${(m.rq || m.quote) && html`<button class="rq" onClick=${e => { e.stopPropagation(); m.reply && onJump(m.reply); }}><b>${m.rq ? m.rq.name : 'Цитата'}</b><span>${m.quote || (m.rq && (m.rq.text || msgPreview({ type: m.rq.type, text: '' }))) || 'сообщение'}</span></button>`}
       <${Body} m=${m} chat=${chat} list=${list} />
-      ${text && html`<div class="txt" dangerouslySetInnerHTML=${{ __html: md(text, mdOpt(chat)) }}></div>`}
+      ${text && html`<div class="txt" dangerouslySetInnerHTML=${{ __html: md(long && !m._open ? clipText(text) : text, mdOpt(chat)) }}></div>`}
+      ${long && html`<button class="txt-more" onClick=${e => { e.stopPropagation(); const el = e.currentTarget.closest('.msg'); m._open = !m._open; bump(); if (!m._open && el) setTimeout(() => el.scrollIntoView({ block: 'nearest' }), 30); }}>${m._open ? 'Свернуть' : `Читать полностью · ${readMin(text)}`}</button>`}
       ${m.bad && html`<small class="dim">Откройте чат на устройстве, где он был создан.</small>`}
       ${m._tr && html`<div class="tr"><small>шуточный перевод</small>${m._tr}</div>`}
-      ${m.link && html`<a class="lp" href=${m.link.url} target="_blank" rel="noopener noreferrer">${m.link.img && html`<img src=${m.link.img} alt="" loading="lazy" referrerpolicy="no-referrer" />`}<span><small>${m.link.site}</small><b>${m.link.title}</b>${m.link.desc && html`<i>${m.link.desc}</i>`}</span></a>`}
+      ${yt && html`<button class=${cx('ytc', yt.short && 'short')} onClick=${e => { e.stopPropagation(); openDock(ytDock(yt, ytTitle(text))); }} title="Смотреть здесь, не уходя из «Нудиста»"><img src=${`https://i.ytimg.com/vi/${yt.id}/mqdefault.jpg`} alt="" loading="lazy" referrerpolicy="no-referrer" /><span class="ytc-play"><${Icon} n="play" s=${26} /></span><span class="ytc-l">Смотреть здесь</span></button>`}
+      ${m.link && !yt && html`<a class="lp" href=${m.link.url} target="_blank" rel="noopener noreferrer">${m.link.img && html`<img src=${m.link.img} alt="" loading="lazy" referrerpolicy="no-referrer" />`}<span><small>${m.link.site}</small><b>${m.link.title}</b>${m.link.desc && html`<i>${m.link.desc}</i>`}</span></a>`}
       ${m.btn && html`<${Buttons} m=${m} chat=${chat} />`}
       ${!flat && !bare && meta}${!flat && bare && html`<span class="meta float">${meta}</span>`}
       ${rx.length > 0 && html`<div class="rxs">${rx.map(([e, us]) => html`<button class=${cx(us.includes(S.me.id) && 'my')} title=${us.slice(0, 12).map(x => userName(S.users[x])).join(', ')} onClick=${ev => { ev.stopPropagation(); react(chat, m, e); }}>${e}<b>${us.length}</b></button>`)}</div>`}
