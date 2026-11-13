@@ -495,7 +495,7 @@ function buildPayload(c, chat, p) {
     if (p.once) { need(type === 'photo' || type === 'video', 'Одноразовыми бывают только фото и видео'); need(chat.type === 'dm', 'Одноразовые фото и видео — только в личных чатах'); out.once = true; out.text = ''; }
   } else if (type === 'sticker') {
     const s = p.sticker || {}; out.type = 'sticker';
-    out.sticker = { pack: str(s.pack, 32), id: str(s.id, 32), e: str(s.e, 16), t: str(s.t, 64), bg: str(s.bg, 32), anim: str(s.anim, 16), snd: str(s.snd, 16), url: isUpload(s.url) ? s.url : undefined };
+    out.sticker = { pack: str(s.pack, 32), id: str(s.id, 32), e: str(s.e, 16), t: str(s.t, 64), bg: str(s.bg, 32), anim: str(s.anim, 16), snd: str(s.snd, 16), url: isUpload(s.url) ? s.url : undefined, thumb: isUpload(s.thumb) ? s.thumb : undefined, kind: s.kind === 'v' || s.kind === 'l' ? s.kind : undefined };
     need(out.sticker.e || out.sticker.url, 'Пустой стикер');
   } else if (type === 'loc') {
     const l = p.loc || {}; need(Math.abs(l.lat) <= 90 && Math.abs(l.lon) <= 180, 'Некорректные координаты');

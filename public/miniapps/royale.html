@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Банный рояль</title>
+<link rel="stylesheet" href="/miniapps/kit.css">
+<link rel="stylesheet" href="/miniapps/game.css">
+<link rel="stylesheet" href="/miniapps/royale.css">
+<script type="module" src="/miniapps/royale.js"></script>
+</head>
+<body class="game">
+<div class="hud"><span>👑 <b id="mine">0</b> : <b id="his">0</b></span><span class="grow center" id="time">2:00</span><button id="again" type="button">Заново</button></div>
+<div class="stage"><canvas id="cv" aria-label="Поле боя"></canvas>
+  <div class="ov" id="ov"><div class="big" id="ovE">🧖</div><h1 id="ovT">Банный рояль</h1><p id="ovP">Две бани, три башни у каждой. Выберите карту внизу и нажмите на свою половину поля: боец пойдёт ломать чужие башни. Карты стоят пар ♨️, он копится сам. Кипяток льётся куда угодно.</p><div class="row"><button id="go" type="button">В бой</button><button id="share" class="alt" type="button" hidden>В чат</button></div><small>Противник — компьютер. За победу дают листики 🍃.</small></div></div>
+<div class="bar"><div id="steam"><i></i><b>0</b></div><div id="hand"></div></div>
+</body>
+</html>

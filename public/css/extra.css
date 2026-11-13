@@ -179,3 +179,13 @@ input.share-n { font: 800 1.9em/1.2 var(--display); text-align: center; letter-s
 .pgate h2 { font-size: 1.3em; line-height: 1.2; } .pgate ul { text-align: left; padding-left: 20px; display: grid; gap: 7px; font-size: .94em; line-height: 1.4; list-style: disc; align-self: stretch; } .pgate .link { color: var(--ink2); font-size: .9em; padding: 6px; }
 .pview { position: fixed; inset: 0; z-index: 400; display: flex; flex-direction: column; background: var(--bg); padding-top: env(safe-area-inset-top); }
 .pview header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--line); } .pview iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+
+/* ───── наборы стикеров из Telegram */
+.sticker-l { position: relative; display: flex; align-items: center; justify-content: center; } .sticker-l > img { width: 100%; height: 100%; object-fit: contain; } .sticker-l > span { font-size: 3em; line-height: 1; } .sticker-l > i { position: absolute; inset: 0; display: block; } .sticker-l > i:empty { display: none; }
+video.sticker-img { background: none; pointer-events: auto; }
+.pk-groups button.pk-tg { padding: 3px; display: flex; align-items: center; justify-content: center; } .pk-groups button.pk-tg img { width: 26px; height: 26px; object-fit: contain; display: block; } .pk-groups button.pk-add { display: flex; align-items: center; justify-content: center; opacity: .8; color: var(--accent); }
+.pk-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; } .pk-h span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .pk-h a { font-weight: 400; cursor: pointer; flex: none; }
+.pack-grid { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); max-height: 46vh; overflow-y: auto; padding: 2px; }
+
+/* ───── просьба обновить приложение */
+.upd-news { margin: 0; padding-left: 20px; display: grid; gap: 4px; }

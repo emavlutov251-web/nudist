@@ -14,6 +14,7 @@ const G = require('./guild');
 const B = require('./bots');
 const Adm = require('./admin');
 require('./gifts');
+require('./tgpacks');
 const Seed = require('./seed');
 const { db, save, now, emit } = C;
 

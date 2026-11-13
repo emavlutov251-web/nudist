@@ -1,0 +1,10 @@
+/* Общая рамка для игр на холсте: полоса со счётом, сцена во весь остаток экрана, затемнённое окно «старт / конец». */
+body.game { display: flex; flex-direction: column; height: 100%; user-select: none; -webkit-user-select: none; touch-action: none; }
+.hud { display: flex; align-items: center; flex: none; padding: 7px 10px; background: var(--card); border-bottom: 1px solid var(--line); font-weight: 600; font-size: 14px; }
+.hud > * + * { margin-left: 10px; } .hud span { white-space: nowrap; } .hud .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; } .hud button { padding: 5px 10px; font-size: 13px; }
+.stage { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; background: #10161a; overflow: hidden; }
+.stage canvas { display: block; touch-action: none; }
+.ov { position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 5; background: rgba(8, 12, 16, .8); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; overflow-y: auto; }
+.ov[hidden] { display: none; } .ov > * + * { margin-top: 12px; } .ov h1 { font-size: 26px; font-weight: 700; } .ov .big { font-size: 64px; line-height: 1; } .ov p { max-width: 330px; opacity: .92; } .ov small { opacity: .7; max-width: 330px; }
+.ov button { background: #2BB36A; color: #fff; padding: 12px 22px; font-size: 16px; font-weight: 600; } .ov button.alt { background: rgba(255, 255, 255, .16); } .ov .row > * + * { margin-left: 8px; }
+.bar { flex: none; background: var(--card); border-top: 1px solid var(--line); padding: 8px; }

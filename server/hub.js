@@ -196,12 +196,16 @@ const APPS = [
   { id: 'listopad', title: 'Листопад', about: 'Тапайте по листу и зарабатывайте листики 🍃', cat: 'games', emoji: '🍃', bot: 'listopad' },
   { id: 'g2048', title: '2048', about: 'Складывайте плитки до 2048. За крупные плитки дают листики 🍃', cat: 'games', emoji: '🔢', url: '/miniapps/2048.html' },
   { id: 'saper', title: 'Сапёр', about: 'Классика из Windows. За победу — 10 🍃, за ошибку вы голый', cat: 'games', emoji: '💣', url: '/miniapps/saper.html' },
+  { id: 'royale', title: 'Банный рояль', about: 'Карточная битва на две дорожки: банщики, моржи и кипяток против чужих башен', cat: 'games', emoji: '♨️', url: '/miniapps/royale.html' },
+  { id: 'beer', title: 'Пивная битва', about: 'Кто больше выпьет и не уснёт лицом в стол. Пиво нарисованное', cat: 'games', emoji: '🍺', url: '/miniapps/beer.html' },
+  { id: 'shooter', title: 'Комариный спецназ', about: 'Шутер: отстреливайтесь листьями от комаров на нудистском пляже', cat: 'games', emoji: '🦟', url: '/miniapps/shooter.html' },
+  { id: 'rp', title: 'Нудищево РП', about: 'Жизнь в провинции: почта, завод, шаурма и мечта о «бэхе»', cat: 'games', emoji: '🏘️', url: '/miniapps/rp.html' },
   { id: 'lot', title: 'Жребий', about: 'Монетка, кубик и «кто идёт за пиццей»', cat: 'tools', emoji: '🎲', url: '/miniapps/lot.html' },
   { id: 'split', title: 'Скинемся', about: 'Делит счёт на компанию с чаевыми', cat: 'tools', emoji: '🧾', url: '/miniapps/split.html' },
 ];
 // Листики за игры. Игры идут в браузере, и проверить честность партии сервер не может,
 // поэтому главный предохранитель — потолок на день по каждой игре (как у «Листопада»).
-const EARN = { g2048: { cap: 60, what: { 128: 2, 256: 4, 512: 8, 1024: 15, 2048: 30 } }, saper: { cap: 50, what: { win: 10 } } };
+const EARN = { g2048: { cap: 60, what: { 128: 2, 256: 4, 512: 8, 1024: 15, 2048: 30 } }, saper: { cap: 50, what: { win: 10 } }, royale: { cap: 40, what: { win: 10 } }, beer: { cap: 30, what: { win: 5 } }, shooter: { cap: 30, what: { w5: 5, w10: 10 } }, rp: { cap: 30, what: { job: 2 } } };
 const earnRate = new Map();      // пользователь → { t, n }: не больше 20 наград в минуту
 H['apps.earn'] = (c, p) => {
   const u = me(c), aid = str(p.app, 16), app = Object.prototype.hasOwnProperty.call(EARN, aid) ? EARN[aid] : null; need(db.flags.stars, 'Листики временно отключены'); need(app, 'В этом приложении листики не выдают');

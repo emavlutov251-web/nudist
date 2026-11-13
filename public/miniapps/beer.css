@@ -1,0 +1,6 @@
+.duel { align-items: stretch; } .who { flex: 1; min-width: 0; text-align: center; padding: 12px 8px; transition: transform .2s, opacity .3s; } .who.out { opacity: .55; transform: rotate(-4deg); } .who.done { outline: 2px solid var(--accent); }
+.face { font-size: 54px; line-height: 1.15; } .face.gulp { animation: gulp .5s; } @keyframes gulp { 30% { transform: translateY(-8px) rotate(-14deg); } 70% { transform: translateY(2px) rotate(6deg); } }
+.nm { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .mugs { font-size: 18px; margin-top: 4px; } .vs { align-self: center; font-weight: 800; color: var(--ink2); }
+.deg { height: 8px; background: var(--hover); margin-top: 8px; } .deg i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #6ddc7b, #f0c040, #ef5350); transition: width .3s; } .who small { color: var(--ink2); font-size: 11px; }
+#log { min-height: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 15px; } #log > * + * { margin-top: 4px; }
+.small { font-size: 12px; } main button { padding: 12px 6px; }

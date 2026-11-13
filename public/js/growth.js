@@ -206,3 +206,29 @@ export function PushSetup({ id }) {
   <//>`;
 }
 export const openPush = () => openModal(PushSetup);
+
+// ───── «Вышло обновление» для приложения на Android
+// Сайт обновляется сам, а APK — нет: у кого стоит старая сборка, тому при каждом входе показываем просьбу поставить новую.
+// Какая сборка последняя, написано в /apk.json (code сверяется с тем, что отвечает приложение: NudistApp.version(); у сборок до 1.3 моста нет — это 0).
+function UpdateDlg({ id, info }) {
+  const [step, setStep] = useState(0);
+  return html`<${Modal} id=${id} title="Вышло обновление" icon="download">
+    <div class="ask">
+      <p><b>«Нудист» ${info.name} для Android.</b> У вас стоит старая версия. Обновление ставится поверх: вход и переписка сохранятся.</p>
+      ${(info.news || []).length > 0 && html`<ul class="upd-news">${info.news.map(n => html`<li>${n}</li>`)}</ul>`}
+      ${step === 1 && html`<ol class="steps"><li>Дождитесь загрузки файла nudist.apk (${info.size || 'он маленький'}).</li><li>Откройте его из шторки или из папки «Загрузки».</li><li>Нажмите «Обновить». Если телефон спросит про установку из этого источника — разрешите.</li></ol><p class="hint">Не скачивается? Откройте в браузере телефона адрес ${location.host}/start и скачайте оттуда.</p>`}
+      <div class="ask-btns"><a class="btn" href="/nudist.apk" download="nudist.apk" onClick=${() => setStep(1)}><${Icon} n="download" s=${16} /> ${step ? 'Скачать ещё раз' : 'Скачать и установить'}</a><button class="btn ghost" onClick=${() => { local.set('apk.later', Date.now()); closeModal(id); }}>Позже</button></div>
+    </div>
+  <//>`;
+}
+let updAsked = false;
+export async function checkUpdate() {
+  if (updAsked || !/ NudistAndroid\//.test(navigator.userAgent)) return; updAsked = true;
+  let have = 0; try { have = window.NudistApp && window.NudistApp.version ? Number(window.NudistApp.version()) || 0 : 0; } catch (e) { /* старая сборка */ }
+  try {
+    const info = await (await fetch('/apk.json', { cache: 'no-store' })).json();
+    if (!(Number(info.code) > have) || Date.now() - (local.get('apk.later') || 0) < 3 * 3600e3) return;      // «Позже» откладывает на три часа
+    openModal(UpdateDlg, { info });
+  } catch (e) { updAsked = false; }
+}
+on('init', () => { setTimeout(checkUpdate, 2500); });

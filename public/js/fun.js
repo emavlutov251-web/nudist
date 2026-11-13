@@ -53,10 +53,29 @@ export const PACKS = [
   { id: 'cats', name: 'Котики', icon: '😺', items: [P('c1', '😺', 'Мур', 'sand', 'bounce', 'meow'), P('c2', '😹', 'Ору', 'sun', 'wobble', 'meow'), P('c3', '🙀', 'Что?!', 'night', 'pulse', 'meow'), P('c4', '😿', 'Грустненько', 'sea', 'wobble', 'trombone'), P('c5', '😼', 'Есть план', 'leaf', 'pulse'), P('c6', '😻', 'Обожаю', 'sun', 'bounce'), P('c7', '🐈', 'Мимо проходил', 'sand', 'wobble'), P('c8', '🐈‍⬛', 'К удаче', 'night', 'spin')] },
   { id: 'react', name: 'Мемные реакции', icon: '🗿', items: [P('r1', '🗿', 'Ъ', 'night', 'pulse', 'bonk'), P('r2', '🤡', 'Это я', 'sun', 'spin', 'horn'), P('r3', '💀', 'Умер со смеху', 'night', 'wobble', 'badum'), P('r4', '🫡', 'Так точно', 'leaf', 'bounce', 'fanfare'), P('r5', '🤌', 'Белиссимо', 'sand', 'wobble'), P('r6', '🦆', 'Кря', 'sea', 'bounce', 'quack'), P('r7', '🦗', 'Тишина…', 'night', 'pulse', 'crickets'), P('r8', '👏', 'Браво', 'sun', 'bounce', 'applause')] },
 ];
+// Анимированный стикер Telegram (.tgs — сжатый Lottie). Проигрыватель и сам файл подгружаются, когда стикер появился на экране чата.
+let lottieLib = null;
+const loadLottie = () => lottieLib || (lottieLib = new Promise((ok, no) => { const s = document.createElement('script'); s.src = '/vendor/lottie.js'; s.onload = () => (window.lottie ? ok(window.lottie) : no(new Error('lottie'))); s.onerror = () => { lottieLib = null; no(new Error('lottie')); }; document.head.appendChild(s); }));
+const tgsCache = new Map();
+const tgsData = url => { if (!tgsCache.has(url)) { if (tgsCache.size > 40) tgsCache.delete(tgsCache.keys().next().value); tgsCache.set(url, fetch(url).then(r => { if (!r.ok || !r.body || !window.DecompressionStream) throw new Error('tgs'); return new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).text(); })); } return tgsCache.get(url); };
+function Lottie({ st, size, onClick }) {
+  const ref = useRef(null), [ok, setOk] = useState(false);
+  useEffect(() => { let anim = null, dead = false; setOk(false);
+    Promise.all([loadLottie(), tgsData(st.url)]).then(([lib, text]) => { if (dead || !ref.current) return; anim = lib.loadAnimation({ container: ref.current, renderer: 'svg', loop: true, autoplay: true, animationData: JSON.parse(text) }); setOk(true); }).catch(() => { tgsCache.delete(st.url); });
+    return () => { dead = true; if (anim) anim.destroy(); }; }, [st.url]);
+  return html`<div class="sticker-img sticker-l" style=${`width:${size}px;height:${size}px`} onClick=${onClick}>${!ok && (st.thumb ? html`<img src=${st.thumb} alt="стикер" />` : html`<span>${st.e || '🙂'}</span>`)}<i ref=${ref}></i></div>`;
+}
 export function Sticker({ st, size = 160, onClick, play }) {
   const [k, setK] = useState(0);
   if (!st) return null;
   const click = e => { if (onClick) return onClick(e); setK(x => x + 1); if (st.snd) sfx(st.snd); };
+  if (st.url && (st.kind || String(st.pack || '').startsWith('tg_'))) {      // стикер из набора Telegram: нажатие в чате открывает набор
+    const tap = e => { if (onClick) return onClick(e); import('./stickers.js').then(m => m.openPack(st.pack)); }, css = `width:${size}px;height:${size}px`, small = size < 100;
+    if (st.kind && small) return st.thumb ? html`<img class="sticker-img" src=${st.thumb} style=${css} alt=${st.e || 'стикер'} loading="lazy" onClick=${tap} />` : st.kind === 'v' ? html`<video class="sticker-img" src=${st.url} style=${css} muted=${true} playsinline=${true} preload="metadata" onClick=${tap}></video>` : html`<div class="sticker-img sticker-l" style=${css} onClick=${tap}><span>${st.e || '🙂'}</span></div>`;
+    if (st.kind === 'v') return html`<video class="sticker-img" src=${st.url} poster=${st.thumb} style=${css} autoplay=${true} loop=${true} muted=${true} playsinline=${true} disableRemotePlayback=${true} disablePictureInPicture=${true} onClick=${tap}></video>`;
+    if (st.kind === 'l') return html`<${Lottie} st=${st} size=${size} onClick=${tap} />`;
+    return html`<img class="sticker-img" src=${st.url} style=${css} alt=${st.e || 'стикер'} loading="lazy" onClick=${tap} />`;
+  }
   if (st.url) return html`<img class="sticker-img" src=${st.url} style=${`width:${size}px;height:${size}px`} alt="стикер" onClick=${click} />`;
   const lines = (st.t || '').split('\n');
   return html`<div class=${cx('sticker', 'bg-' + (st.bg || 'leaf'))} style=${`width:${size}px;height:${size}px;font-size:${size / 160}em`} onClick=${click} title=${st.snd ? 'Со звуком — нажмите' : st.t}>

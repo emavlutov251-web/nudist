@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Нудищево РП</title>
+<link rel="stylesheet" href="/miniapps/kit.css">
+<link rel="stylesheet" href="/miniapps/game.css">
+<link rel="stylesheet" href="/miniapps/rp.css">
+<script type="module" src="/miniapps/rp.js"></script>
+</head>
+<body class="game">
+<div class="hud"><span>💵 <b id="money">0</b> ₽</span><span>🍗 <b id="food">100</b></span><span>⚡ <b id="en">100</b></span><span class="grow" style="text-align:right">ур. <b id="lvl">1</b></span></div>
+<div class="stage"><canvas id="cv" aria-label="Город Нудищево"></canvas>
+  <div class="ov" id="ov"><div class="big">🏘️</div><h1>Нудищево РП</h1><p>Провинциальный городок, вы в нём новенький. Берите посылки на почте, крутите гайки на заводе, ешьте шаурму, копите на «Жигули», а там и на «бэху». Через дорогу — осторожно: маршрутки не тормозят.</p><div class="row"><button id="go" type="button">В город</button><button id="wipe" class="alt" type="button" hidden>Начать заново</button></div><small>Ходить: палец по экрану или WASD. Действие — кнопка внизу или пробел. Играете один: других игроков на карте нет.</small></div></div>
+<div class="bar"><div id="quest" class="dim">Найдите работу: 📦 почта или 🏭 завод.</div><div class="row"><button id="act" class="pri grow" type="button" disabled>Подойдите к зданию</button><button id="share" type="button">В чат</button></div></div>
+</body>
+</html>

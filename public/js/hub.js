@@ -239,7 +239,7 @@ function Live() {
 // ───────────────────────────── мини-приложения
 let APPS = null;
 const CATS = [['games', 'Игры', 'gamepad-2'], ['tools', 'Утилиты', 'wrench'], ['bots', 'От ботов', 'bot']];
-const TILE = { listopad: '#107C10', g2048: '#0078D7', saper: '#5C2D91', lot: '#E3008C', split: '#008272' };
+const TILE = { listopad: '#107C10', g2048: '#0078D7', saper: '#5C2D91', lot: '#E3008C', split: '#008272', royale: '#B146C2', beer: '#CA5010', shooter: '#498205', rp: '#0063B1' };
 export function launchApp(app, chatId) {
   const rec = [app.id].concat((local.get('apps.recent') || []).filter(i => i !== app.id)).slice(0, 6); local.set('apps.recent', rec);
   if (app.url) openModal(AppFrame, { app, chat: chatId || null }); else if (app.bot) openMiniApp(app.bot);

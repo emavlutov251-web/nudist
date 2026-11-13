@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Пивная битва</title>
+<link rel="stylesheet" href="/miniapps/kit.css">
+<link rel="stylesheet" href="/miniapps/beer.css">
+<script type="module" src="/miniapps/beer.js"></script>
+</head>
+<body>
+<main>
+  <div class="row duel">
+    <div class="who card" id="me"><div class="face">🙂</div><b class="nm">Вы</b><div class="mugs">🍺 × <b>0</b></div><div class="deg"><i></i></div><small>градус</small></div>
+    <div class="vs">VS</div>
+    <div class="who card" id="bot"><div class="face">🙂</div><b class="nm">Сосед</b><div class="mugs">🍺 × <b>0</b></div><div class="deg"><i></i></div><small>градус</small></div>
+  </div>
+  <div class="card center" id="log">Кто больше выпьет и не уснёт лицом в стол. После каждой кружки судьба бросает кубик.</div>
+  <div class="row"><button id="drink" class="pri grow" type="button">🍺 Пить</button><button id="snack" class="grow" type="button">🥒 Закусить</button><button id="stop" class="grow" type="button">✋ Хватит</button></div>
+  <div class="row"><button id="new" class="grow" type="button">Новый соперник</button><button id="share" class="grow" type="button">В чат</button></div>
+  <p class="dim center" id="risk"></p>
+  <p class="dim center small">Пиво нарисованное, похмелья не будет. В жизни в таком споре выигрывает тот, кто не участвует.</p>
+</main>
+</body>
+</html>
