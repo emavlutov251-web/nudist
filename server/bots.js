@@ -291,6 +291,10 @@ A.hooks.onRegister.push(u => setTimeout(() => {
   const ch = C.openDm(sysBot.id, u.id);
   postMessage(ch, sysBot.id, { text: WELCOME }, { quiet: true });
   for (const cid of db.meta.autoJoin || []) { const c = db.chats[cid]; if (c && !c.members[u.id]) { C.addToChat(c, u.id); C.emitChat(c, [u.id]); } }
+  for (const c of Object.values(db.chats)) {      // открытые каналы редакции тоже сразу в списке у новичка, чтобы там не было пусто
+    if (c.type !== 'channel' || !c.pub || c.members[u.id] || !Object.keys(c.members).some(m => c.members[m].role === 'owner' && C.isRobot(m))) continue;
+    C.addToChat(c, u.id); C.emitChat(c, [u.id]);
+  }
   for (const sid of db.meta.autoServers || []) { const s = db.servers[sid]; if (s) G.joinServer(s, u.id, false); }
   save();
 }, 30));

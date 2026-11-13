@@ -37,7 +37,7 @@ const ups = [];      // идущие загрузки: { name, p }
 
 function Music() {
   const [tab, setTabM] = useState(local.get('music.tab') || 'my'), [q, setQ] = useState(''), [d, setD] = useState(null), [pub, setPub] = useState(!!local.get('music.pub'));
-  const load = () => rpc('music.list', { tab, q }).then(r => { addUsers(r.users); if (r.mb) MB = r.mb; setD(r); }).catch(err);
+  const load = () => rpc('music.list', { tab, q }).then(r => { addUsers(r.users); if (r.mb) MB = r.mb; if (tab === 'my' && !q && !r.tracks.length && !local.get('music.tab')) return setTabM('all'); setD(r); }).catch(err);      // своей музыки ещё нет — показываем общую, а не пустой экран
   useEffect(() => { setD(null); const t = setTimeout(load, q ? 250 : 0); return () => clearTimeout(t); }, [tab, q]);
   const cur = S.player && String(S.player.id).startsWith('trk_') ? S.player.id.slice(4) : null;
   useEffect(() => { if (cur) rpc('music.play', { id: cur }).catch(() => {}); }, [cur]);

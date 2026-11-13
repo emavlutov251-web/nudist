@@ -748,12 +748,12 @@ function storyVisible(s, viewer) {
   if (s.aud === 'close' || s.aud === 'selected') return (s.list || []).includes(viewer.id);
   if (s.aud === 'except' && (s.list || []).includes(viewer.id)) return false;
   if (s.aud === 'contacts') return (a.contacts || []).includes(viewer.id);
-  return knows(a, viewer);
+  return C.isRobot(a.id) || knows(a, viewer);      // подборки редакции видны всем, остальные истории только знакомым
 }
 const storyView = (s, uid) => ({ id: s.id, user: s.user, ts: s.ts, kind: s.kind, text: s.text, bg: s.bg, media: s.media, aud: s.user === uid ? s.aud : undefined, seen: s.views.some(v => v.u === uid), views: s.user === uid ? s.views.length : undefined, items: s.items });
 H['story.list'] = (c, p) => {
   const me = user(c), t = now() - 864e5;
-  const list = Object.values(db.stories).filter(s => (p.archive ? s.user === me.id : s.ts > t) && storyVisible(s, me)).sort((a, b) => a.ts - b.ts);
+  const list = Object.values(db.stories).filter(s => (p.archive ? s.user === me.id : s.ts > t && s.ts <= now()) && storyVisible(s, me)).sort((a, b) => a.ts - b.ts);
   return { stories: list.map(s => storyView(s, c.uid)), users: usersFor(c, list.map(s => s.user)) };
 };
 H['story.post'] = (c, p) => {
@@ -764,8 +764,9 @@ H['story.post'] = (c, p) => {
   if (Array.isArray(p.items)) s.items = p.items.slice(0, 12).map(i => ({ k: i.k === 'emoji' ? 'emoji' : 'text', v: str(i.v, 80), x: int(i.x, 0, 100), y: int(i.y, 0, 100), s: int(i.s, 10, 200, 40), c: str(i.c, 20) }));
   if (kind !== 'text') { need(p.media && isUpload(p.media.url), 'Файл не загружен'); s.media = { url: p.media.url, w: int(p.media.w, 0, 20000), h: int(p.media.h, 0, 20000), dur: Math.min(60, Number(p.media.dur) || 0) || undefined }; }
   else need(s.text, 'Пустая история');
+  if (p.ts && C.canImport(me)) s.ts = int(p.ts, 1, now() + 31 * 864e5, now());      // отложенная история редакции: появится в своё время
   db.stories[s.id] = s; save();
-  for (const uid of C.conns.keys()) { const v = db.users[uid]; if (v && storyVisible(s, v)) emit(uid, 'story', { story: storyView(s, uid), user: pubUser(me, uid) }); }
+  if (s.ts <= now()) for (const uid of C.conns.keys()) { const v = db.users[uid]; if (v && storyVisible(s, v)) emit(uid, 'story', { story: storyView(s, uid), user: pubUser(me, uid) }); }
   return storyView(s, c.uid);
 };
 H['story.view'] = (c, p) => { const s = db.stories[p.id]; if (!s || !storyVisible(s, user(c)) || s.user === c.uid) return; if (!s.views.some(v => v.u === c.uid)) { s.views.push({ u: c.uid, ts: now() }); save(); emit(s.user, 'story.views', { id: s.id, views: s.views.length }); } };
