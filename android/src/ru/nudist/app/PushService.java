@@ -189,7 +189,7 @@ public class PushService extends Service {
             c.setUseCaches(false);
             c.setRequestProperty("Authorization", "Bearer " + token);
             c.setRequestProperty("Accept", "application/json");
-            c.setRequestProperty("User-Agent", "NudistAndroid-push/1.3");
+            c.setRequestProperty("User-Agent", "NudistAndroid-push/1.4");
             int code = c.getResponseCode();
             if (code != 200) return code;
             JSONObject o = new JSONObject(read(c.getInputStream()));

@@ -3,4 +3,5 @@
     <string name="app_name">Нудист</string>
     <string name="sc_server">Сменить сервер</string>
     <string name="sc_server_long">Сменить адрес сервера</string>
+    <string name="share_music">В музыку Нудиста</string>
 </resources>

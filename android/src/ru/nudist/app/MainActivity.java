@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -17,9 +18,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.PowerManager;
+import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.app.NotificationManager;
 import android.text.InputType;
+import android.util.Base64;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -46,10 +49,18 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
  * «Нудист» для Android — тонкая оболочка над веб-версией.
@@ -58,7 +69,9 @@ import java.util.List;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 13;      // 1.3: уведомления в шторке
+    private static final int APP_VERSION = 14;      // 1.4: «Поделиться» музыкой из других программ, плеер Яндекс Музыки
+    private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
+    private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
     static volatile boolean visible;
     private static final int C_BG = 0xFF14251C, C_INK = 0xFFEAF3EC, C_DIM = 0xFF9DB8A8, C_LEAF = 0xFF2BB36A, C_WARN = 0xFFF0A04B;
@@ -70,6 +83,18 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private PermissionRequest pendingRequest;
     private boolean mainFrameFailed;
+
+    /** Аудио, которым поделились с «Нудистом» из другой программы. Файл уже скопирован в кэш приложения. */
+    private static final class Shared {
+        File file;
+        String name, type;
+    }
+    private final List<Shared> shared = new ArrayList<Shared>();
+    /**
+     * Пропуск к этим файлам. Мост window.NudistApp виден и посторонним вставкам на странице (плеер Яндекса, карта),
+     * поэтому пропуск получает только главная страница — через evaluateJavascript, который во вставки не попадает.
+     */
+    private final String shareKey = randomKey();
 
     @Override
     protected void onCreate(Bundle state) {
@@ -90,6 +115,8 @@ public class MainActivity extends Activity {
         }
         if (server != null) open(server, chatFrom(getIntent()));
         if (server == null || ACTION_CHANGE_SERVER.equals(getIntent().getAction())) showSetup(null);
+        clearShareDir();      // остатки с прошлого раза
+        if (state == null) takeShare(getIntent());
     }
 
     @Override
@@ -111,6 +138,7 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         if (ACTION_CHANGE_SERVER.equals(intent.getAction())) showSetup(null);
+        takeShare(intent);
         final String chat = chatFrom(intent);
         if (chat != null && web != null) {
             // Нажали на уведомление, приложение уже открыто: просим мессенджер перейти в нужный чат.
@@ -134,6 +162,74 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public int version() {
             return APP_VERSION;
+        }
+
+        /** Страница загрузилась и спрашивает: не ждут ли файлы, которыми поделились. Ответ придёт событием nudist-share. */
+        @JavascriptInterface
+        public void shareAsk() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    announceShare();
+                }
+            });
+        }
+
+        /** Список ждущих файлов: [{i, name, size, type}]. Без верного пропуска — пусто. */
+        @JavascriptInterface
+        public String shared(String key) {
+            JSONArray a = new JSONArray();
+            if (!shareKey.equals(key)) return a.toString();
+            synchronized (shared) {
+                for (int i = 0; i < shared.size(); i++) {
+                    Shared f = shared.get(i);
+                    try {
+                        JSONObject o = new JSONObject();
+                        o.put("i", i);
+                        o.put("name", f.name);
+                        o.put("size", f.file.length());
+                        o.put("type", f.type);
+                        a.put(o);
+                    } catch (Throwable e) { /* такого файла просто не будет в списке */ }
+                }
+            }
+            return a.toString();
+        }
+
+        /** Кусок файла в base64: страница собирает из кусков файл и загружает его как обычно. */
+        @JavascriptInterface
+        public String sharedChunk(String key, int i, int off, int len) {
+            if (!shareKey.equals(key) || off < 0 || len <= 0) return "";
+            File file;
+            synchronized (shared) {
+                if (i < 0 || i >= shared.size()) return "";
+                file = shared.get(i).file;
+            }
+            RandomAccessFile in = null;
+            try {
+                in = new RandomAccessFile(file, "r");
+                if (off >= in.length()) return "";
+                byte[] buf = new byte[(int) Math.min(Math.min(len, 1 << 20), in.length() - off)];
+                in.seek(off);
+                in.readFully(buf);
+                return Base64.encodeToString(buf, Base64.NO_WRAP);
+            } catch (Throwable e) {
+                return "";
+            } finally {
+                try {
+                    if (in != null) in.close();
+                } catch (Throwable e) { /* уже закрыт */ }
+            }
+        }
+
+        /** Страница всё забрала: копии можно стереть. */
+        @JavascriptInterface
+        public void sharedDone(String key) {
+            if (!shareKey.equals(key)) return;
+            synchronized (shared) {
+                for (Shared f : shared) f.file.delete();
+                shared.clear();
+            }
         }
 
         /**
@@ -190,6 +286,142 @@ public class MainActivity extends Activity {
                 }
             });
         }
+    }
+
+    // ───── «Поделиться» → «Нудист»: аудио из любой программы попадает в «Мою музыку»
+
+    private static String randomKey() {
+        byte[] b = new byte[16];
+        new SecureRandom().nextBytes(b);
+        StringBuilder sb = new StringBuilder();
+        for (byte x : b) sb.append(String.format("%02x", x & 0xff));
+        return sb.toString();
+    }
+
+    private File shareDir() {
+        return new File(getCacheDir(), "share");
+    }
+
+    private void clearShareDir() {
+        try {
+            File[] old = shareDir().listFiles();
+            if (old != null) for (File f : old) f.delete();
+        } catch (Throwable e) { /* кэш почистит система */ }
+    }
+
+    /** Разбирает «Поделиться»: копирует аудио в кэш (пока действует разрешение на чтение) и зовёт страницу. */
+    private void takeShare(Intent intent) {
+        if (intent == null || (intent.getFlags() & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return;
+        final ArrayList<Uri> uris = new ArrayList<Uri>();
+        try {
+            String act = intent.getAction();
+            if (Intent.ACTION_SEND.equals(act)) {
+                Uri u = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+                if (u != null) uris.add(u);
+            } else if (Intent.ACTION_SEND_MULTIPLE.equals(act)) {
+                ArrayList<Uri> l = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+                if (l != null) for (Uri u : l) if (u != null) uris.add(u);
+            }
+        } catch (Throwable e) { /* чужая программа прислала что-то странное */ }
+        if (uris.isEmpty()) return;
+        Toast.makeText(this, "Забираю музыку…", Toast.LENGTH_SHORT).show();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                int ok = 0;
+                for (Uri u : uris) {
+                    synchronized (shared) {
+                        if (shared.size() >= SHARE_FILES) break;
+                    }
+                    Shared f = copyShared(u);
+                    if (f == null) continue;
+                    synchronized (shared) {
+                        shared.add(f);
+                    }
+                    ok++;
+                }
+                final int got = ok;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (got == 0) Toast.makeText(MainActivity.this, "Не получилось прочитать файл. Нужен аудиофайл до 100 МБ.", Toast.LENGTH_LONG).show();
+                        else announceShare();
+                    }
+                });
+            }
+        }, "nudist-share").start();
+    }
+
+    /** Копия одного файла. Принимаем только content://: адрес вида file:// мог бы указать на данные самого приложения. */
+    private Shared copyShared(Uri u) {
+        if (!"content".equals(u.getScheme())) return null;
+        String name = null, type = null;
+        Cursor c = null;
+        try {
+            type = getContentResolver().getType(u);
+            c = getContentResolver().query(u, new String[] { OpenableColumns.DISPLAY_NAME }, null, null, null);
+            if (c != null && c.moveToFirst() && !c.isNull(0)) name = c.getString(0);
+        } catch (Throwable e) { /* имя придумаем сами */ } finally {
+            if (c != null) c.close();
+        }
+        if (type == null) type = "audio/mpeg";
+        if (name == null || name.trim().isEmpty()) name = "Трек";
+        name = name.replaceAll("[\\\\/\\p{Cntrl}]", " ").trim();
+        if (name.length() > 150) name = name.substring(name.length() - 150);
+        if (!name.matches("(?i).*\\.(mp3|m4a|aac|ogg|oga|opus|wav|flac)$")) {
+            String ext = type.contains("mp4") || type.contains("m4a") ? "m4a" : type.contains("ogg") ? "ogg" : type.contains("opus") ? "opus" : type.contains("flac") ? "flac"
+                    : type.contains("wav") ? "wav" : type.contains("aac") ? "aac" : type.contains("mpeg") || type.contains("mp3") ? "mp3" : null;
+            if (ext != null) name = name + "." + ext;
+        }
+        File dir = shareDir();
+        dir.mkdirs();
+        File out = new File(dir, "s" + System.nanoTime());
+        InputStream in = null;
+        FileOutputStream os = null;
+        boolean good = false;
+        try {
+            in = getContentResolver().openInputStream(u);
+            if (in == null) return null;
+            os = new FileOutputStream(out);
+            byte[] buf = new byte[65536];
+            long total = 0;
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                total += n;
+                if (total > SHARE_MAX) return null;
+                os.write(buf, 0, n);
+            }
+            good = total > 0;
+        } catch (Throwable e) {
+            return null;
+        } finally {
+            try {
+                if (in != null) in.close();
+            } catch (Throwable e) { /* уже закрыт */ }
+            try {
+                if (os != null) os.close();
+            } catch (Throwable e) { /* уже закрыт */ }
+            if (!good) out.delete();
+        }
+        if (!good) return null;
+        Shared f = new Shared();
+        f.file = out;
+        f.name = name;
+        f.type = type;
+        return f;
+    }
+
+    /** Сообщает главной странице мессенджера, что её ждут файлы, и передаёт пропуск. На чужой странице молчит. */
+    private void announceShare() {
+        synchronized (shared) {
+            if (shared.isEmpty()) return;
+        }
+        final String server = prefs.getString("server", null);
+        String at = web == null ? null : web.getUrl();
+        if (server == null || at == null || !(at.equals(server) || at.startsWith(server + "/"))) return;
+        try {
+            web.evaluateJavascript("(function(){try{window.dispatchEvent(new CustomEvent('nudist-share',{detail:'" + shareKey + "'}));}catch(e){}})()", null);
+        } catch (Throwable e) { /* страница ещё грузится: она сама спросит через shareAsk() */ }
     }
 
     /** Читает ключ сеанса из хранилища главной страницы и включает или выключает службу уведомлений. */
@@ -260,7 +492,7 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setSupportMultipleWindows(false);
-        s.setUserAgentString(s.getUserAgentString() + " NudistAndroid/1.3");
+        s.setUserAgentString(s.getUserAgentString() + " NudistAndroid/1.4");
         CookieManager.getInstance().setAcceptCookie(true);
         web.addJavascriptInterface(new Bridge(), "NudistApp");
 
@@ -271,6 +503,8 @@ public class MainActivity extends Activity {
                 String server = prefs.getString("server", "");
                 String scheme = u.getScheme() == null ? "" : u.getScheme();
                 if ((scheme.equals("http") || scheme.equals("https")) && sameOrigin(u, Uri.parse(server))) return false;
+                // Вставка с другого сайта (официальный плеер Яндекс Музыки) остаётся внутри своей рамки
+                if (!request.isForMainFrame() && scheme.equals("https")) return false;
                 openExternal(u);
                 return true;
             }

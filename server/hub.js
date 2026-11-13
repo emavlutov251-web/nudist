@@ -24,7 +24,7 @@ function perDay(u, key, max, msg) {
 // ───────────────────────────── музыка
 const AUDIO_EXT = new Set(['mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'wav', 'flac']);
 const MUSIC_MAX = Number(process.env.MUSIC_MAX_TRACKS) || 300;      // треков в одной библиотеке
-const trackView = (t, u) => ({ id: t.id, title: t.title, artist: t.artist, url: t.url, dur: t.dur, size: t.size, ts: t.ts, by: t.by, pub: !!t.pub, plays: t.plays || 0, own: t.by === u.id, mine: (u.music || []).includes(t.id) });
+const trackView = (t, u) => ({ id: t.id, title: t.title, artist: t.artist, url: t.url, dur: t.dur, size: t.size, ts: t.ts, by: t.by, pub: !!t.pub, plays: t.plays || 0, own: t.by === u.id, mine: (u.music || []).includes(t.id), ext: t.ext });      // ext — трек не лежит у нас, а играет с чужого сайта (см. tunes.js)
 const cleanLib = u => { u.music = (u.music || []).filter(i => db.tracks[i] && (db.tracks[i].pub || db.tracks[i].by === u.id)); return u.music; };
 
 H['music.add'] = (c, p) => {
@@ -64,7 +64,7 @@ H['music.edit'] = (c, p) => {
 };
 H['music.del'] = (c, p) => {
   const u = me(c), t = db.tracks[str(p.id, 32)]; need(t && (t.by === u.id || isMod(u)), 'Удалять можно только свои треки');
-  delete db.tracks[t.id]; u.music = (u.music || []).filter(i => i !== t.id); C.dropUpload(t.url); save();
+  delete db.tracks[t.id]; u.music = (u.music || []).filter(i => i !== t.id); if (!t.ext) C.dropUpload(t.url); save();
 };
 H['music.play'] = (c, p) => { const t = db.tracks[str(p.id, 32)]; if (t) { t.plays = (t.plays || 0) + 1; if (t.by !== c.uid) C.markSeen(t, c.uid, 'heard'); save(); } };
 H['music.listeners'] = (c, p) => { const t = db.tracks[str(p.id, 32)]; need(t && t.by === c.uid, 'Кто слушал трек, видит только тот, кто его загрузил'); return { ...C.viewersOf(t, c.uid, 'heard'), total: t.plays || 0 }; };
@@ -280,4 +280,4 @@ H['support.close'] = (c, p) => {
   staffPing(t);
 };
 
-module.exports = { dropConn, onSupport, lives };
+module.exports = { dropConn, onSupport, lives, trackView, cleanLib, MUSIC_MAX };

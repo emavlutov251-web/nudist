@@ -34,48 +34,112 @@ const trackMsg = t => ({ id: 'trk_' + t.id, chat: null, type: 'audio', from: t.b
 const audioDur = f => new Promise(res => { const a = new Audio(); a.preload = 'metadata'; a.onloadedmetadata = () => res(isFinite(a.duration) ? a.duration : 0); a.onerror = () => res(0); setTimeout(() => res(0), 6000); a.src = URL.createObjectURL(f); });
 const AUDIO_RE = /\.(mp3|m4a|aac|ogg|oga|opus|wav|flac)$/i;
 const ups = [];      // идущие загрузки: { name, p }
+let musicReload = null;      // открыта вкладка «Музыка» — после загрузки со стороны (например, «Поделиться» на телефоне) список обновится сам
+const extMsg = it => ({ id: 'ext_' + it.key, chat: null, type: 'audio', from: S.me.id, media: { url: it.url, name: (it.s === 'rb' ? '📻 ' : it.artist ? it.artist + ' — ' : '') + it.title, dur: it.dur } });
+const GENRES = [['рок', 'rock'], ['электроника', 'electronic'], ['лоу-фай', 'lofi'], ['джаз', 'jazz'], ['хип-хоп', 'hiphop'], ['эмбиент', 'ambient'], ['классика', 'classical'], ['пианино', 'piano'], ['фолк', 'folk'], ['метал', 'metal']];
+const WAVES = [['все', ''], ['поп', 'pop'], ['рок', 'rock'], ['танцевальное', 'dance'], ['хип-хоп', 'hip-hop'], ['ретро', 'retro'], ['шансон', 'chanson'], ['джаз', 'jazz'], ['чилл', 'chillout'], ['новости', 'news']];
+// Загрузка аудиофайлов в «Мою музыку»: и из кнопки «Загрузить», и из «Поделиться» в приложении на телефоне
+export async function uploadTracks(files, pub) {
+  let ok = 0;
+  for (const f of files) {
+    if (!AUDIO_RE.test(f.name)) { toast(`«${f.name}» — не аудио. Нужен mp3, m4a, ogg, wav или flac.`, 'err'); continue; }
+    if (f.size > MB * 1048576) { toast(`«${f.name}» весит ${fmtSize(f.size)}, а предел — ${MB} МБ.`, 'err'); continue; }
+    const u = { name: f.name, p: 0 }; ups.push(u); bump();
+    try { const dur = await audioDur(f), up = await upload(f, { name: f.name, onProgress: p => { u.p = p; bump(); } }); await rpc('music.add', { media: { url: up.url, size: f.size, dur, name: f.name }, pub }); ok++; } catch (e) { err(e); }
+    ups.splice(ups.indexOf(u), 1); bump();
+  }
+  if (ok) toast(`Загружено: ${ok} ${plural(ok, ['трек', 'трека', 'треков'])}`);
+  return ok;
+}
+// Приложение на телефоне: в «Нудист» поделились аудио из другой программы. Забираем файлы у оболочки по кусочкам и кладём в «Мою музыку».
+let sharing = false, shareKey = '';
+export async function takeShared(key) {
+  const app = window.NudistApp; if (key) shareKey = key;
+  if (sharing || !app || !app.shared || !shareKey || !S.me) return;
+  let list = []; try { list = JSON.parse(app.shared(shareKey) || '[]'); } catch (e) { return; }
+  if (!list.length) return; sharing = true;
+  try {
+    openHub('music'); const files = [];
+    for (const it of list) {
+      const parts = []; let off = 0;
+      while (off < it.size) { const b = atob(app.sharedChunk(shareKey, it.i, off, 262144) || ''); if (!b.length) break; const a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); parts.push(a); off += a.length; await new Promise(r => setTimeout(r, 0)); }
+      if (off >= it.size && it.size > 0) files.push(new File(parts, it.name || 'track.mp3', { type: it.type || 'audio/mpeg' })); else toast(`«${it.name}» не удалось прочитать`, 'err');
+    }
+    try { app.sharedDone(shareKey); } catch (e) { /* не страшно */ }
+    if (files.length && await uploadTracks(files, !!local.get('music.pub'))) { local.set('music.tab', 'my'); if (musicReload) musicReload(); }
+  } finally { sharing = false; }
+}
+// Оболочка присылает событие с пропуском к файлам; пропуск получает только главная страница, вставкам с других сайтов он недоступен
+window.addEventListener('nudist-share', e => { takeShared(typeof e.detail === 'string' ? e.detail : ''); });
+on('init', () => { setTimeout(() => { try { if (window.NudistApp && window.NudistApp.shareAsk) window.NudistApp.shareAsk(); } catch (e) { /* старая сборка */ } }, 1200); });
+function YandexFrame({ id, t }) {
+  const x = t.ext, old = / NudistAndroid\//.test(navigator.userAgent) && !(window.NudistApp && window.NudistApp.version && Number(window.NudistApp.version()) >= 14);
+  return html`<${Modal} id=${id} title=${t.title} icon="music" cls="small" footer=${html`<a class="btn ghost" href=${x.page} target="_blank" rel="noopener noreferrer"><${Icon} n="external-link" s=${16} /> Открыть в Яндекс Музыке</a>`}>
+    ${old ? html`<p class="note warn">В старой версии приложения плеер Яндекса не открывается. Обновите «Нудист» или нажмите кнопку ниже — трек откроется в Яндекс Музыке.</p>`
+      : html`<iframe class="ym-frame" style=${`height:${x.kind === 'track' ? 180 : 450}px`} src=${x.frame} allow="autoplay; encrypted-media; clipboard-write" title="Плеер Яндекс Музыки"></iframe>`}
+    <p class="hint">Это официальный плеер Яндекс Музыки. Что играть целиком, а что отрывком — решает Яндекс: полные треки он обычно даёт тем, кто вошёл к нему с подпиской.</p><//>`;
+}
 
 function Music() {
   const [tab, setTabM] = useState(local.get('music.tab') || 'my'), [q, setQ] = useState(''), [d, setD] = useState(null), [pub, setPub] = useState(!!local.get('music.pub'));
+  const [net, setNet] = useState(null), [wave, setWave] = useState(''), [world, setWorld] = useState(false), [page, setPage] = useState(1), [busy, setBusy] = useState(false);
+  const outer = tab === 'find' || tab === 'radio';      // «Каталог» и «Радио» — музыка с чужих сайтов, а не наша библиотека
+  const go = t => { setQ(''); setPage(1); setTabM(t); local.set('music.tab', t); };
   const load = () => rpc('music.list', { tab, q }).then(r => { addUsers(r.users); if (r.mb) MB = r.mb; if (tab === 'my' && !q && !r.tracks.length && !local.get('music.tab')) return setTabM('all'); setD(r); }).catch(err);      // своей музыки ещё нет — показываем общую, а не пустой экран
-  useEffect(() => { setD(null); const t = setTimeout(load, q ? 250 : 0); return () => clearTimeout(t); }, [tab, q]);
+  const loadNet = () => { const ask = tab === 'find' ? rpc('tunes.find', { q: q.trim() || 'rock', page }) : rpc('tunes.radio', { q: q.trim(), tag: wave, world }); setBusy(true);
+    return ask.then(r => setNet(o => (tab === 'find' && page > 1 && o && !o.error ? { ...r, items: o.items.concat(r.items.filter(i => !o.items.some(j => j.key === i.key))) } : r))).catch(e => { if (page > 1) err(e); else setNet({ items: [], error: e.message }); }).then(() => setBusy(false)); };
+  useEffect(() => { if (outer) return; setD(null); const t = setTimeout(load, q ? 250 : 0); return () => clearTimeout(t); }, [tab, q]);
+  useEffect(() => { if (!outer || (tab === 'find' && q.trim().length === 1)) return; if (page === 1) setNet(null); const t = setTimeout(loadNet, q ? 900 : 0); return () => clearTimeout(t); }, [tab, q, wave, world, page]);
+  useEffect(() => { musicReload = () => { if (tab !== 'my') setTabM('my'); else load(); }; return () => { musicReload = null; }; });
   const cur = S.player && String(S.player.id).startsWith('trk_') ? S.player.id.slice(4) : null;
   useEffect(() => { if (cur) rpc('music.play', { id: cur }).catch(() => {}); }, [cur]);
-  const play = t => playAudio(trackMsg(t), d.tracks.map(trackMsg));
-  const add = async () => {
-    const files = (await pickFile('audio/*,.mp3,.m4a,.aac,.ogg,.opus,.wav,.flac', true)) || []; let ok = 0;
-    for (const f of files) {
-      if (!AUDIO_RE.test(f.name)) { toast(`«${f.name}» — не аудио. Нужен mp3, m4a, ogg, wav или flac.`, 'err'); continue; }
-      if (f.size > MB * 1048576) { toast(`«${f.name}» весит ${fmtSize(f.size)}, а предел — ${MB} МБ.`, 'err'); continue; }
-      const u = { name: f.name, p: 0 }; ups.push(u); bump();
-      try { const dur = await audioDur(f), up = await upload(f, { name: f.name, onProgress: p => { u.p = p; bump(); } }); await rpc('music.add', { media: { url: up.url, size: f.size, dur, name: f.name }, pub }); ok++; } catch (e) { err(e); }
-      ups.splice(ups.indexOf(u), 1); bump();
-    }
-    if (ok) { toast(`Загружено: ${ok} ${plural(ok, ['трек', 'трека', 'треков'])}`); if (tab !== 'my') setTabM('my'); else load(); }
+  const play = t => (t.ext && t.ext.s === 'ym' ? openModal(YandexFrame, { t }) : playAudio(trackMsg(t), d.tracks.filter(x => x.url).map(trackMsg)));
+  const playNet = it => playAudio(extMsg(it), net.items.map(extMsg));
+  const keepNet = it => rpc('tunes.keep', { key: it.key }).then(() => { setNet(o => ({ ...o, items: o.items.map(i => (i.key === it.key ? { ...i, mine: true } : i)) })); toast(it.s === 'rb' ? 'Станция добавлена в вашу музыку' : 'Добавлено в вашу музыку'); }).catch(err);
+  const yandex = async () => {
+    const link = await promptDlg({ title: 'Ссылка из Яндекс Музыки', label: 'Трек, альбом или плейлист', placeholder: 'https://music.yandex.ru/album/…/track/…', hint: 'В Яндекс Музыке нажмите «Поделиться» → «Скопировать ссылку» и вставьте её сюда. В «Нудисте» появится официальный плеер Яндекса: сам файл мы не копируем.' }); if (!link) return;
+    const title = await promptDlg({ title: 'Как подписать', label: 'Название (можно оставить пустым)', placeholder: 'Исполнитель — трек' });
+    rpc('tunes.yandex', { link, title: title || '' }).then(() => { toast('Добавлено в вашу музыку'); if (tab !== 'my') go('my'); else load(); }).catch(err);
   };
+  const add = async () => { const files = (await pickFile('audio/*,.mp3,.m4a,.aac,.ogg,.opus,.wav,.flac', true)) || []; if (await uploadTracks(files, pub)) { if (tab !== 'my') go('my'); else load(); } };
   const patch = (t, x) => setD(o => ({ ...o, tracks: o.tracks.map(i => (i.id === t.id ? { ...i, ...x } : i)) }));
   const menu = (e, t) => showMenu(e, [
-    S.ui.chat && S.chats[S.ui.chat] && S.chats[S.ui.chat].type !== 'secret' && { icon: 'send', label: 'Отправить в открытый чат', run: () => sendPayload(S.ui.chat, { type: 'audio', media: { url: t.url, size: t.size, dur: t.dur, name: trackMsg(t).media.name + '.' + t.url.split('.').pop(), mime: 'audio/mpeg' } }).then(() => toast('Трек отправлен в чат')).catch(err) },
+    t.ext && t.ext.page && { icon: 'external-link', label: t.ext.s === 'ym' ? 'Открыть в Яндекс Музыке' : t.ext.s === 'rb' ? 'Сайт станции' : 'Страница трека у автора', run: () => window.open(t.ext.page, '_blank', 'noopener') },
+    t.ext && S.ui.chat && S.chats[S.ui.chat] && S.chats[S.ui.chat].type !== 'secret' && { icon: 'send', label: 'Отправить ссылку в открытый чат', run: () => sendPayload(S.ui.chat, { type: 'text', text: '🎵 ' + trackMsg(t).media.name + '\n' + (t.ext.page || t.url) }).then(() => toast('Ссылка отправлена в чат')).catch(err) },
+    !t.ext && S.ui.chat && S.chats[S.ui.chat] && S.chats[S.ui.chat].type !== 'secret' && { icon: 'send', label: 'Отправить в открытый чат', run: () => sendPayload(S.ui.chat, { type: 'audio', media: { url: t.url, size: t.size, dur: t.dur, name: trackMsg(t).media.name + '.' + t.url.split('.').pop(), mime: 'audio/mpeg' } }).then(() => toast('Трек отправлен в чат')).catch(err) },
     !t.own && (t.mine ? { icon: 'x', label: 'Убрать из моей музыки', run: () => rpc('music.save', { id: t.id, on: false }).then(() => (tab === 'my' ? load() : patch(t, { mine: false }))).catch(err) } : { icon: 'plus', label: 'Добавить в мою музыку', run: () => rpc('music.save', { id: t.id }).then(() => { patch(t, { mine: true }); toast('Добавлено в вашу музыку'); }).catch(err) }),
     t.own && { icon: 'pencil', label: 'Название и исполнитель', run: async () => { const title = await promptDlg({ title: 'Название трека', label: 'Название', value: t.title }); if (!title) return; const artist = await promptDlg({ title: 'Исполнитель', label: 'Исполнитель', value: t.artist }); rpc('music.edit', { id: t.id, title, artist: artist == null ? t.artist : artist }).then(r => patch(t, r)).catch(err); } },
     t.own && { icon: 'eye', label: 'Кто слушал', run: () => openModal(Viewers, { title: 'Кто слушал трек', method: 'music.listeners', target: t.id, none: 'Пока никто не слушал. Выложите трек в «Общую волну», если он ещё не там.' }) },
     t.own && { icon: t.pub ? 'lock' : 'globe', label: t.pub ? 'Скрыть из общей волны' : 'Выложить в общую волну', run: () => rpc('music.edit', { id: t.id, pub: !t.pub }).then(r => patch(t, r)).catch(err) },
-    (t.own || isStaff()) && '-', (t.own || isStaff()) && { icon: 'trash-2', label: 'Удалить трек', danger: true, run: async () => { if (await confirmDlg({ title: 'Удалить трек?', text: `«${t.title}» исчезнет у всех, кто его добавил, а файл сотрётся с сервера.`, ok: 'Удалить', danger: true })) rpc('music.del', { id: t.id }).then(load).catch(err); } },
+    (t.own || isStaff()) && '-', (t.own || isStaff()) && { icon: 'trash-2', label: 'Удалить трек', danger: true, run: async () => { if (await confirmDlg({ title: 'Удалить трек?', text: t.ext ? `«${t.title}» исчезнет из вашей музыки и у всех, кто добавил его у вас.` : `«${t.title}» исчезнет у всех, кто его добавил, а файл сотрётся с сервера.`, ok: 'Удалить', danger: true })) rpc('music.del', { id: t.id }).then(load).catch(err); } },
   ].filter(Boolean), { anchor: e.currentTarget });
   return html`<div class="hub-pad music">
     <div class="hub-bar">
-      <div class="seg"><button class=${cx(tab === 'my' && 'on')} onClick=${() => { setTabM('my'); local.set('music.tab', 'my'); }}>Моя музыка</button><button class=${cx(tab === 'all' && 'on')} onClick=${() => { setTabM('all'); local.set('music.tab', 'all'); }}>Общая волна</button></div>
-      <label class="search"><${Icon} n="search" s=${16} /><input value=${q} placeholder="Трек или исполнитель" onInput=${e => setQ(e.target.value)} /></label>
+      <div class="seg mus-seg"><button class=${cx(tab === 'my' && 'on')} onClick=${() => go('my')}>Моя музыка</button><button class=${cx(tab === 'all' && 'on')} onClick=${() => go('all')}>Общая волна</button><button class=${cx(tab === 'find' && 'on')} onClick=${() => go('find')}>Каталог</button><button class=${cx(tab === 'radio' && 'on')} onClick=${() => go('radio')}>Радио</button></div>
+      <label class="search"><${Icon} n="search" s=${16} /><input value=${q} placeholder=${tab === 'find' ? 'Жанр или исполнитель, лучше по-английски' : tab === 'radio' ? 'Название станции' : 'Трек или исполнитель'} onInput=${e => { setPage(1); setQ(e.target.value); }} /></label>
       <button class="btn" onClick=${add}><${Icon} n="upload" s=${16} /> Загрузить</button>
+      <button class="btn ghost" onClick=${yandex} title="Добавить трек, альбом или плейлист по ссылке из Яндекс Музыки"><${Icon} n="link" s=${16} /> Из Яндекса</button>
     </div>
-    <${Toggle} label="Новые треки сразу выкладывать в «Общую волну»" hint="Выключено — трек слышите только вы. Меняется потом в меню трека" on=${pub} onChange=${v => { setPub(v); local.set('music.pub', v); }} />
+    ${!outer && html`<${Toggle} label="Новые треки сразу выкладывать в «Общую волну»" hint="Выключено — трек слышите только вы. Меняется потом в меню трека" on=${pub} onChange=${v => { setPub(v); local.set('music.pub', v); }} />`}
     ${ups.map(u => html`<div class="up-row"><${Icon} n="upload" s=${15} /><span>${u.name}</span><i><b style=${`width:${Math.round(u.p * 100)}%`}></b></i><small>${Math.round(u.p * 100)}%</small></div>`)}
-    ${!d ? html`<${Spinner} />` : !d.tracks.length ? html`<${Empty} icon="music" title=${q ? 'Ничего не нашлось' : tab === 'my' ? 'Тут пока тихо' : 'В общей волне пусто'} text=${q ? 'Попробуйте другое слово.' : tab === 'my' ? `Загрузите свои mp3 — и слушайте их с любого устройства. Подходят ещё m4a, ogg, wav и flac, до ${MB} МБ каждый.` : 'Никто ещё ничего не выложил. Станьте первым диджеем пляжа.'}>${!q && html`<button class="btn" onClick=${add}><${Icon} n="upload" s=${16} /> Загрузить музыку</button>`}<//>` : html`
+    ${outer && html`
+      <div class="chips mus-chips">${tab === 'find' ? GENRES.map(([n, v]) => html`<button class=${cx('chip', (q.trim() || 'rock') === v && 'on')} onClick=${() => { setPage(1); setQ(v); }}>${n}</button>`)
+        : html`${WAVES.map(([n, v]) => html`<button class=${cx('chip', wave === v && 'on')} onClick=${() => setWave(v)}>${n}</button>`)}<button class=${cx('chip', world && 'on')} onClick=${() => setWorld(!world)} title="Искать станции не только в России"><${Icon} n="globe" s=${13} /> весь мир</button>`}</div>
+      ${!net ? html`<${Spinner} />` : net.error ? html`<${Empty} icon="refresh-cw" title="Не получилось" text=${net.error}><button class="btn" onClick=${loadNet}>Повторить</button><//>` : !net.items.length ? html`<${Empty} icon=${tab === 'find' ? 'music' : 'radio'} title="Ничего не нашлось" text=${tab === 'find' ? 'В каталоге музыка независимых авторов со свободными лицензиями. Попробуйте жанр по-английски: rock, lofi, piano.' : 'Попробуйте другое название или включите «весь мир».'} />` : html`
+        <div class="trk-list" role="list">${net.items.map((it, i) => { const on = S.player && S.player.id === 'ext_' + it.key; return html`<div role="listitem" key=${it.key} class=${cx('trk', on && 'on')} onDblClick=${() => playNet(it)}>
+          <button class="trk-p" onClick=${() => playNet(it)} title=${on && S.player.on ? 'Пауза' : 'Слушать'}>${on ? html`<${Icon} n=${S.player.on ? 'pause' : 'play'} s=${17} />` : html`<span class="trk-n">${i + 1}</span><${Icon} n="play" s=${17} />`}</button>
+          <div class="trk-m" onClick=${() => playNet(it)}><b>${it.title}</b><small>${it.artist}${it.s === 'ov' ? ` · ${it.from}${it.lic ? ' · ' + it.lic : ''}` : it.kbps ? ` · ${it.kbps} кбит/с` : ''}</small></div>
+          ${it.page && html`<a class="ib sm" href=${it.page} target="_blank" rel="noopener noreferrer" title=${it.s === 'ov' ? 'Страница трека у автора' : 'Сайт станции'}><${Icon} n="external-link" s=${16} /></a>`}
+          <span class="trk-d">${it.dur ? fmtDur(it.dur) : it.s === 'rb' ? 'эфир' : '—'}</span>
+          ${it.mine ? html`<span class="ib sm" title="Уже в вашей музыке"><${Icon} n="check" s=${17} /></span>` : html`<button class="ib sm" title="Добавить в мою музыку" onClick=${() => keepNet(it)}><${Icon} n="plus" s=${17} /></button>`}</div>`; })}</div>
+        ${tab === 'find' && net.more && html`<div class="center"><button class="btn ghost" disabled=${busy} onClick=${() => setPage(page + 1)}>Показать ещё</button></div>`}
+        <p class="hint center">${tab === 'find' ? 'Музыка играет прямо с сайтов авторов (Jamendo, Wikimedia Commons) по свободным лицензиям — у каждого трека указаны автор, лицензия и ссылка. Поиск через Openverse.' : 'Станции из открытого справочника Radio Browser. Звук идёт напрямую со станции; если молчит — станция легла, попробуйте другую.'}</p>`}`}
+    ${outer ? null : !d ? html`<${Spinner} />` : !d.tracks.length ? html`<${Empty} icon="music" title=${q ? 'Ничего не нашлось' : tab === 'my' ? 'Тут пока тихо' : 'В общей волне пусто'} text=${q ? 'Попробуйте другое слово.' : tab === 'my' ? `Загрузите свои mp3 — и слушайте их с любого устройства. Подходят ещё m4a, ogg, wav и flac, до ${MB} МБ каждый. А можно ничего не загружать: найдите музыку в каталоге или включите радио.` : 'Никто ещё ничего не выложил. Станьте первым диджеем пляжа.'}>${!q && html`<button class="btn" onClick=${add}><${Icon} n="upload" s=${16} /> Загрузить музыку</button><button class="btn ghost" onClick=${() => go('find')}><${Icon} n="search" s=${16} /> Каталог</button><button class="btn ghost" onClick=${() => go('radio')}><${Icon} n="radio" s=${16} /> Радио</button>`}<//>` : html`
       <div class="trk-list" role="list">${d.tracks.map((t, i) => { const on = cur === t.id; return html`<div role="listitem" key=${t.id} class=${cx('trk', on && 'on')} onDblClick=${() => play(t)}>
         <button class="trk-p" onClick=${() => play(t)} title=${on && S.player.on ? 'Пауза' : 'Слушать'}>${on ? html`<${Icon} n=${S.player.on ? 'pause' : 'play'} s=${17} />` : html`<span class="trk-n">${i + 1}</span><${Icon} n="play" s=${17} />`}</button>
-        <div class="trk-m" onClick=${() => play(t)}><b>${t.title}</b><small>${t.artist}${tab === 'all' && !t.own ? ' · загрузил(а) ' + userName(who(t.by)) : ''}</small></div>
+        <div class="trk-m" onClick=${() => play(t)}><b>${t.ext && t.ext.s === 'rb' ? '📻 ' : ''}${t.title}</b><small>${t.artist}${t.ext && t.ext.s === 'ov' ? ` · ${t.ext.from}${t.ext.lic ? ' · ' + t.ext.lic : ''}` : ''}${tab === 'all' && !t.own ? (t.ext ? ' · добавил(а) ' : ' · загрузил(а) ') + userName(who(t.by)) : ''}</small></div>
         ${t.pub ? html`<span class="trk-tag" title="Трек в общей волне"><${Icon} n="globe" s=${13} /> ${fmtNum(t.plays)}</span>` : html`<span class="trk-tag" title="Трек виден только вам"><${Icon} n="lock" s=${13} /></span>`}
-        <span class="trk-d">${t.dur ? fmtDur(t.dur) : '—'}</span>
+        <span class="trk-d">${t.dur ? fmtDur(t.dur) : t.ext && t.ext.s === 'rb' ? 'эфир' : t.ext && t.ext.s === 'ym' ? 'Яндекс' : '—'}</span>
         ${!t.own && !t.mine && html`<button class="ib sm" title="Добавить в мою музыку" onClick=${() => rpc('music.save', { id: t.id }).then(() => { patch(t, { mine: true }); toast('Добавлено в вашу музыку'); }).catch(err)}><${Icon} n="plus" s=${17} /></button>`}
         <button class="ib sm" title="Ещё" onClick=${e => menu(e, t)}><${Icon} n="ellipsis" s=${17} /></button></div>`; })}</div>
       <p class="hint center">${d.total} ${plural(d.total, ['трек', 'трека', 'треков'])}${tab === 'my' ? ` из ${d.max} возможных` : ''}. Загружайте только то, на что у вас есть права.</p>`}

@@ -118,3 +118,9 @@ article.post footer { font-size: inherit; color: inherit; }
 .feed-tabs button { padding-left: 6px; padding-right: 6px; }
 .vw-list { display: flex; flex-direction: column; } .vw { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 8px; border-radius: 4px; text-align: left; } .vw:hover { background: var(--hover); }
 .vw b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; } .vw small { flex: none; color: var(--ink3); } .vw b .badge { vertical-align: -2px; }
+
+/* музыка из сети: каталог, радио, плеер Яндекса */
+.mus-chips { margin: 10px 0 6px; } .mus-chips .chip svg { vertical-align: -2px; margin-right: 2px; }
+.ym-frame { display: block; width: 100%; border: 0; border-radius: 8px; background: var(--hover); }
+.music .trk a.ib { display: inline-flex; align-items: center; justify-content: center; color: var(--ink3); }
+@media (max-width: 640px) { .hub-bar .mus-seg { flex: 1 1 100%; overflow-x: auto; } .hub-bar .mus-seg button { padding-left: 8px; padding-right: 8px; font-size: .92em; } .music .trk a.ib { display: none; } }

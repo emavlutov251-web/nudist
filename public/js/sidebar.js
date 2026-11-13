@@ -1,5 +1,5 @@
 // Левая часть: рейка серверов, список чатов с папками и историями, каналы сервера, поиск.
-import { html, useState, useEffect, useRef, useMemo, S, bump, rpc, call, toast, Icon, Logo, Avatar, ChatAvatar, Badges, cx, showMenu, openModal, chatInfo, msgPreview, fmtShort, isMuted, userName, lastSeen, kindIcon, setSetting, debounce, addUsers, Empty, Spinner, local, plural, fmtNum, md, confirmDlg, promptDlg, fmtFull, openAdmin } from './lib.js';
+import { html, useState, useEffect, useRef, useMemo, S, bump, rpc, call, toast, Icon, Logo, Avatar, ChatAvatar, Badges, cx, showMenu, openModal, chatInfo, msgPreview, fmtShort, isMuted, userName, lastSeen, kindIcon, setSetting, debounce, addUsers, Empty, Spinner, local, plural, fmtNum, md, confirmDlg, promptDlg, fmtFull, openAdmin, Modal, closeModal } from './lib.js';
 import { openChat, openUser, logout, accounts, switchAccount, addAccount, totalUnread } from './store.js';
 import { CreateChat, ContactsModal, showProfile, StatusDlg, BotsCatalog, StarsModal, chatActions, JoinPreview, CallsModal, FolderEditor } from './panels.js';
 import { CreateServer, Discover, openServerSettings, ChannelDlg, EventsModal, InviteModal, RoleMsgDlg } from './guildui.js';
@@ -144,6 +144,7 @@ function HomeSidebar() {
     '-',
     { icon: 'users', label: 'Новая группа', run: () => openModal(CreateChat, { type: 'group' }) },
     { icon: 'megaphone', label: 'Новый канал', run: () => openModal(CreateChat, { type: 'channel' }) },
+    { icon: 'server', label: 'Новый сервер', run: () => openModal(CreateServer) },
     { icon: 'lock', label: 'Секретный чат', run: () => openModal(ContactsModal, { secret: true }) },
     '-',
     { icon: 'bookmark', label: 'Избранное', run: () => openUser(S.me.id) },
@@ -160,7 +161,7 @@ function HomeSidebar() {
     <header class="side-h">
       <button class="ib" onClick=${menu} aria-label="Меню"><${Icon} n="menu" /></button>
       <label class="search"><${Icon} n="search" s=${17} /><input id="search" value=${q} placeholder="Поиск (Ctrl+K)" onInput=${e => setQ(e.target.value)} onFocus=${() => setFocus(true)} onBlur=${() => setTimeout(() => setFocus(false), 200)} onKeyDown=${e => e.key === 'Escape' && (setQ(''), e.target.blur())} autocomplete="off" />${q && html`<button class="ib sm" onClick=${() => setQ('')} aria-label="Очистить"><${Icon} n="x" s=${15} /></button>`}</label>
-      <button class="ib" title="Новый чат" onClick=${() => openModal(ContactsModal)}><${Icon} n="square-pen" /></button>
+      <button class="ib" title="Создать: чат, группу, канал или сервер" aria-label="Создать" onClick=${() => openModal(CreateMenu)}><${Icon} n="square-pen" /></button>
     </header>
     ${q.trim() ? html`<div class="side-b"><${SearchView} q=${q.trim()} /></div>` : focus && (S.settings.searchHistory || []).length ? html`<div class="side-b"><h4 class="sh">Недавние запросы <a onClick=${() => setSetting({ searchHistory: [] })}>очистить</a></h4>${S.settings.searchHistory.map(h => html`<button class="hist-i" onMouseDown=${e => { e.preventDefault(); setQ(h); }}><${Icon} n="history" s=${16} />${h}</button>`)}</div>` : html`
       ${!S.ui.archive && html`<${StoriesRow} />`}
@@ -168,7 +169,7 @@ function HomeSidebar() {
       <div class="side-b" role="list">
         ${!S.ui.archive && archived.length > 0 && fid === 'all' && html`<button class="ci arch" onClick=${() => { S.ui.archive = true; bump(); }}><span class="ava" style="width:48px;height:48px;background:var(--hover);color:var(--ink2)"><${Icon} n="archive" s=${22} /></span><span class="ci-m"><span class="ci-t"><b>Архив</b></span><span class="ci-p"><span>${archived.map(c => chatInfo(c).title).join(', ')}</span>${archived.reduce((a, c) => a + (c.unread || 0), 0) > 0 && html`<b class="cnt mute">${archived.reduce((a, c) => a + (c.unread || 0), 0)}</b>`}</span></span></button>`}
         ${list.map(c => html`<${ChatItem} key=${c.id} chat=${c} />`)}
-        ${!list.length && html`<${Empty} icon=${S.ui.archive ? 'archive' : 'message-circle'} title=${S.ui.archive ? 'Архив пуст' : 'Здесь пока голо'} text=${S.ui.archive ? 'Чаты из архива возвращаются сами, когда в них пишут.' : fid === 'all' ? 'Найдите людей через поиск или создайте группу в меню.' : 'В этой папке нет чатов.'} />`}
+        ${!list.length && html`<${Empty} icon=${S.ui.archive ? 'archive' : 'message-circle'} title=${S.ui.archive ? 'Архив пуст' : 'Здесь пока голо'} text=${S.ui.archive ? 'Чаты из архива возвращаются сами, когда в них пишут.' : fid === 'all' ? 'Найдите людей через поиск или заведите свою группу, канал или сервер.' : 'В этой папке нет чатов.'}>${!S.ui.archive && fid === 'all' && html`<button class="btn" onClick=${() => openModal(CreateMenu)}><${Icon} n="plus" s=${16} /> Создать</button>`}<//>`}
       </div>`}
     <${MeBar} />
   </aside>`;
@@ -232,4 +233,18 @@ function ServerSidebar({ s }) {
     <${MeBar} />
   </aside>`;
 }
+// ═════ «Создать»: любой человек может завести свою группу, канал или сервер — никаких особых прав не нужно ═════
+const MAKE = [
+  ['user', 'Написать человеку', 'Найти по имени или @username и начать личный чат', () => openModal(ContactsModal)],
+  ['users', 'Своя группа', 'Общий чат для друзей, класса или двора. Вы — владелец: зовёте людей и назначаете админов', () => openModal(CreateChat, { type: 'group' })],
+  ['megaphone', 'Свой канал', 'Вы пишете — подписчики читают. Можно сделать публичным, со ссылкой', () => openModal(CreateChat, { type: 'channel' })],
+  ['server', 'Свой сервер', 'Как в Discord: текстовые и голосовые комнаты, роли, события', () => openModal(CreateServer)],
+  ['lock', 'Секретный чат', 'Переписка со сквозным шифрованием для двоих', () => openModal(ContactsModal, { secret: true })],
+];
+export function CreateMenu({ id }) {
+  return html`<${Modal} id=${id} title="Создать" icon="square-pen" cls="small">
+    <div class="make-list">${MAKE.map(([ic, t, d, run]) => html`<button class="make-i" onClick=${() => { closeModal(id); run(); }}><span class="make-ic"><${Icon} n=${ic} s=${20} /></span><span class="make-m"><b>${t}</b><small>${d}</small></span><${Icon} n="chevron-right" s=${16} /></button>`)}</div>
+    <p class="hint">Создавать может каждый, бесплатно и сколько угодно. Вы становитесь владельцем и сами решаете, кого пускать.</p><//>`;
+}
+
 export function Sidebar() { const s = S.servers[S.ui.server]; return s ? html`<${ServerSidebar} key=${s.id} s=${s} />` : html`<${HomeSidebar} />`; }
