@@ -89,7 +89,7 @@ const PRIV = [['phone', 'Номер телефона'], ['lastSeen', 'Время
 function Privacy() {
   const me = S.me, p = me.privacy || {}, blocked = (me.blocked || []).map(id => S.users[id] || { id });
   return html`<div class="form">
-    <p class="hint">В «Нудисте» все на виду — кроме того, что вы решите прикрыть.</p>
+    <p class="hint">В «Нудисте» все на виду — кроме того, что вы решите прикрыть. Что и где хранится, написано в <a href="/privacy" target="_blank" rel="noopener">политике конфиденциальности</a>.</p>
     ${PRIV.map(([k, l]) => html`<${Sel} label=${l} value=${p[k] || 'all'} opts=${[['all', 'Все'], ['contacts', 'Мои контакты'], ['none', 'Никто']]} onChange=${v => call('me.privacy', { [k]: v })} />`)}
     <${Toggle} label="Закрытый профиль" hint="«О себе», ссылки и город видны только вашим контактам" on=${!!me.private} onChange=${v => call('me.update', { private: v })} />
     <h5>Двухфакторная защита</h5>

@@ -1,6 +1,6 @@
 // Точка входа: экран входа, каркас приложения, глобальные клавиши и маршруты.
 import { html, render, useState, useEffect, useRef, S, bump, useStore, http, rpc, call, toast, Icon, Logo, Avatar, cx, closeMenu, closeModal, confirmDlg, local, openModal, userName, applyTheme, Spinner } from './lib.js';
-import { boot, login, openChat, closeChat, onReady, accounts, switchAccount, openUser } from './store.js';
+import { boot, login, logout, openChat, closeChat, onReady, accounts, switchAccount, openUser } from './store.js';
 import { BossScreen, funKeys, DAILY_FACTS, sfx } from './fun.js';
 import { Rail, Sidebar } from './sidebar.js';
 import { Main } from './chat.js';
@@ -27,6 +27,26 @@ function swSetup() {
 }
 if (document.readyState === 'complete') swSetup(); else addEventListener('load', swSetup);
 
+// ═════ Политика конфиденциальности ═════
+// Полный текст — отдельная страница /privacy. Показываем её во фрейме поверх приложения: так она открывается и в APK, и не сбрасывает форму регистрации.
+function PolicyView({ onClose }) {
+  useEffect(() => { const k = e => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }; addEventListener('keydown', k, true); return () => removeEventListener('keydown', k, true); }, []);
+  return html`<div class="pview" role="dialog" aria-modal="true" aria-label="Политика конфиденциальности"><header><b>Политика конфиденциальности</b><button type="button" class="ib" onClick=${onClose} aria-label="Закрыть"><${Icon} n="x" /></button></header><iframe src="/privacy" title="Политика конфиденциальности"></iframe></div>`;
+}
+// Пока человек не принял действующую редакцию политики, дальше этого экрана приложение не пускает.
+function PolicyGate() {
+  const [full, setFull] = useState(false), [busy, setBusy] = useState(false);
+  const accept = async () => { setBusy(true); try { await rpc('me.policy', { v: S.me.policyNeed }); } catch (e) { toast(e.message, 'err'); } setBusy(false); };
+  return html`<div class="pgate"><section class="card" role="dialog" aria-modal="true" aria-labelledby="pgate-t">
+    <${Logo} s=${56} /><h2 id="pgate-t">Политика конфиденциальности</h2>
+    <p class="dim">${S.me.policy ? 'Политика обновилась. Чтобы продолжить, примите новую редакцию.' : 'Прежде чем продолжить, посмотрите, как «Нудист» обращается с вашими данными.'}</p>
+    <ul><li>Для аккаунта нужны только username и пароль. Телефон, город и дата рождения — по желанию.</li><li>Год рождения и возраст другим не показываются: в профиле виден только день и месяц.</li><li>Обычные чаты хранятся на сервере, секретные зашифрованы от всех, включая нас.</li><li>Данные не продаются, рекламы нет. Аккаунт можно удалить в настройках.</li></ul>
+    <button type="button" class="btn ghost wide" onClick=${() => setFull(true)}><${Icon} n="file-text" s=${16} /> Читать полностью</button>
+    <button type="button" class="btn big wide" disabled=${busy} onClick=${accept}>${busy ? 'Секунду…' : 'Принимаю'}</button>
+    <button type="button" class="link" onClick=${() => logout()}>Не согласен — выйти из аккаунта</button>
+  </section>${full && html`<${PolicyView} onClose=${() => setFull(false)} />`}</div>`;
+}
+
 // ═════ Вход ═════
 const SLOGANS = ['Мессенджер, которому нечего скрывать.', 'Скрывать нечего. Но шифруем на совесть.', 'Голая правда и немного стикеров.', 'Одежда — по желанию. Двухфакторка — обязательно.'];
 function Auth() {
@@ -35,6 +55,7 @@ function Auth() {
   const [step, setStep] = useState(null); // totp | code | name | password
   const [demo, setDemo] = useState(null);
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  const [agree, setAgree] = useState(false), [policy, setPolicy] = useState(false);
   const [slogan] = useState(() => SLOGANS[Math.floor(Math.random() * SLOGANS.length)]);
   const set = k => e => setF(x => ({ ...x, [k]: e.target.value }));
   const go = async fn => { setErr(''); setBusy(true); try { await fn(); } catch (e) { setErr(e.message); } setBusy(false); };
@@ -42,7 +63,7 @@ function Auth() {
   const submit = e => {
     e.preventDefault();
     go(async () => {
-      if (mode === 'register') { if (done(await http('register', { username: f.username, password: f.password, name: f.name, ref: pendingRef() || undefined }))) clearRef(); }
+      if (mode === 'register') { if (!agree) throw new Error('Чтобы зарегистрироваться, примите политику конфиденциальности'); if (done(await http('register', { username: f.username, password: f.password, name: f.name, agree: true, ref: pendingRef() || undefined }))) clearRef(); }
       else if (mode === 'login') { const r = await http('login', { username: f.username, password: f.password, code: f.totp || undefined }); if (!done(r) && r.need === 'totp') setStep('totp'); }
       else if (mode === 'recover') done(await http('recover', { username: f.username, code: f.rec, password: f.password }));
       else if (mode === 'phone') {
@@ -79,6 +100,7 @@ function Auth() {
             ${step === 'name' && html`<label class="fld"><span>Номер новый — давайте знакомиться</span><input value=${f.name} onInput=${set('name')} placeholder="Ваше имя" required /></label>`}
             ${step === 'password' && html`<label class="fld"><span>Облачный пароль</span><input type="password" value=${f.password} onInput=${set('password')} required /></label>`}
             ${step === 'totp' && html`<label class="fld"><span>Код двухфакторной защиты</span><input value=${f.totp} onInput=${set('totp')} inputmode="numeric" required /></label>`}`}
+          ${mode === 'register' && html`<label class="agree"><input type="checkbox" checked=${agree} onChange=${e => { setAgree(e.target.checked); if (e.target.checked) setErr(''); }} /><span>Я принимаю <a role="button" tabindex="0" onClick=${e => { e.preventDefault(); setPolicy(true); }} onKeyDown=${e => { if (e.key === 'Enter') { e.preventDefault(); setPolicy(true); } }}>политику конфиденциальности</a></span></label>`}
           ${err && html`<p class="err" role="alert">${err}</p>`}
           <button class="btn big" disabled=${busy}>${busy ? 'Секунду…' : mode === 'register' ? 'Раздеться и войти' : mode === 'recover' ? 'Сменить пароль и войти' : mode === 'phone' && !step ? 'Получить код' : 'Войти'}</button>
           ${mode === 'login' && html`<p class="auth-alt">Впервые здесь? <a onClick=${() => sw('register')}>Создать аккаунт</a> · <a onClick=${() => sw('recover')}>Забыли пароль?</a></p>`}
@@ -86,7 +108,7 @@ function Auth() {
           ${mode === 'recover' && html`<p class="auth-alt"><a onClick=${() => sw('login')}>Вспомнил пароль</a></p><p class="hint">Коды восстановления выдаются при включении двухфакторной защиты. Без них пароль не сбросить — мы честно его не знаем.</p>`}`}
         ${S.adding && acc.length > 0 && html`<p class="auth-alt"><a onClick=${() => { S.adding = false; login(acc[0].token); }}>← Вернуться в аккаунт ${acc[0].name}</a></p>`}
       </form>
-    </section></div>`;
+    </section>${policy && html`<${PolicyView} onClose=${() => setPolicy(false)} />`}</div>`;
 }
 function QrLogin({ onToken }) {
   const [q, setQ] = useState(null); const [n, setN] = useState(0);
@@ -128,6 +150,7 @@ function Modals() { return S.modals.map(m => html`<${m.c} key=${m.id} id=${m.id}
 function App() {
   useStore();
   if (!S.token) return html`<${Auth} /><${Toasts} />`;
+  if (S.ready && S.me && S.me.policyNeed && S.me.policy !== S.me.policyNeed) return html`<${PolicyGate} /><${Toasts} />`;
   if (!S.ready) return html`<div class="splash"><${Logo} s=${88} /><p>${S.offline ? 'Связь потеряна. Переподключаемся…' : 'Снимаем лишнее…'}</p></div><${Toasts} />`;
   const chat = S.chats[S.ui.chat];
   return html`<div class=${cx('shell', !S.ui.list && chat && 'in-chat', S.ui.panel && chat && 'with-panel')}>

@@ -192,7 +192,8 @@ const server = http.createServer(async (req, res) => {
     if (p === '/sw.js') return serveSw(req, res);
     if (p === '/' || p === '/index.html') return serveStatic(req, res, 'index.html');
     if (p === '/admin' || p === '/admin/') return serveStatic(req, res, 'admin.html');
-    if (/^\/(start|download)\/?$/.test(p)) return serveStatic(req, res, 'start.html');   // страница для новых людей: скачать APK
+    if (/^\/(start|download)\/?$/.test(p)) return serveStatic(req, res, 'start.html');
+    if (/^\/(privacy|policy)\/?$/.test(p)) return serveStatic(req, res, 'privacy.html');      // политика конфиденциальности   // страница для новых людей: скачать APK
     if (/^\/q\/[\w.-]{1,40}\/?$/.test(p)) return serveStatic(req, res, 'ask.html');      // «Голая правда»: страница анонимного вопроса
     return serveStatic(req, res, p);
   } catch (e) {

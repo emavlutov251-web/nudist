@@ -172,3 +172,10 @@ input.share-n { font: 800 1.9em/1.2 var(--display); text-align: center; letter-s
 .gs-i.give { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); }
 .pf-tabs { margin: 10px 0 8px; } .pf-tabs button { flex: 1; text-align: center; } .gift-tab { padding: 2px 2px 4px; } .gift-tab .gift-grid { max-height: none; overflow: visible; }
 .c-row .c-gift { color: #e8590c; margin-left: -4px; } [data-theme='dark'] .c-row .c-gift { color: #ffa94d; }
+/* политика конфиденциальности: галочка при регистрации, экран согласия, полный текст во фрейме */
+.agree { display: flex; align-items: flex-start; gap: 9px; font-size: .92em; line-height: 1.35; cursor: pointer; } .agree input { width: 18px; height: 18px; margin: 1px 0 0; flex: none; accent-color: var(--accent); } .agree a { color: var(--accent); text-decoration: underline; cursor: pointer; }
+.pgate { flex: 1; min-height: 0; overflow-y: auto; display: grid; place-items: center; padding: 18px; }
+.pgate .card { width: min(100%, 460px); display: flex; flex-direction: column; gap: 12px; padding: 24px 22px; text-align: center; align-items: center; }
+.pgate h2 { font-size: 1.3em; line-height: 1.2; } .pgate ul { text-align: left; padding-left: 20px; display: grid; gap: 7px; font-size: .94em; line-height: 1.4; list-style: disc; align-self: stretch; } .pgate .link { color: var(--ink2); font-size: .9em; padding: 6px; }
+.pview { position: fixed; inset: 0; z-index: 400; display: flex; flex-direction: column; background: var(--bg); padding-top: env(safe-area-inset-top); }
+.pview header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--line); } .pview iframe { flex: 1; width: 100%; border: 0; background: #fff; }

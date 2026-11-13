@@ -155,6 +155,7 @@ const api = {
     const hash = await hashPassAsync(password);
     need(!C.usernameTaken(username), 'Этот username уже занят. Кто-то разделся раньше вас.');      // пока считался хеш, имя могли занять
     const u = createUser({ username, hash, name: str(b.name, 64) || username, ref: str(b.ref, 32) });
+    if (b.agree === true) u.policy = { v: C.POLICY, ts: now() };      // галочка на форме регистрации; без неё приложение спросит согласие при первом входе
     return createSession(u, meta);
   },
   async login(b, meta) {

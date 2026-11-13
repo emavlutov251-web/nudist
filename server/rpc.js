@@ -106,6 +106,8 @@ H['me.delete'] = (c, p) => {
   else need(p.confirm === 'УДАЛИТЬ', 'Введите слово УДАЛИТЬ для подтверждения');
   A.deleteUser(u);
 };
+// Согласие с политикой конфиденциальности. Пока человек не принял действующую редакцию, приложение не пускает его дальше окна с текстом.
+H['me.policy'] = (c, p) => { const u = user(c); need(p.v === C.POLICY, 'Политика обновилась. Обновите страницу и прочитайте новую редакцию.'); u.policy = { v: C.POLICY, ts: now() }; save(); selfUpdate(u); return { v: C.POLICY }; };
 H['me.autodelete'] = (c, p) => { user(c).autodelete = int(p.months, 1, 24, 6); save(); selfUpdate(user(c)); };
 H['me.contact'] = (c, p) => {
   const u = user(c), o = getUser(p.id); need(o.id !== u.id, 'Вы и так всегда с собой');

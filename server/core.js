@@ -115,7 +115,7 @@ function pubUser(u, vid) {
   if (u.deleted) return { id: u.id, name: 'Удалённый аккаунт', deleted: true, color: 0 };
   const o = { id: u.id, username: u.username, name: u.name, last: u.last, color: u.color || 0, badges: badges(u), status: u.status, bot: u.bot || undefined, cmds: u.cmds, app: u.app };
   if (canSee(u, vid, 'avatar')) { o.avatar = u.avatar; o.avatars = u.avatars; }
-  if (canSee(u, vid, 'bio')) { o.bio = u.bio; o.links = u.links; o.city = u.city; o.birthday = u.birthday; o.tz = u.tz; }
+  if (canSee(u, vid, 'bio')) { o.bio = u.bio; o.links = u.links; o.city = u.city; o.birthday = u.id === vid || !u.birthday ? u.birthday : '2000' + u.birthday.slice(4); o.tz = u.tz; }      // чужим — только день и месяц, год рождения не отдаём
   if (canSee(u, vid, 'phone')) o.phone = u.phone;
   if (canSee(u, vid, 'lastSeen')) { o.online = u.bot ? true : isOnline(u.id); o.seen = u.seen; } else o.hidden = true;
   if (u.profile) o.profile = u.profile;
@@ -134,8 +134,9 @@ const IMPORTERS = new Set(String(process.env.IMPORTERS || '').split(',').map(s =
 const canImport = u => !!u && (IMPORTERS.has(u.id) || isOwner(u));
 // Аккаунты редакции с автоматическими подборками: рядом с именем честно стоит значок «Бот».
 const ROBOTS = new Set(String(process.env.ROBOTS || '').split(',').map(s => s.trim()).filter(Boolean));
+const POLICY = '2026-11-13';      // редакция политики конфиденциальности (public/privacy.html); сменили текст — смените дату, и приложение спросит согласие заново
 function selfUser(u) {
-  return { ...pubUser(u, u.id), phone: u.phone, email: u.email, stars: u.stars || 0, premiumUntil: u.premiumUntil, privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, owner: isOwner(u) || undefined, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, private: !!u.private, lastDaily: u.lastDaily, muted: u.muted > now() ? u.muted : undefined, taps: u.tapDay === today() ? u.taps : 0 };
+  return { ...pubUser(u, u.id), policy: (u.policy || {}).v, policyNeed: POLICY, phone: u.phone, email: u.email, stars: u.stars || 0, premiumUntil: u.premiumUntil, privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, owner: isOwner(u) || undefined, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, private: !!u.private, lastDaily: u.lastDaily, muted: u.muted > now() ? u.muted : undefined, taps: u.tapDay === today() ? u.taps : 0 };
 }
 // Кому рассылать «в сети / изменил профиль»: только тем, кто этого человека действительно видит — собеседникам, контактам
 // и участникам небольших общих чатов и серверов. Рассылка «всем подключённым» на каждое подключение — это N² и смерть при первом же наплыве.
@@ -457,4 +458,4 @@ function viewersOf(o, viewerId, key = 'seen') {
   for (const v of list) users[v.u] = pubUser(db.users[v.u], viewerId);
   return { list, users };
 }
-module.exports = { chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
