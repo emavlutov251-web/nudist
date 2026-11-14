@@ -187,3 +187,26 @@ article.post footer { font-size: inherit; color: inherit; }
 /* длинные посты: «Читать полностью» */
 .txt-more { display: inline-block; margin-top: 6px; padding: 5px 12px; border: 0; border-radius: 999px; font: inherit; font-size: .92em; font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); cursor: pointer; transition: transform .12s, background .12s; }
 .txt-more:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); } .txt-more:active { transform: scale(.97); }
+
+/* ───── Огонёк: питомец серии, задания, значки, восстановление */
+.streak.lost { filter: grayscale(1); opacity: .7; cursor: pointer; }
+.pet-modal .modal-b, .pet-modal .mb { background: linear-gradient(180deg, color-mix(in srgb, #FFB52E 34%, var(--panel)) 0, var(--panel) 420px); }
+.pet-top { display: flex; align-items: flex-start; justify-content: space-between; }
+.pet-days small { display: block; font-size: 1em; font-weight: 600; } .pet-days b { display: block; font-size: 3.4em; font-weight: 400; line-height: 1; }
+.pet-duo { display: flex; } .pet-duo > * + * { margin-left: -12px; box-shadow: 0 0 0 3px var(--panel); border-radius: 50%; }
+.pet-say { position: relative; width: -moz-fit-content; width: fit-content; max-width: 260px; margin: 10px auto 0; padding: 9px 14px; border-radius: 14px; font-size: .95em; line-height: 1.3; text-align: center; color: #1b1b1f; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, .12); }
+.pet-say::after { content: ''; position: absolute; left: 50%; bottom: -7px; width: 14px; height: 14px; margin-left: -7px; background: #fff; transform: rotate(45deg); border-radius: 2px; }
+.pet-stage { display: grid; place-items: center; padding: 14px 0 2px; } .pet-art { animation: pet-bob 2.6s ease-in-out infinite; transform-origin: 50% 90%; } .pet-art.sad { animation-duration: 5s; }
+.pet-eyes { animation: pet-blink 4.2s infinite; transform-origin: 80px 88px; }
+@keyframes pet-bob { 0%, 100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-5px) scale(1.02, .98); } }
+@keyframes pet-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.12); } }
+@media (prefers-reduced-motion: reduce) { .pet-art, .pet-eyes { animation: none; } }
+.pet-name { display: flex; align-items: center; justify-content: center; min-height: 36px; } .pet-name b { font-size: 1.15em; margin-right: 4px; } .pet-name input { width: 170px; margin-right: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; color: var(--ink); background: var(--panel); }
+.pet-bar { position: relative; width: min(280px, 100%); height: 22px; margin: 6px auto 0; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--ink) 10%, var(--panel)); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .5); }
+.pet-bar i { display: block; height: 100%; border-radius: 999px; background: repeating-linear-gradient(115deg, #FF8A00 0 10px, #FFA733 10px 20px); transition: width .4s; }
+.pet-bar span { position: absolute; inset: 0; display: grid; place-items: center; font-size: .82em; font-weight: 700; color: var(--ink); text-shadow: 0 0 3px var(--panel), 0 0 3px var(--panel); }
+.pet-hint { margin: 6px 0 0; font-size: .86em; line-height: 1.4; text-align: center; color: var(--ink2); } .pet-card .pet-hint { text-align: left; }
+.pet-card { margin-top: 14px; padding: 14px; border-radius: 14px; background: var(--panel); box-shadow: 0 1px 6px rgba(0, 0, 0, .08), inset 0 0 0 1px var(--line); } .pet-card h3 { margin: 0 0 8px; font-size: 1.02em; } .pet-card .btn { margin-top: 10px; width: 100%; justify-content: center; }
+.pet-task { display: flex; align-items: center; padding: 7px 0; } .pet-task b { display: block; font-weight: 600; line-height: 1.25; } .pet-task small { color: var(--ink2); } .pet-task em { font-style: normal; font-weight: 700; color: #F08A00; }
+.pet-ck { display: grid; place-items: center; flex: none; width: 30px; height: 30px; margin-right: 10px; border-radius: 50%; color: var(--ink3); background: color-mix(in srgb, var(--ink) 8%, transparent); } .pet-task.done .pet-ck { color: #fff; background: #F08A00; }
+.pet-badges { display: flex; justify-content: space-between; } .pet-badge { display: flex; flex-direction: column; align-items: center; flex: 1; filter: grayscale(1); opacity: .45; } .pet-badge.on { filter: none; opacity: 1; } .pet-badge i { font-style: normal; font-size: 1.9em; line-height: 1.2; } .pet-badge small { color: var(--ink2); }

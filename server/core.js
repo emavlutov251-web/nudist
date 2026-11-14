@@ -268,8 +268,47 @@ function touchStreak(chat, from) {
   for (const u of Object.keys(k.by)) if (k.by[u] !== d) delete k.by[u];      // вчерашние отметки больше не нужны
   k.by[from] = d;
   if (k.last === d || !streakDone(chat, k.by)) return false;
+  if (k.last !== dayMsk(-1) && k.n >= 2) k.old = { n: k.n, last: k.last };      // серия сгорела и начинается заново — прежнюю ещё можно восстановить
   k.n = k.last === dayMsk(-1) ? (k.n || 0) + 1 : 1; k.last = d; k.best = Math.max(k.best || 0, k.n);
   return true;
+}
+// ───── Восстановление огонька: сгоревшую серию можно вернуть в течение FIX_DAYS дней, каждому человеку — FIX_MAX раз в календарный месяц.
+const FIX_MAX = 3, FIX_DAYS = 3;
+const streakAlive = k => !!k && k.n > 0 && (k.last === dayMsk() || k.last === dayMsk(-1));
+function streakLost(chat) {      // { n, last } сгоревшей серии, которую ещё можно вернуть
+  const k = chat.sk; if (!k || !streakable(chat)) return null;
+  const src = streakAlive(k) ? k.old : (k.n >= 2 ? { n: k.n, last: k.last } : k.old);
+  return src && src.n >= 2 && src.last >= dayMsk(-1 - FIX_DAYS) ? src : null;
+}
+const fixLeft = u => { const f = u && u.skFix; return Math.max(0, FIX_MAX - (f && f.m === dayMsk().slice(0, 7) ? f.n : 0)); };
+function streakRestore(chat, uid) {
+  const u = db.users[uid], lost = streakLost(chat);
+  if (!lost) fail('Восстанавливать нечего: огонёк можно вернуть в течение трёх дней после того, как он погас');
+  if (!fixLeft(u)) fail('В этом месяце вы уже восстановили огонёк три раза. Новые попытки появятся первого числа');
+  const k = chat.sk;
+  if (streakAlive(k)) k.n += lost.n; else { k.n = lost.n; k.last = dayMsk(-1); }      // серия снова «вчерашняя»: сегодня её осталось продлить
+  delete k.old; k.best = Math.max(k.best || 0, k.n);
+  const m = dayMsk().slice(0, 7); u.skFix = { m, n: (u.skFix && u.skFix.m === m ? u.skFix.n : 0) + 1 };
+  service(chat, uid, `восстановил(а) огонёк: снова ${k.n} 🔥`); emitChat(chat); save();
+  return k.n;
+}
+// ───── Питомец серии: растёт от общения двоих. Каждый день три задания, за выполненные обоими — очки роста; каждые 100 очков — новый облик.
+//   chat.pet = { name, xp, day, m: { человек: сообщений сегодня }, p: { человек: публикаций сегодня }, done: { задание: 1 } }
+const PET_TASKS = [{ k: 'm1', xp: 1, need: 1, f: 'm' }, { k: 'p2', xp: 2, need: 2, f: 'p' }, { k: 'm10', xp: 4, need: 10, f: 'm' }];
+const PET_STEP = 100;
+const petable = chat => !chat.server && (chat.type === 'dm' || chat.type === 'secret') && Object.keys(chat.members).length === 2 && Object.keys(chat.members).every(u => db.users[u] && !db.users[u].bot);
+function petTouch(chat, from, m) {      // сообщение засчитано; возвращает true, если питомец сменил облик
+  const d = dayMsk(), p = chat.pet || (chat.pet = { xp: 0 }); if (p.day !== d) { p.day = d; p.m = {}; p.p = {}; p.done = {}; }
+  p.m[from] = (p.m[from] || 0) + 1;
+  if (m.fwd || m.media || m.album || m.files || /https?:\/\//.test(m.text || '')) p.p[from] = (p.p[from] || 0) + 1;      // публикация: пересланный пост, фото, видео или ссылка
+  const ids = Object.keys(chat.members), before = Math.floor((p.xp || 0) / PET_STEP);
+  for (const t of PET_TASKS) if (!p.done[t.k] && ids.every(u => (p[t.f][u] || 0) >= t.need)) { p.done[t.k] = 1; p.xp = (p.xp || 0) + t.xp; }
+  return Math.floor(p.xp / PET_STEP) > before;
+}
+function petView(chat, uid) {
+  const p = chat.pet || {}, cur = p.day === dayMsk(), peer = Object.keys(chat.members).find(u => u !== uid);
+  const cnt = (f, u) => (cur && p[f] && p[f][u]) || 0;
+  return { name: p.name || '', xp: p.xp || 0, step: PET_STEP, tasks: PET_TASKS.map(t => ({ k: t.k, xp: t.xp, need: t.need, done: cur && !!(p.done || {})[t.k], me: Math.min(t.need, cnt(t.f, uid)), peer: Math.min(t.need, cnt(t.f, peer)) })) };
 }
 // { n, day, hot, me }: hot — сегодня серия уже продлена, иначе она сгорит в полночь; me — этот человек сегодня уже писал.
 // day нужен приложению, чтобы после полуночи самому понять, что огонёк остыл или сгорел, не дожидаясь сервера.
@@ -331,7 +370,8 @@ function chatView(chat, uid) {
     v.pending = (chat.members[uid] || {}).pending;
     if (chatMuted(chat, uid)) v.muted = chatMuted(chat, uid);
     if (chat.type === 'dm' || chat.type === 'secret') v.peer = Object.keys(chat.members).find(u => u !== uid) || uid;
-    if (chat.sk) { const k = streakOf(chat, uid); if (k) v.streak = k; }
+    if (chat.sk) { const k = streakOf(chat, uid); if (k) { v.streak = k; k.best = chat.sk.best || k.n; } const lost = streakLost(chat); if (lost) v.lost = { n: lost.n, plus: streakAlive(chat.sk) ? chat.sk.n : 0 }; if (k || lost) v.fix = fixLeft(db.users[uid]); }
+    if (petable(chat)) v.pet = petView(chat, uid);
     if (chat.type === 'secret') { v.keys = chat.keys; v.by = chat.by; }
     if (chat.type === 'group' || chat.type === 'channel') {
       Object.assign(v, { perms: chat.perms, sign: chat.sign, approval: chat.approval, captcha: chat.captcha, price: chat.price, rules: chat.rules, color: chat.color });
@@ -372,6 +412,7 @@ function postMessage(chat, from, p, o = {}) {
   const ttl = p.ttl || chat.ttl;
   if (ttl && m.type !== 'service') { m.exp = m.ts + ttl * 1000; expiring.push({ c: chat.id, i: m.id, at: m.exp }); }
   arr.push(m);
+  if (m.type !== 'service' && from && !o.quiet && petable(chat) && !isRobot(from) && petTouch(chat, from, m)) setImmediate(() => { try { service(chat, null, `🌱 ${(chat.pet || {}).name || 'Искорка'} подрос(ла): новый облик!`); emitChat(chat); } catch (e) { console.error('[pet]', e.message); } });
   if (streakable(chat) && m.type !== 'service' && from && !o.quiet) { const fu = db.users[from]; if (fu && !fu.bot && !isRobot(from) && touchStreak(chat, from)) setImmediate(() => { try { streakNote(chat); } catch (e) { console.error('[streak]', e.message); } }); }
   let root = null;
   if (m.thread) { root = findMsg(chat.id, m.thread); if (root) { root.tcount = (root.tcount || 0) + 1; root.tlast = m.ts; } }
@@ -479,4 +520,4 @@ function viewersOf(o, viewerId, key = 'seen') {
   for (const v of list) users[v.u] = pubUser(db.users[v.u], viewerId);
   return { list, users };
 }
-module.exports = { unreadCount, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

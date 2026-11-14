@@ -823,6 +823,9 @@ const TAP_RATE = 15, TAP_BURST = 150, tapBucket = new Map();      // тапов 
 const tapsToday = u => (u.tapDay === today() ? u.taps || 0 : 0);
 const leafInfo = u => { const t = tapsToday(u); return { stars: u.stars || 0, per: LEAF.per, prog: t % LEAF.per, left: Math.max(0, LEAF.limit - Math.floor(t / LEAF.per)), limit: LEAF.limit, daily: u.lastDaily !== today(), dailyMin: LEAF.dailyMin, dailyMax: LEAF.dailyMax, dailyStep: LEAF.dailyStep, dailyRun: dailyRun(u), dailyNext: dailyFor(dailyRun(u) + 1) }; };
 H['stars.info'] = c => leafInfo(user(c));
+// Огонёк: вернуть сгоревшую серию (три раза в месяц) и дать имя питомцу серии
+H['streak.restore'] = (c, p) => { const ch = getChat(c, p.chat); C.streakRestore(ch, c.uid); return chatView(ch, c.uid); };
+H['pet.name'] = (c, p) => { const ch = getChat(c, p.chat); need(C.petable(ch), 'Питомец есть только в личных чатах'); const name = str(p.name, 24).replace(/\s+/g, ' ').trim(); (ch.pet = ch.pet || { xp: 0 }).name = name || undefined; save(); C.emitChat(ch); return chatView(ch, c.uid); };
 function spend(u, n, why) { need(db.flags.stars, 'Листики временно отключены'); need((u.stars || 0) >= n, `Не хватает листиков: нужно ${n} 🍃, у вас ${u.stars || 0}. ${why || ''}`); u.stars -= n; }
 // Ежедневный бонус растёт, если заходить каждый день: 10, 15, 20 … 50 листиков. Пропущенный день начинает счёт заново.
 const dailyRun = u => (u.lastDaily === today() || u.lastDaily === today(now() - 864e5) ? u.dailyRun || 1 : 0);      // сколько дней подряд уже собрано

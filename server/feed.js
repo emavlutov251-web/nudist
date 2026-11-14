@@ -32,14 +32,18 @@ function visible(by, u) { const a = db.users[by]; return !!a && !a.deleted && !(
 // Свежие записи каналов, где человек состоит: по пять последних из каждого
 function channelItems(u) {
   const out = [];
-  for (const cid of u.chats || []) {
-    const ch = db.chats[cid]; if (!ch || ch.type !== 'channel' || !ch.members || !ch.members[u.id]) continue;
+  // свои каналы — по пять последних записей; открытые каналы с автопостингом (новости, видео) показываем в ленте всем — по восемь
+  const auto = Object.values(db.chats).filter(c => c.type === 'channel' && c.pub && !c.server && c.rss && c.rss.length && !c.price).map(c => c.id);
+  for (const cid of new Set([...(u.chats || []), ...auto])) {
+    const ch = db.chats[cid]; if (!ch || ch.type !== 'channel' || !ch.members) continue;
+    const open = auto.includes(cid); if (!ch.members[u.id] && !open) continue;
+    if ((ch.banned || {})[u.id]) continue;
     const arr = db.msgs[cid] || []; let n = 0;
-    for (let i = arr.length - 1; i >= 0 && n < 5; i--) {
+    for (let i = arr.length - 1; i >= 0 && n < (open ? 8 : 5); i--) {
       const m = arr[i]; if (m.type === 'service' || m.enc || m.once || m.thread || !(m.text || m.media)) continue;
       const url = m.media && m.media.url, img = url && isUpload(url) && IMG_EXT.has(extOf(url)) ? [url] : [];
       if (!m.text && !img.length) continue;
-      out.push({ id: 'ch.' + cid + '.' + m.id, kind: 'channel', chat: cid, title: ch.title, avatar: ch.avatar, color: ch.color || 0, ts: m.ts, text: clip((m.text || '').replace(/\*\*|__|~~|\|\||`/g, '')), media: img });      // разметку чата лента не понимает: убираем звёздочки
+      out.push({ id: 'ch.' + cid + '.' + m.id, kind: 'channel', chat: cid, username: ch.username, title: ch.title, avatar: ch.avatar, color: ch.color || 0, ts: m.ts, text: clip((m.text || '').replace(/\*\*|__|~~|\|\||`/g, '')), media: img });      // разметку чата лента не понимает: убираем звёздочки
       n++;
     }
   }

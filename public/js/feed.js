@@ -3,6 +3,7 @@
 // и сама обновляется раз в две с половиной минуты. Автор записи видит, кто её посмотрел.
 import { html, useState, useEffect, useRef, S, bump, rpc, toast, Icon, Avatar, Badges, cx, userName, fmtShort, fmtNum, confirmDlg, pickFile, upload, Empty, Spinner, Modal, openModal, closeModal, local } from './lib.js';
 import { openChat } from './store.js';
+import { openDock, ytFind, ytDock, oldShell } from './dock.js';
 
 const TABS = [['rec', 'Для вас'], ['all', 'Новое'], ['subs', 'Подписки'], ['user', 'Мои']];
 const REFRESH_MS = 150e3;      // лента сама обновляется раз в 2,5 минуты
@@ -78,16 +79,19 @@ function Post({ p, users, follows, onChange, onDel, onFollow }) {
   const like = async () => { const on = !p.liked; onChange({ ...p, liked: on, likes: p.likes + (on ? 1 : -1) }); try { const r = await rpc('feed.like', { id: p.id, on }); onChange({ ...p, ...r }); } catch (e) { onChange(p); toast(e.message, 'err'); } };
   const del = async () => { if (!await confirmDlg({ title: 'Удалить запись?', text: 'Вместе с лайками и комментариями. Вернуть не получится.', ok: 'Удалить', danger: true })) return; try { await rpc('feed.del', { id: p.id }); onDel(p); } catch (e) { toast(e.message, 'err'); } };
   const mine = p.by === S.me.id, fol = follows.includes(p.by);
+  const yt = ch && !oldShell() ? ytFind(p.text) : null;      // ролик YouTube из канала играет прямо в ленте, в окне плеера
+  const toChannel = () => { if (S.chats[p.chat]) { S.ui.hub = null; openChat(p.chat); bump(); } else if (p.username) import('./panels.js').then(m => openModal(m.JoinPreview, { q: '@' + p.username })); else toast('Канал закрыт', 'err'); };
   return html`<article class="post" ref=${box} data-pid=${p.id}>
     <header class="post-h"><${Avatar} src=${ch ? p.avatar : u && u.avatar} name=${ch ? p.title : userName(u)} color=${ch ? p.color : u ? u.color : 0} s=${40} />
       <div class="post-who"><b>${ch ? p.title : userName(u)} ${!ch && u && html`<${Badges} list=${u.badges} s=${14} />`}</b><small>${ch ? 'канал · ' : ''}${fmtShort(p.ts)}</small></div>
       ${!ch && !mine && html`<button class=${cx('btn ghost post-fol', fol && 'on')} onClick=${() => onFollow(p.by, !fol)}><${Icon} n=${fol ? 'user-check' : 'user-plus'} s=${15} /> ${fol ? 'Вы подписаны' : 'Подписаться'}</button>`}
       ${!ch && p.own && html`<button class="ib" title="Удалить запись" aria-label="Удалить запись" onClick=${del}><${Icon} n="trash-2" s=${16} /></button>`}</header>
-    ${p.text && html`<p class="post-t">${shown}</p>`}
+    ${p.text && html`<p class="post-t">${yt ? shown.replace(/\n?https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/\S+\s*$/, '') : shown}</p>`}
     ${long && html`<button class="post-more" onClick=${() => setFull(true)}>Показать полностью</button>`}
+    ${yt && html`<button class=${cx('ytc', yt.short && 'short')} onClick=${() => openDock(ytDock(yt, (p.text || '').split('\n')[0].replace(/^(?:▶️|🔴|⚡)\s*/, '').trim()))} title="Смотреть здесь, не уходя из «Нудиста»"><img src=${`https://i.ytimg.com/vi/${yt.id}/mqdefault.jpg`} alt="" loading="lazy" referrerpolicy="no-referrer" /><span class="ytc-play"><${Icon} n="play" s=${26} /></span><span class="ytc-l">Смотреть здесь</span></button>`}
     ${p.media && p.media.length > 0 && html`<div class=${'post-m n' + Math.min(p.media.length, 5)}>${p.media.map(m => /\.(mp4|webm|mov)$/i.test(m) ? html`<video key=${m} src=${m + '#t=0.1'} controls playsinline preload="metadata"></video>` : /\.(m4a|mp3|ogg|oga|opus|aac|wav)$/i.test(m) ? html`<audio key=${m} src=${m} controls preload="none"></audio>` : html`<img key=${m} src=${m} alt="" loading="lazy" />`)}</div>`}
     <footer class="post-f">${ch
-      ? html`<button class="post-a" onClick=${() => { S.ui.hub = null; openChat(p.chat); bump(); }}><${Icon} n="megaphone" s=${17} /> Открыть канал</button>`
+      ? html`<button class="post-a" onClick=${toChannel}><${Icon} n="megaphone" s=${17} /> ${yt ? 'Открыть канал' : 'Читать в канале'}</button>`
       : html`<button class=${cx('post-a', p.liked && 'on')} aria-pressed=${!!p.liked} title="Нравится" onClick=${like}><${Icon} n="heart" s=${18} /> ${p.likes ? fmtNum(p.likes) : ''}</button>
         <button class=${cx('post-a', open && 'on')} aria-expanded=${open} title="Комментарии" onClick=${() => setOpen(!open)}><${Icon} n="message-circle" s=${18} /> ${p.comments ? fmtNum(p.comments) : ''}</button>
         ${mine

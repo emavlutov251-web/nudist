@@ -286,12 +286,31 @@ const YT_KINDS = [['UULF', 'video'], ['UULV', 'live'], ['UUSH', 'short']];
 const YT_LABEL = { video: ['▶️', 'видео'], live: ['🔴', 'трансляция'], short: ['⚡', 'Shorts'] };
 const YT_FILL = { video: 8, live: 3, short: 4 };      // сколько последних записей каждой вкладки публикуем при подключении канала
 const FILL_AGE = 14 * 864e5, FRESH_AGE = 3 * 864e5, DAY_MS = 864e5;
-async function ytItems(src) {
+const YT_PAGE = { video: 'videos', live: 'streams', short: 'shorts' }, YT_PAGE_EVERY = 25 * 6e4, ytPageAt = new Map();
+async function ytItems(src, seen) {
   const id = (src.match(/channel_id=UC([\w-]{22})/) || [])[1], out = [], had = new Set(); let ok = 0;
+  const add = (r, kind) => { for (const i of r) if (!had.has(i.guid)) { had.add(i.guid); out.push({ ...i, kind }); } };
   if (id) for (const [pre, kind] of YT_KINDS) {
-    try { const r = await N.rssItems(`https://www.youtube.com/feeds/videos.xml?playlist_id=${pre}${id}`); ok++; for (const i of r) if (!had.has(i.guid)) { had.add(i.guid); out.push({ ...i, kind }); } } catch (e) { /* у канала нет такой вкладки */ }
+    try { add(await N.rssItems(`https://www.youtube.com/feeds/videos.xml?playlist_id=${pre}${id}`), kind); ok++; } catch (e) { /* у канала нет такой вкладки */ }
   }
-  if (!ok) for (const i of await N.rssItems(src)) out.push({ ...i, kind: /\/shorts\//.test(i.link) ? 'short' : 'video' });
+  if (!ok) {
+    let err;
+    try { for (const i of await N.rssItems(src)) out.push({ ...i, kind: /\/shorts\//.test(i.link) ? 'short' : 'video' }); ok++; } catch (e) { err = e; }
+    // ленты YouTube не отвечают (у него это бывает сразу по всем каналам) — читаем вкладки канала со страницы, но не чаще раза в 25 минут
+    if (!ok && id) {
+      if (Date.now() - (ytPageAt.get(id) || 0) < YT_PAGE_EVERY) return null;
+      ytPageAt.set(id, Date.now());
+      for (const [, kind] of YT_KINDS) {
+        try {
+          let r = await N.ytTab('UC' + id, YT_PAGE[kind]); ok++;
+          // у Shorts на странице нет дат: новыми считаем только те, что стоят выше первого уже известного
+          if (seen && seen.size) { const cut = r.findIndex(i => !i.ts && seen.has(i.guid)); r = r.filter((i, n) => i.ts || (cut >= 0 && n < cut)); }
+          add(r, kind);
+        } catch (e) { err = err || e; }
+      }
+    }
+    if (!ok) throw err || new Error('лента недоступна');
+  }
   return out.sort((x, y) => (y.ts || 0) - (x.ts || 0));
 }
 const ytText = it => { const [icon, label] = YT_LABEL[it.kind] || YT_LABEL.video; return `${icon} **${it.title}**\n${it.author ? it.author + ' · ' : ''}${label}\n${it.link}`; };
@@ -311,8 +330,9 @@ async function pollRss() {
       try {
         if (!feed.src) feed.src = await N.feedUrl(feed.url);      // ссылка на канал YouTube → адрес его ленты (узнаём один раз)
         const yt = /youtube\.com\/feeds\//.test(feed.src);
-        const items = yt ? await ytItems(feed.src) : await N.rssItems(feed.src); feed.err = undefined;
         const seen = new Set(feed.seen || []), t = Date.now();
+        const items = yt ? await ytItems(feed.src, seen) : await N.rssItems(feed.src); if (!items) continue;      // запасной путь YouTube только что опрашивали — ждём
+        feed.err = undefined;
         let pick;
         if (feed.seen) pick = items.filter(i => !seen.has(i.guid) && (!yt || !i.ts || t - i.ts < FRESH_AGE)).slice(0, yt ? 5 : 3);      // обычная работа: только новое
         else if (yt) { const left = { ...YT_FILL }; pick = items.filter(i => (!i.ts || t - i.ts < FILL_AGE) && left[i.kind]-- > 0); }      // подключение: последние записи каждой вкладки
@@ -322,7 +342,7 @@ async function pollRss() {
       } catch (e) { feed.err = e.message; }
     }
     // публикуем по порядку выхода; у записей, добавленных при подключении, сохраняем настоящую дату
-    batch.sort((x, y) => (x.it.ts || 0) - (y.it.ts || 0));
+    batch.sort((x, y) => (x.it.ts || 9e15) - (y.it.ts || 9e15));      // записи без даты (Shorts с запасного пути) идут последними, как самые свежие
     for (const { it, yt, fill } of batch) {
       const o = fill && it.ts && Date.now() - it.ts > DAY_MS / 24 ? { ts: it.ts } : {};
       if (yt) { postMessage(ch, owner, { text: ytText(it), as: 'chan', via: 'YouTube' }, o); continue; }

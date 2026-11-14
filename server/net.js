@@ -124,4 +124,38 @@ async function rssItems(url) {
   }
   return items;
 }
-module.exports = { safeFetch, linkPreview, rssItems, feedUrl, htmlText, isPrivate };
+// Запасной путь для YouTube: его RSS-ленты временами отдают 404/500 сразу по всем каналам.
+// Тогда читаем открытую страницу вкладки канала (/videos, /streams, /shorts) и берём из неё те же сведения, что были бы в ленте.
+const YT_AGO = [[/^секунд/, 1e3], [/^минут/, 6e4], [/^час/, 36e5], [/^(дн|день)/, 864e5], [/^недел/, 6048e5], [/^месяц/, 2592e6], [/^(год|лет)/, 31536e6]];
+function ytAgo(label) {
+  const m = String(label || '').toLowerCase().match(/(\d+)\s+([а-яё]+)\s+назад/); if (!m) return 0;
+  const u = YT_AGO.find(([re]) => re.test(m[2])); return u ? Date.now() - m[1] * u[1] : 0;
+}
+const walk = (o, key, out) => { if (Array.isArray(o)) for (const v of o) walk(v, key, out); else if (o && typeof o === 'object') for (const k in o) { if (k === key) out.push(o[k]); else walk(o[k], key, out); } return out; };
+async function ytTab(id, tab) {
+  const r = await safeFetch(`https://www.youtube.com/channel/${id}/${tab}`, { accept: 'text/html', max: 4000000, timeout: 15000,
+    headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', 'accept-language': 'ru', cookie: 'SOCS=CAI; CONSENT=YES+1' } });
+  if (r.status !== 200) throw new Error('HTTP ' + r.status);
+  const m = decode(r.body, r.headers['content-type']).match(/var ytInitialData = (\{[\s\S]*?\});<\/script>/); if (!m) throw new Error('страница канала YouTube не прочиталась');
+  let d; try { d = JSON.parse(m[1]); } catch (e) { throw new Error('страница канала YouTube не прочиталась'); }
+  const author = String(((walk(d.metadata || {}, 'channelMetadataRenderer', [])[0] || {}).title) || '').slice(0, 80), items = [];
+  // открыта ли именно та вкладка, что просили: у канала без неё YouTube молча показывает главную
+  const sel = walk(d.contents || {}, 'tabRenderer', []).find(t => t.selected); if (!sel || !new RegExp('/' + tab + '$').test(((sel.endpoint || {}).commandMetadata || {}).webCommandMetadata ? sel.endpoint.commandMetadata.webCommandMetadata.url || '' : '')) return items;
+  if (tab === 'shorts') {
+    for (const o of walk(sel, 'shortsLockupViewModel', [])) {
+      const vid = (walk(o.onTap || {}, 'reelWatchEndpoint', [])[0] || {}).videoId, title = (((o.overlayMetadata || {}).primaryText || {}).content || '').trim();
+      if (/^[\w-]{11}$/.test(vid || '') && title) items.push({ title: title.slice(0, 300), link: 'https://www.youtube.com/shorts/' + vid, guid: 'yt:video:' + vid, body: '', img: '', ts: 0, author });
+    }
+    return items;
+  }
+  for (const o of walk(sel, 'lockupViewModel', [])) {
+    const vid = o.contentId, md = (o.metadata || {}).lockupMetadataViewModel || {}, title = ((md.title || {}).content || '').trim();
+    if (o.contentType !== 'LOCKUP_CONTENT_TYPE_VIDEO' || !/^[\w-]{11}$/.test(vid || '') || !title) continue;
+    let ts = 0; for (const row of walk(md, 'metadataParts', [])) for (const p of row) ts = ts || ytAgo(p.accessibilityLabel) || ytAgo(((p.text || {}).content || '').replace(/(\d+)\s+ч\b/, '$1 час').replace(/(\d+)\s+мин\.?/, '$1 минут').replace(/(\d+)\s+дн\.?/, '$1 дн').replace(/(\d+)\s+нед\.?/, '$1 недел').replace(/(\d+)\s+мес\.?/, '$1 месяц').replace(/(\d+)\s+(г|л)\./, '$1 лет'));
+    // без «… назад» запись либо идёт в эфире прямо сейчас, либо только запланирована — запланированные пропускаем до начала
+    if (!ts) { if (walk(o.contentImage || {}, 'thumbnailBadgeViewModel', []).some(b => /LIVE/.test(b.badgeStyle || ''))) ts = Date.now(); else continue; }
+    items.push({ title: title.slice(0, 300), link: 'https://www.youtube.com/watch?v=' + vid, guid: 'yt:video:' + vid, body: '', img: '', ts, author });
+  }
+  return items;
+}
+module.exports = { safeFetch, linkPreview, rssItems, feedUrl, htmlText, isPrivate, ytTab, ytAgo };

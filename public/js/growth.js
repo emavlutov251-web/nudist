@@ -1,5 +1,5 @@
 // Рост и удержание: приглашения друзей, «огонёк» серии переписки, одноразовые фото и видео, установка как приложения.
-import { html, useState, useEffect, S, bump, rpc, on, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, copyText, local, Spinner, plural, fmtNum, Toggle, upload, download, fmtShort } from './lib.js';
+import { chatInfo, html, useState, useEffect, S, bump, rpc, on, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, copyText, local, Spinner, plural, fmtNum, Toggle, upload, download, fmtShort } from './lib.js';
 import { QR } from './panels.js';
 import { nativeApp, nativePush } from './store.js';
 
@@ -114,11 +114,65 @@ export function streakNow(chat) {
   return null;
 }
 export function Streak({ chat, big }) {
-  const k = streakNow(chat); if (!k) return null;
+  const k = streakNow(chat);
+  if (!k) return big && chat.lost ? html`<span class="streak big lost" title="Огонёк погас — его ещё можно вернуть" onClick=${e => { e.stopPropagation(); openModal(PetModal, { chat: chat.id }); }}><i>🔥</i>${chat.lost.n}</span>`
+    : big && chat.pet ? html`<span class="streak big seed" title="Питомец серии: растёт, когда вы общаетесь" onClick=${e => { e.stopPropagation(); openModal(PetModal, { chat: chat.id }); }}><i>🌱</i></span>` : null;
   const days = `${k.n} ${plural(k.n, ['день', 'дня', 'дней'])}`, group = chat.type === 'group';
   const text = k.hot ? `🔥 Огонёк горит ${days} подряд. ${group ? 'Он не гаснет, пока каждый день в группе пишут хотя бы двое.' : 'Пишите друг другу каждый день, чтобы он не погас.'}`
     : `⏳ Огонёк (${days}) погаснет в полночь по Москве. ${group ? 'Чтобы продлить, сегодня должны написать хотя бы двое.' : k.me ? 'Вы сегодня уже написали — ждём ответа собеседника.' : 'Напишите сегодня, чтобы продлить серию.'}`;
-  return html`<span class=${cx('streak', !k.hot && 'cold', big && 'big')} title=${text} onClick=${big ? e => { e.stopPropagation(); toast(text); } : undefined}><i>${k.hot ? '🔥' : '⏳'}</i>${k.n}</span>`;
+  return html`<span class=${cx('streak', !k.hot && 'cold', big && 'big')} title=${text} onClick=${big ? e => { e.stopPropagation(); openModal(PetModal, { chat: chat.id, text }); } : undefined}><i>${k.hot ? '🔥' : '⏳'}</i>${k.n}</span>`;
+}
+
+// ───── Питомец серии «Искорка»: растёт от общения, каждые 100 очков — новый облик. Рисунок свой, меняется по ступеням.
+const PET_LOOKS = [['#FFE45C', '#FF9A1F'], ['#FFD34D', '#FF7A1A'], ['#FFC23D', '#FF5A36'], ['#FF9EC4', '#F0428A'], ['#A9B8FF', '#6A4DF5'], ['#FFF2A8', '#F5B301']];
+export function PetArt({ lvl = 0, sad, s = 150 }) {
+  const i = Math.min(lvl, PET_LOOKS.length - 1), [c1, c2] = sad ? ['#D7DADF', '#9AA1AB'] : PET_LOOKS[i], g = 'petg' + i + (sad ? 's' : '');
+  return html`<svg class=${cx('pet-art', sad && 'sad')} width=${s} height=${s} viewBox="0 0 160 160" role="img" aria-label="Питомец серии">
+    <defs><linearGradient id=${g} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color=${c1} /><stop offset="1" stop-color=${c2} /></linearGradient></defs>
+    <ellipse cx="80" cy="148" rx="38" ry="6" fill="rgba(0,0,0,.14)" />
+    ${i >= 5 && !sad && html`<g fill="#FFD23F"><circle cx="22" cy="52" r="4" /><circle cx="138" cy="46" r="5" /><circle cx="30" cy="100" r="3" /><circle cx="134" cy="98" r="3.5" /><circle cx="80" cy="8" r="3" /></g>`}
+    ${i >= 1 && html`<g stroke=${c2} stroke-width="7" stroke-linecap="round"><path d="M64 132v12M96 132v12" /><path d="M40 96q-12 6 -10 18M120 96q12 6 10 18" fill="none" /></g>`}
+    <path d="M80 18c10 16 44 38 44 76a44 44 0 0 1 -88 0c0 -24 14 -34 22 -48c4 10 8 14 12 16c-2 -16 2 -32 10 -44z" fill=${`url(#${g})`} />
+    <ellipse cx="80" cy="108" rx="24" ry="20" fill="rgba(255,255,255,.28)" />
+    <g class="pet-eyes"><ellipse cx="64" cy="88" rx="11" ry="13" fill="#fff" /><ellipse cx="96" cy="88" rx="11" ry="13" fill="#fff" /><circle cx="66" cy=${sad ? 92 : 89} r="6.5" fill="#3A1D0A" /><circle cx="98" cy=${sad ? 92 : 89} r="6.5" fill="#3A1D0A" /><circle cx="68.5" cy=${sad ? 89.5 : 86.5} r="2.2" fill="#fff" /><circle cx="100.5" cy=${sad ? 89.5 : 86.5} r="2.2" fill="#fff" /></g>
+    ${sad ? html`<path d="M70 114q10 -8 20 0" fill="none" stroke="#3A1D0A" stroke-width="3.5" stroke-linecap="round" /><path d="M108 100q4 8 0 11q-4 -3 0 -11z" fill="#7CC4FF" />`
+      : html`<path d="M68 108q12 12 24 0" fill="none" stroke="#3A1D0A" stroke-width="3.5" stroke-linecap="round" /><ellipse cx="50" cy="104" rx="6" ry="3.5" fill="rgba(255,90,90,.45)" /><ellipse cx="110" cy="104" rx="6" ry="3.5" fill="rgba(255,90,90,.45)" />`}
+    ${i >= 2 && html`<path d="M80 22q-4 -16 -20 -16q2 16 20 16zM80 22q8 -12 20 -8q-6 12 -20 8z" fill="#4CB944" stroke="#2E8B2E" stroke-width="1.5" />`}
+    ${i >= 3 && !sad && html`<g><rect x="50" y="78" width="26" height="17" rx="7" fill="#1B1B1F" /><rect x="84" y="78" width="26" height="17" rx="7" fill="#1B1B1F" /><path d="M76 84h8" stroke="#1B1B1F" stroke-width="4" /><path d="M55 82l8 0M89 82l8 0" stroke="rgba(255,255,255,.5)" stroke-width="2.5" stroke-linecap="round" /></g>`}
+    ${i >= 4 && html`<path d="M58 40l6 -18l10 12l6 -16l6 16l10 -12l6 18z" fill="#FFD23F" stroke="#D99A00" stroke-width="2" stroke-linejoin="round" />`}
+  </svg>`;
+}
+const PET_TASK_TEXT = { m1: 'Отправьте друг другу по сообщению', p2: 'Поделитесь друг с другом двумя публикациями', m10: 'Отправьте друг другу по 10 сообщений' };
+const STREAK_BADGES = [3, 10, 30, 100, 200];
+function PetModal({ id, chat: cid, text }) {
+  const chat = S.chats[cid], [busy, setBusy] = useState(false), [edit, setEdit] = useState(null);
+  if (!chat) return null;
+  const k = streakNow(chat), pet = chat.pet, lost = chat.lost, left = chat.fix == null ? 3 : chat.fix, group = chat.type === 'group';
+  const peer = !group && chatInfo(chat).user, best = Math.max((chat.streak && chat.streak.best) || 0, k ? k.n : 0, lost ? lost.n : 0);
+  const xp = pet ? pet.xp : 0, step = (pet && pet.step) || 100, lvl = Math.floor(xp / step), name = (pet && pet.name) || 'Искорка';
+  const restore = async () => { setBusy(true); try { const v = await rpc('streak.restore', { chat: cid }); Object.assign(chat, { streak: v.streak, lost: v.lost, fix: v.fix }); if (!v.lost) delete chat.lost; toast(`Огонёк снова с вами: ${v.streak ? v.streak.n : ''} 🔥`); } catch (e) { toast(e.message, 'err'); } setBusy(false); bump(); };
+  const rename = async () => { const v = (edit || '').trim(); setEdit(null); if (v === name || (!v && !pet.name)) return; try { const r = await rpc('pet.name', { chat: cid, name: v }); chat.pet = r.pet; bump(); } catch (e) { toast(e.message, 'err'); } };
+  const say = lost && !k ? 'Огонёк погас… Но его ещё можно вернуть!' : k && !k.hot ? (k.me ? 'Ждём ответа — и серия продлится!' : 'Напишите сегодня, а то я погасну!') : pet ? 'Чем больше вы общаетесь, тем больше я расту!' : 'Пишите каждый день — и огонёк не погаснет!';
+  return html`<${Modal} id=${id} title="Огонёк" cls="pet-modal">
+    <div class="pet-top"><div class="pet-days"><small>Дней серии</small><b>${k ? k.n : 0}</b></div>
+      ${!group && html`<div class="pet-duo"><${Avatar} src=${peer && peer.avatar} name=${userName(peer)} color=${peer ? peer.color : 0} s=${46} /><${Avatar} src=${S.me.avatar} name=${userName(S.me)} color=${S.me.color} s=${46} /></div>`}</div>
+    <div class="pet-say">${say}</div>
+    <div class="pet-stage"><${PetArt} lvl=${lvl} sad=${!k && !!chat.lost} /></div>
+    ${pet && html`<div class="pet-name">${edit === null
+      ? html`<b>${name}</b><button class="ib sm" title="Переименовать" aria-label="Переименовать питомца" onClick=${() => setEdit(pet.name || '')}><${Icon} n="pencil" s=${15} /></button>`
+      : html`<input value=${edit} maxlength="24" placeholder="Искорка" aria-label="Имя питомца" onInput=${e => setEdit(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter') rename(); }} /><button class="btn sm" onClick=${rename}>Готово</button>`}</div>
+    <div class="pet-bar" role="progressbar" aria-valuemin="0" aria-valuemax=${step} aria-valuenow=${xp % step}><i style=${`width:${Math.max(4, (xp % step) / step * 100)}%`}></i><span>${xp % step}/${step}</span></div>
+    <p class="pet-hint">${step - xp % step} ${plural(step - xp % step, ['очко', 'очка', 'очков'])} до нового облика${lvl ? ` · облик ${lvl + 1}` : ''}</p>
+    <section class="pet-card"><h3>Растите питомца вместе</h3>
+      ${pet.tasks.map(t => html`<div class=${cx('pet-task', t.done && 'done')} key=${t.k}><span class="pet-ck"><${Icon} n="check" s=${15} /></span><div><b>${PET_TASK_TEXT[t.k] || t.k}</b><small><em>+${t.xp}</em> ${plural(t.xp, ['очко', 'очка', 'очков'])} роста${t.done ? ' · выполнено' : ` · вы ${t.me}/${t.need}, собеседник ${t.peer}/${t.need}`}</small></div></div>`)}
+      <p class="pet-hint">Задания обновляются каждый день в полночь по Москве. Публикация — пересланный пост, фото, видео или ссылка.</p></section>`}
+    <section class="pet-card"><h3>Значки серии</h3>
+      <div class="pet-badges">${STREAK_BADGES.map(n => html`<span class=${cx('pet-badge', best >= n && 'on')} key=${n}><i>🔥</i><small>${n} дн.</small></span>`)}</div></section>
+    <section class="pet-card"><h3>Восстановление огонька</h3>
+      <p class="pet-hint">Если огонёк погас, его можно вернуть в течение трёх дней. В этом месяце у вас ${left ? `${plural(left, ['осталась', 'остались', 'осталось'])} ${left} ${plural(left, ['попытка', 'попытки', 'попыток'])} из 3` : 'попыток не осталось'}.</p>
+      ${lost && html`<button class="btn" disabled=${busy || !left} onClick=${restore}>🔥 Вернуть серию: ${lost.n + (lost.plus || 0)} ${plural(lost.n + (lost.plus || 0), ['день', 'дня', 'дней'])}</button>`}</section>
+    ${text && html`<p class="pet-hint">${text}</p>`}
+  <//>`;
 }
 
 // ───── одноразовые фото и видео
