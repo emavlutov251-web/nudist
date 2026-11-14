@@ -20,7 +20,7 @@ export const inviteLink = () => location.origin + '/?ref=' + ((S.me && S.me.user
 export function InviteFriends({ id }) {
   const [d, setD] = useState(null), me = S.me, link = inviteLink();
   useEffect(() => { rpc('ref.info').then(setD).catch(e => toast(e.message, 'err')); }, []);
-  const text = 'Заходи в «Нудист» — мессенджер, которому нечего скрывать. По моей ссылке обоим дадут листики 🍃';
+  const text = 'Заходи в «Нудист» — тут независимые новости, анонимные вопросы и огоньки за переписку. По моей ссылке обоим дадут по 100 листиков 🍃';
   const share = async () => {
     if (navigator.share) { try { await navigator.share({ title: 'Нудист', text, url: link }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
     copyText(text + '\n' + link); toast('Ссылка и текст скопированы. Вставьте в любой чат.');
@@ -102,6 +102,22 @@ export function AskLink({ id }) {
     </div><//>`;
 }
 export const openAsk = () => openModal(AskLink);
+
+// ───── «С чего начать»: четыре карточки для новичка вместо пустого экрана. Не окно и не всплывашка: блок в списке чатов
+// (на телефоне) и на пустом экране (на компьютере); скрывается одной кнопкой и сам пропадает, когда чатов становится много.
+const START = [
+  ['search', 'Найти друзей', 'Поиск по имени и username', () => import('./panels.js').then(p => openModal(p.ContactsModal))],
+  ['circle-help', 'Голая правда', 'Узнай, что о тебе думают анонимно', () => openAsk()],
+  ['list', 'Независимые новости', 'Новости и видео в одной ленте', () => import('./hub.js').then(h => h.openHub('feed'))],
+  ['user-plus', 'Позвать друга', 'Обоим по 100 листиков 🍃', () => openInvite()],
+];
+export const startShown = () => !local.get('start.off') && Object.values(S.chats).filter(c => !c.server && c.type !== 'saved').length <= 6;
+export function StartCards({ side }) {
+  if (side && !startShown()) return null;
+  return html`<div class=${cx('start', side && 'start-side')}>
+    ${side && html`<div class="start-h"><b>С чего начать</b><button class="ib sm" title="Скрыть подсказки" aria-label="Скрыть подсказки" onClick=${() => { local.set('start.off', 1); bump(); }}><${Icon} n="x" s=${15} /></button></div>`}
+    <div class="start-g">${START.map(([ic, t, d, run]) => html`<button class="start-c" onClick=${run}><span class="start-i"><${Icon} n=${ic} s=${20} /></span><b>${t}</b><small>${d}</small></button>`)}</div></div>`;
+}
 
 // ───── огонёк: серия переписки, как в TikTok
 // Сервер присылает { n, day, hot, me }. День серии — по Москве; после полуночи сами видим, что огонёк остыл (песочные часы) или сгорел.

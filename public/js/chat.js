@@ -4,7 +4,7 @@ import { msgKey, loadHistory, openChat, closeChat, openUser, markRead, retryMsg,
 import { Sticker, sfx } from './fun.js';
 import { OnceMsg, Streak } from './growth.js';
 import { Photo, Gif, VideoMsg, RoundMsg, VoiceMsg, AudioMsg, FileMsg, LocMsg } from './media.js';
-import { showProfile, chatActions, openMiniApp, JoinPreview, shareLeaves } from './panels.js';
+import { showProfile, chatActions, openMiniApp, JoinPreview, shareLeaves, E2eeInfo } from './panels.js';
 import { Composer, EmojiPicker, ForwardModal } from './composer.js';
 import { GiftCard } from './gifts.js';
 import { memberOf } from './guildui.js';
@@ -38,7 +38,7 @@ function Header({ chat, thread, onSearch }) {
     <button class=${cx('ib back', thread && 'show')} onClick=${back} aria-label="Назад"><${Icon} n="arrow-left" /></button>
     <button class="ch-main" onClick=${() => { S.ui.panel = !S.ui.panel; bump(); }} title="Информация о чате">
       ${!thread && html`<${ChatAvatar} chat=${chat} s=${40} />`}
-      <span class="ch-t"><b>${thread ? (chat.type === 'channel' ? 'Комментарии' : 'Тред') : html`${chat.server && html`<${Icon} n=${kindIcon(chat.kind)} s=${17} /> `}${i.title}`}${!thread && u && html`<${Badges} list=${u.badges} />`}${!thread && i.verified && !u && html`<${Badges} list=${['verified']} />`}${isMuted(chat) && html`<${Icon} n="bell-off" s=${14} cls="dim" />`}${!thread && html`<${Streak} chat=${chat} big />`}${chat.ttl ? html`<span class="ttl-chip" title="Автоудаление сообщений"><${Icon} n="timer" s=${12} /> ${ttlLabel(chat.ttl)}</span>` : ''}</b>
+      <span class="ch-t"><b>${thread ? (chat.type === 'channel' ? 'Комментарии' : 'Тред') : html`${chat.server && html`<${Icon} n=${kindIcon(chat.kind)} s=${17} /> `}${i.title}`}${!thread && u && html`<${Badges} list=${u.badges} />`}${!thread && i.verified && !u && html`<${Badges} list=${['verified']} />`}${isMuted(chat) && html`<${Icon} n="bell-off" s=${14} cls="dim" />`}${!thread && chat.type === 'secret' && html`<span class="e2ee" title="Что значит E2EE" onClick=${e => { e.stopPropagation(); openModal(E2eeInfo, { chat: chat.id }); }}><${Icon} n="lock" s=${11} /> E2EE</span>`}${!thread && html`<${Streak} chat=${chat} big />`}${chat.ttl ? html`<span class="ttl-chip" title="Автоудаление сообщений"><${Icon} n="timer" s=${12} /> ${ttlLabel(chat.ttl)}</span>` : ''}</b>
         <small class=${cx(typing && 'typing')}>${typing ? typing + '…' : sub}</small></span>
     </button>
     ${live && !thread && RTC.chat !== chat.id && html`<button class="btn sm pulse" onClick=${() => joinVoice(chat.id)}><${Icon} n="phone-incoming" s=${15} /> Идёт звонок · войти</button>`}
@@ -149,6 +149,7 @@ function msgMenu(e, m, chat, { thread, onJump }) {
     text && { icon: 'copy', label: quote ? 'Копировать выделенное' : 'Копировать текст', run: () => { copyText(quote || text); toast('Скопировано'); } },
     (priv || can.pin) && !m.thread && { icon: (chat.pinned || []).includes(m.id) ? 'pin-off' : 'pin', label: (chat.pinned || []).includes(m.id) ? 'Открепить' : 'Закрепить', run: () => call('msg.pin', { chat: chat.id, id: m.id, on: !(chat.pinned || []).includes(m.id) }) },
     chat.type !== 'secret' && m.type !== 'call' && { icon: 'forward', label: 'Переслать', run: () => openModal(ForwardModal, { from: chat.id, ids: [m.id] }) },
+    chat.type === 'channel' && chat.pub && !chat.server && !chat.price && !m.thread && m.type !== 'service' && { icon: 'share-2', label: 'Ссылка на пост', hint: 'откроется и без аккаунта', run: () => { copyText(location.origin + '/p/ch.' + chat.id + '.' + m.id + (S.me.username ? '?r=' + encodeURIComponent(S.me.username) : '')); toast('Ссылка на пост скопирована'); } },
     text && chat.type !== 'secret' && { icon: 'send', label: 'Поделиться в Telegram', run: () => { const link = (text.match(/https?:\/\/[^\s<>"]+/) || [])[0] || '', rest = (link ? text.replace(link, '') : text).replace(/\*\*|__|~~|`/g, '').trim().slice(0, 900); window.open('https://t.me/share/url?url=' + encodeURIComponent(link || rest) + (link && rest ? '&text=' + encodeURIComponent(rest) : ''), '_blank', 'noopener'); } },
     { icon: 'circle-check', label: 'Выбрать', run: () => { S.ui.sel = [m.id]; bump(); } },
     '-',

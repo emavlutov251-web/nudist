@@ -7,7 +7,7 @@ import { RTC, joinVoice, leaveVoice, toggleMute, toggleDeaf } from './rtc.js';
 import { StoryEditor } from './media.js';
 import { openSettings } from './settings.js';
 import { openHub, openApps, openSupport } from './hub.js';
-import { Streak, openInvite, openAsk, openPush, installApp, isStandalone } from './growth.js';
+import { Streak, openInvite, openAsk, openPush, installApp, isStandalone, StartCards } from './growth.js';
 
 // ═════ Рейка ═════
 export function Rail() {
@@ -24,9 +24,8 @@ export function Rail() {
       <button class="rail-b add" title="Каталог серверов" onClick=${() => openModal(Discover)}><${Icon} n="compass" /></button>
     </div>
     <i class="rail-sep"></i>
-    ${[['feed', 'list', 'Лента'], ['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['tv', 'tv', 'Телевизор'], ['apps', 'layout-grid', 'Приложения']].map(([k, ic, name]) => html`<button class=${cx('rail-b add hubb', S.ui.hub === k && 'on')} title=${name} aria-label=${name} onClick=${() => openHub(k)}><${Icon} n=${ic} /></button>`)}
-    <i class="rail-sep"></i>
-    <button class="rail-b add" title="Прикрыться (Esc Esc)" onClick=${() => { S.ui.boss = true; bump(); }}><${Icon} n="table" /></button>
+    <button class=${cx('rail-b add hubb', S.ui.hub && 'on')} title="Хаб: лента, музыка, клипы, эфиры, телевизор, приложения" aria-label="Хаб" onClick=${() => openHub()}><${Icon} n="layout-grid" /></button>
+    <button class="rail-b add cover" title="Прикрыться: спрятать переписку за таблицей (Esc Esc)" aria-label="Прикрыться" onClick=${() => { S.ui.boss = true; bump(); }}><${Icon} n="table" /></button>
     <button class="rail-b add" title="Настройки (Ctrl+,)" onClick=${() => openSettings()}><${Icon} n="settings" /></button>
   </nav>`;
 }
@@ -134,7 +133,7 @@ function HomeSidebar() {
   const menu = e => showMenu(e, [
     { icon: 'venetian-mask', label: 'Голая правда', hint: 'анонимные вопросы', run: openAsk },
     { icon: 'bell', label: 'Уведомления', hint: 'когда приложение закрыто', run: openPush },
-    { icon: 'user-plus', label: 'Позвать друзей', hint: '+50 🍃', run: openInvite },
+    { icon: 'user-plus', label: 'Позвать друзей', hint: '+100 🍃', run: openInvite },
     !isStandalone() && { icon: 'smartphone', label: 'Установить как приложение', run: installApp },
     '-',
     { icon: 'list', label: 'Лента', run: () => openHub('feed') },
@@ -169,6 +168,7 @@ function HomeSidebar() {
       <div class="side-b" role="list">
         ${!S.ui.archive && archived.length > 0 && fid === 'all' && html`<button class="ci arch" onClick=${() => { S.ui.archive = true; bump(); }}><span class="ava" style="width:48px;height:48px;background:var(--hover);color:var(--ink2)"><${Icon} n="archive" s=${22} /></span><span class="ci-m"><span class="ci-t"><b>Архив</b></span><span class="ci-p"><span>${archived.map(c => chatInfo(c).title).join(', ')}</span>${archived.reduce((a, c) => a + (c.unread || 0), 0) > 0 && html`<b class="cnt mute">${archived.reduce((a, c) => a + (c.unread || 0), 0)}</b>`}</span></span></button>`}
         ${list.map(c => html`<${ChatItem} key=${c.id} chat=${c} />`)}
+        ${!S.ui.archive && fid === 'all' && !S.ui.server && html`<${StartCards} side=${true} />`}
         ${!list.length && html`<${Empty} icon=${S.ui.archive ? 'archive' : 'message-circle'} title=${S.ui.archive ? 'Архив пуст' : 'Здесь пока голо'} text=${S.ui.archive ? 'Чаты из архива возвращаются сами, когда в них пишут.' : fid === 'all' ? 'Найдите людей через поиск или заведите свою группу, канал или сервер.' : 'В этой папке нет чатов.'}>${!S.ui.archive && fid === 'all' && html`<button class="btn" onClick=${() => openModal(CreateMenu)}><${Icon} n="plus" s=${16} /> Создать</button>`}<//>`}
       </div>`}
     <${MeBar} />
@@ -177,7 +177,7 @@ function HomeSidebar() {
 
 // ═════ Нижняя плашка: я и голос ═════
 function MeBar() {
-  const me = S.me, vc = RTC.chat && S.chats[RTC.chat];
+  const me = S.me, vc = RTC.chat && S.chats[RTC.chat], due = !!(S.flags || {}).stars && me.lastDaily !== new Date().toISOString().slice(0, 10);      // сегодняшний бонус ещё не собран
   const accMenu = e => showMenu(e, [
     { icon: 'user', label: 'Мой профиль', run: () => showProfile(me.id) },
     { icon: 'smile', label: me.status ? 'Изменить статус' : 'Задать статус', run: () => openModal(StatusDlg) },
@@ -194,7 +194,7 @@ function MeBar() {
       <button class="ib danger" title="Отключиться" onClick=${() => leaveVoice()}><${Icon} n="phone-off" s=${18} /></button></div>`}
     <div class="me-row">
       <button class="me-u" onClick=${accMenu}><${Avatar} src=${me.avatar} name=${userName(me)} color=${me.color} s=${36} online /><span><b>${userName(me)}</b><small>${me.status ? (me.status.e || '') + ' ' + (me.status.t || '') : me.playing ? '🎮 ' + me.playing : 'в сети'}</small></span></button>
-      ${vc ? html`<button class=${cx('ib', RTC.muted && 'off')} title=${RTC.muted ? 'Включить микрофон' : 'Выключить микрофон'} onClick=${toggleMute}><${Icon} n=${RTC.muted ? 'mic-off' : 'mic'} s=${18} /></button><button class=${cx('ib', RTC.deaf && 'off')} title=${RTC.deaf ? 'Включить звук' : 'Выключить звук'} onClick=${toggleDeaf}><${Icon} n=${RTC.deaf ? 'headphone-off' : 'headphones'} s=${18} /></button>` : html`<button class="ib" title="Листики" onClick=${() => openModal(StarsModal)}><span class="stars-chip">${fmtNum(me.stars || 0)} 🍃</span></button>`}
+      ${vc ? html`<button class=${cx('ib', RTC.muted && 'off')} title=${RTC.muted ? 'Включить микрофон' : 'Выключить микрофон'} onClick=${toggleMute}><${Icon} n=${RTC.muted ? 'mic-off' : 'mic'} s=${18} /></button><button class=${cx('ib', RTC.deaf && 'off')} title=${RTC.deaf ? 'Включить звук' : 'Выключить звук'} onClick=${toggleDeaf}><${Icon} n=${RTC.deaf ? 'headphone-off' : 'headphones'} s=${18} /></button>` : html`<button class=${cx('ib', due && 'due')} title=${due ? 'Ежедневный бонус ждёт — заберите листики' : 'Листики'} onClick=${() => openModal(StarsModal)}><span class="stars-chip">${fmtNum(me.stars || 0)} 🍃</span>${due && html`<i class="due-dot"></i>`}</button>`}
       <button class="ib" title="Настройки" onClick=${() => openSettings()}><${Icon} n="settings" s=${18} /></button>
     </div></div>`;
 }

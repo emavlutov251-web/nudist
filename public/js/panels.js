@@ -314,6 +314,17 @@ function SafetyCode({ chat }) {
   if (!c) return null;
   return html`<div class="safety"><h5><${Icon} n="shield-check" s=${15} /> Код безопасности</h5><div class="sf-e">${c.emoji}</div><code class="mono">${c.hex}</code><div class="qr-box sm"><${QR} text=${'nudist-safety:' + c.hex.replace(/ /g, '')} size=${120} /></div><p class="hint">Сравните эмодзи и цифры с собеседником — лично или по звонку. Совпали — значит, между вами никого нет. Даже нас.</p></div>`;
 }
+// Простое объяснение сквозного шифрования — по нажатию на значок «E2EE» в шапке секретного чата.
+export function E2eeInfo({ id, chat }) {
+  const ch = S.chats[chat]; if (!ch) return null;
+  return html`<${Modal} id=${id} title="Этот чат зашифрован" icon="lock" footer=${html`<button class="btn" onClick=${() => closeModal(id)}>Понятно</button>`}>
+    <div class="e2ee-info">
+      <p><b>Сообщения шифруются на вашем устройстве</b> и расшифровываются только на устройстве собеседника. На сервере лежит набор символов — прочитать его не можем даже мы.</p>
+      <p><b>Ключ хранится только у вас.</b> Поэтому на другом телефоне или после переустановки приложения старые сообщения этого чата не откроются — это плата за секретность.</p>
+      <p><b>Что сервер всё же видит:</b> кто с кем переписывается и когда. Текст, фото и файлы — нет.</p>
+      <${SafetyCode} chat=${ch} />
+    </div><//>`;
+}
 export function InfoPanel({ chat }) {
   if (chat.server) return html`<${ServerPanel} chat=${chat} />`;
   const i = chatInfo(chat), u = i.user, can = chat.can || {}, grp = chat.type === 'group' || chat.type === 'channel', close = () => { S.ui.panel = false; bump(); };

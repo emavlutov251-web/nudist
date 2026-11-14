@@ -9,6 +9,7 @@ const Hub = require('./hub');
 require('./feed');
 const Push = require('./push');
 const Ask = require('./ask');
+const Share = require('./share');
 const R = require('./rpc');
 const G = require('./guild');
 const B = require('./bots');
@@ -207,6 +208,14 @@ const server = http.createServer(async (req, res) => {
     if (p === '/admin' || p === '/admin/') return serveStatic(req, res, 'admin.html');
     if (/^\/(start|download)\/?$/.test(p)) return serveStatic(req, res, 'start.html');
     if (/^\/(privacy|policy)\/?$/.test(p)) return serveStatic(req, res, 'privacy.html');      // политика конфиденциальности   // страница для новых людей: скачать APK
+    const pm = /^\/p\/([\w.-]{1,90})\/?$/.exec(p);      // открытая страница одной записи: ею делятся за пределами «Нудиста»
+    if (pm) {
+      try { A.limit('pp:' + ipOf(req), 180, 60e3); } catch (e) { res.writeHead(429, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('Слишком часто. Передохните минутку.'); }
+      const host = String(req.headers.host || '').replace(/[^\w.:-]/g, ''), proto = /^https?$/.test(req.headers['x-forwarded-proto'] || '') ? req.headers['x-forwarded-proto'] : (process.env.RENDER ? 'https' : 'http');
+      const r = Share.page(pm[1], proto + '://' + host, url.searchParams.get('r'));
+      res.writeHead(r.code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache', 'content-security-policy': CSP, 'referrer-policy': 'no-referrer', 'x-robots-tag': 'noindex, nofollow', 'x-content-type-options': 'nosniff' });
+      return res.end(req.method === 'HEAD' ? undefined : r.html);
+    }
     if (/^\/q\/[\w.-]{1,40}\/?$/.test(p)) return serveStatic(req, res, 'ask.html');      // «Голая правда»: страница анонимного вопроса
     return serveStatic(req, res, p);
   } catch (e) {
@@ -240,7 +249,7 @@ function onConnect(ws, tok, sess, u, ip) {
   const first = !C.conns.has(u.id);
   if (first) C.conns.set(u.id, new Set());
   C.conns.get(u.id).add(c); C.connById.set(c.id, c);
-  sess.seen = now(); sess.ip = ip; u.seen = now(); C.touchDau(u.id);
+  sess.seen = now(); if (!u.hideMeta) sess.ip = ip; u.seen = now(); C.touchDau(u.id);
   // отметка «доставлено» для личных чатов
   for (const cid of u.chats || []) { const ch = db.chats[cid]; if (ch && (ch.type === 'dm' || ch.type === 'secret') && ch.members[u.id]) { const s = C.st(ch, u.id); if ((s.deliv || 0) < ch.seq) { s.deliv = ch.seq; for (const o in ch.members) if (o !== u.id) emit(o, 'deliv', { chat: ch.id, seq: ch.seq }); } } }
   c.send('init', { ...initData(c), build: buildVer() });

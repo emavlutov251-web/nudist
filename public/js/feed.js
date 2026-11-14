@@ -1,7 +1,7 @@
 // «Лента»: записи людей и каналов. Текст и до четырёх картинок, лайки, комментарии, подписки на авторов.
 // Вкладка «Для вас» — рекомендации, «Новое» — всё подряд по времени. Лента догружается сама при прокрутке
 // и сама обновляется раз в две с половиной минуты. Автор записи видит, кто её посмотрел.
-import { html, useState, useEffect, useRef, S, bump, rpc, toast, Icon, Avatar, Badges, cx, userName, fmtShort, fmtNum, confirmDlg, pickFile, upload, Empty, Spinner, Modal, openModal, closeModal, local } from './lib.js';
+import { html, useState, useEffect, useRef, S, bump, rpc, toast, Icon, Avatar, Badges, cx, userName, fmtShort, fmtNum, confirmDlg, pickFile, upload, Empty, Spinner, Modal, openModal, closeModal, local, showMenu, copyText } from './lib.js';
 import { openChat } from './store.js';
 import { openDock, ytFind, ytDock, oldShell } from './dock.js';
 
@@ -96,9 +96,23 @@ function Post({ p, users, follows, onChange, onDel, onFollow }) {
         <button class=${cx('post-a', open && 'on')} aria-expanded=${open} title="Комментарии" onClick=${() => setOpen(!open)}><${Icon} n="message-circle" s=${18} /> ${p.comments ? fmtNum(p.comments) : ''}</button>
         ${mine
           ? html`<button class="post-a post-v" title="Кто посмотрел" onClick=${() => openModal(Viewers, { title: 'Кто посмотрел запись', method: 'feed.viewers', target: p.id })}><${Icon} n="eye" s=${17} /> ${fmtNum(p.views || 0)}</button>`
-          : p.views > 0 && html`<span class="post-v" title="Просмотры"><${Icon} n="eye" s=${16} /> ${fmtNum(p.views)}</span>`}`}</footer>
+          : p.views > 0 && html`<span class="post-v" title="Просмотры"><${Icon} n="eye" s=${16} /> ${fmtNum(p.views)}</span>`}`}
+      ${p.share && html`<button class="post-a post-sh" title="Поделиться записью за пределами «Нудиста»" aria-label="Поделиться" onClick=${e => sharePost(e, p)}><${Icon} n="share-2" s=${17} /></button>`}</footer>
     ${open && !ch && html`<${Comments} post=${p} users=${users} onCount=${n => onChange({ ...p, comments: n })} />`}
   </article>`;
+}
+
+// Поделиться записью наружу: ссылка на открытую страницу /p/<id>. Тот, кто придёт по ней и зарегистрируется, засчитывается как приглашённый.
+export const shareLink = pid => location.origin + '/p/' + pid + (S.me && S.me.username ? '?r=' + encodeURIComponent(S.me.username) : '');
+export function sharePost(e, p) {
+  const link = shareLink(p.id), line = String(p.text || '').split('\n').map(x => x.replace(/^(?:▶️|🔴|⚡)\s*/, '').trim()).filter(Boolean)[0] || '', text = (line.length > 140 ? line.slice(0, 137) + '…' : line);
+  const out = u => window.open(u, '_blank', 'noopener');
+  showMenu(e, [
+    { icon: 'copy', label: 'Скопировать ссылку', run: () => { copyText(link); toast('Ссылка скопирована — вставьте её куда угодно'); } },
+    { icon: 'send', label: 'Отправить в Telegram', run: () => out('https://t.me/share/url?url=' + encodeURIComponent(link) + (text ? '&text=' + encodeURIComponent(text) : '')) },
+    { icon: 'users', label: 'Отправить во ВКонтакте', run: () => out('https://vk.com/share.php?url=' + encodeURIComponent(link)) },
+    navigator.share && { icon: 'share-2', label: 'Другое приложение…', run: () => navigator.share({ title: 'Нудист', text, url: link }).catch(() => {}) },
+  ], { anchor: e.currentTarget });
 }
 
 export function Feed() {

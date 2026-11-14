@@ -84,7 +84,7 @@
   .sup { height: calc(100vh - 170px); } .sup-list { width: 100%; border-right: 0; } .sup-th { display: none; } .sup.in .sup-list { display: none; } .sup.in .sup-th { display: flex; } .sup-back { display: inline-grid; }
   .help-hero > div { margin: 10px 0; flex-basis: 100%; }
 }
-@media (max-height: 700px) { .rail-b.hubb:not(.on) ~ .rail-b.hubb:not(.on) { display: none; } .rail-sep + .rail-sep { display: none; } }
+
 
 /* ───── Лента ───── */
 .feed { max-width: 640px; } .feed-tabs { margin-bottom: 4px; }
@@ -210,3 +210,28 @@ article.post footer { font-size: inherit; color: inherit; }
 .pet-task { display: flex; align-items: center; padding: 7px 0; } .pet-task b { display: block; font-weight: 600; line-height: 1.25; } .pet-task small { color: var(--ink2); } .pet-task em { font-style: normal; font-weight: 700; color: #F08A00; }
 .pet-ck { display: grid; place-items: center; flex: none; width: 30px; height: 30px; margin-right: 10px; border-radius: 50%; color: var(--ink3); background: color-mix(in srgb, var(--ink) 8%, transparent); } .pet-task.done .pet-ck { color: #fff; background: #F08A00; }
 .pet-badges { display: flex; justify-content: space-between; } .pet-badge { display: flex; flex-direction: column; align-items: center; flex: 1; filter: grayscale(1); opacity: .45; } .pet-badge.on { filter: none; opacity: 1; } .pet-badge i { font-style: normal; font-size: 1.9em; line-height: 1.2; } .pet-badge small { color: var(--ink2); }
+
+/* ── «С чего начать»: карточки для новичка */
+.start { width: 100%; max-width: 520px; } .start-g { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.start-c { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-height: 96px; padding: 12px; text-align: left; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: var(--r, 10px); transition: transform .12s var(--ease), border-color .15s, background .15s; }
+.start-c:hover { border-color: var(--accent); } .start-c:active { transform: scale(.97); }
+.start-c b { font-size: .95em; line-height: 1.2; } .start-c small { color: var(--ink2); font-size: .8em; line-height: 1.25; }
+.start-i { display: grid; place-items: center; width: 34px; height: 34px; margin-bottom: 4px; border-radius: 50%; color: #fff; background: var(--accent); }
+.start-c:nth-child(2) .start-i { background: #1F9D57; } .start-c:nth-child(3) .start-i { background: #E8590C; } .start-c:nth-child(4) .start-i { background: #7B4DDB; }
+.start-side { display: none; padding: 10px 12px 14px; max-width: none; } .start-h { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 6px; color: var(--ink2); font-size: .82em; text-transform: uppercase; letter-spacing: .04em; }
+@media (max-width: 800px) { .start-side { display: block; } }
+.welcome .start { margin: 8px 0 4px; }
+/* ── «Прикрыться» заметнее остальных кнопок полосы */
+.rail-b.add.cover { color: #FF8A65; } .rail-b.add.cover:hover { background: #E8590C; color: #fff; animation: cover-pulse 1.1s ease-in-out infinite; }
+@keyframes cover-pulse { 50% { box-shadow: 0 0 0 6px rgba(232, 89, 12, .25); } } [data-anim='0'] .rail-b.add.cover:hover { animation: none; }
+@media (prefers-reduced-motion: reduce) { .rail-b.add.cover:hover { animation: none; } }
+
+/* ── «Поделиться» под записью ленты */
+.post-f .post-sh { margin-left: auto; } .post-f .post-v + .post-sh { margin-left: 4px; }
+
+/* ── ежедневный бонус не собран: точка на листиках */
+.ib.due { position: relative; padding-right: 15px !important; } .due-dot { position: absolute; top: 6px; right: 3px; width: 9px; height: 9px; border-radius: 50%; background: #E03131; box-shadow: 0 0 0 2px var(--panel); animation: due-pulse 1.8s ease-in-out infinite; }
+@keyframes due-pulse { 50% { box-shadow: 0 0 0 2px var(--panel), 0 0 0 7px rgba(224, 49, 49, .22); } } [data-anim='0'] .due-dot { animation: none; } @media (prefers-reduced-motion: reduce) { .due-dot { animation: none; } }
+/* ── значок сквозного шифрования в шапке секретного чата */
+.e2ee { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: .68em; font-weight: 700; letter-spacing: .03em; color: #fff; background: #1F9D57; cursor: pointer; vertical-align: middle; }
+.e2ee-info { display: flex; flex-direction: column; gap: 10px; } .e2ee-info p { line-height: 1.45; }

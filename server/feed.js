@@ -25,7 +25,7 @@ let order = null;      // id записей от новых к старым; с�
 const sorted = () => order || (order = Object.values(db.posts).sort((a, b) => b.ts - a.ts).map(p => p.id));
 // длинные посты каналов (новости целиком) в общей ленте показываем началом — целиком они читаются в самом канале
 const clip = t => { if (t.length <= 900) return t; const cut = t.lastIndexOf('\n', 800); return t.slice(0, cut > 300 ? cut : 800).replace(/[\s.…,;:]+$/, '') + '…'; };
-const view = (p, u) => ({ id: p.id, by: p.by, ts: p.ts, text: p.text, media: p.media || [], likes: count(p.likes), liked: !!p.likes[u.id], comments: (p.cm || []).length, views: p.views || 0, own: p.by === u.id || isMod(u) });
+const view = (p, u) => ({ id: p.id, by: p.by, ts: p.ts, text: p.text, media: p.media || [], likes: count(p.likes), liked: !!p.likes[u.id], comments: (p.cm || []).length, views: p.views || 0, own: p.by === u.id || isMod(u), share: !(db.users[p.by] || {}).private || undefined });
 const post = p => { const x = db.posts[str(p.id, 32)]; need(x, 'Запись не найдена. Возможно, автор передумал.'); return x; };
 // Автор виден, если он существует, не удалён и никто из двоих не заблокировал другого
 function visible(by, u) { const a = db.users[by]; return !!a && !a.deleted && !(a.blocked || []).includes(u.id) && !(u.blocked || []).includes(by); }
@@ -43,7 +43,7 @@ function channelItems(u) {
       const m = arr[i]; if (m.type === 'service' || m.enc || m.once || m.thread || !(m.text || m.media)) continue;
       const url = m.media && m.media.url, img = url && isUpload(url) && IMG_EXT.has(extOf(url)) ? [url] : [];
       if (!m.text && !img.length) continue;
-      out.push({ id: 'ch.' + cid + '.' + m.id, kind: 'channel', chat: cid, username: ch.username, title: ch.title, avatar: ch.avatar, color: ch.color || 0, ts: m.ts, text: clip((m.text || '').replace(/\*\*|__|~~|\|\||`/g, '')), media: img });      // разметку чата лента не понимает: убираем звёздочки
+      out.push({ id: 'ch.' + cid + '.' + m.id, kind: 'channel', chat: cid, username: ch.username, share: !!(ch.pub && !ch.server && !ch.price) || undefined, title: ch.title, avatar: ch.avatar, color: ch.color || 0, ts: m.ts, text: clip((m.text || '').replace(/\*\*|__|~~|\|\||`/g, '')), media: img });      // разметку чата лента не понимает: убираем звёздочки
       n++;
     }
   }

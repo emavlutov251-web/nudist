@@ -372,7 +372,7 @@ A.hooks.onRegister.push(u => setTimeout(() => {
 }, 30));
 A.hooks.onLogin.push((u, s) => {
   const sysBot = db.users[db.meta.sys]; if (!sysBot) return;
-  postMessage(C.openDm(sysBot.id, u.id), sysBot.id, { text: `🔐 **Новый вход в аккаунт**\nУстройство: ${s.ua}\nIP: ${s.ip}\n\nЕсли это были не вы — завершите сеанс в Настройках → Устройства и смените пароль.` }, { quiet: true });
+  postMessage(C.openDm(sysBot.id, u.id), sysBot.id, { text: `🔐 **Новый вход в аккаунт**\nУстройство: ${s.ua}\nIP: ${s.ip || 'скрыт по вашей настройке'}\n\nЕсли это были не вы — завершите сеанс в Настройках → Устройства и смените пароль.` }, { quiet: true });
 });
 
 module.exports = { ensureBuiltin, botApi, pollRss, JOKES, FACTS, MEMES, pick, memeSticker };

@@ -12,7 +12,7 @@ import { hashFromHistory } from './back.js';
 import './fluent.js';
 import { Hub, openHub, openApps } from './hub.js';
 import { Dock, foldDock } from './dock.js';
-import { takeRef, pendingRef, clearRef, offerSiteUpdate } from './growth.js';
+import { takeRef, pendingRef, clearRef, offerSiteUpdate, StartCards } from './growth.js';
 takeRef();
 // Офлайн-кеш оболочки: со второго захода приложение открывается с диска. Вышла новая версия — докачается в фоне и предложит обновиться.
 function swSetup() {
@@ -86,7 +86,7 @@ function Auth() {
     <section class="auth-form">
       <form class="card" onSubmit=${submit}>
         <div class="tabs auth-tabs"><button type="button" class=${cx((mode === 'login' || mode === 'register' || mode === 'recover') && 'on')} onClick=${() => sw('login')}>Username</button><button type="button" class=${cx(mode === 'phone' && 'on')} onClick=${() => sw('phone')}>Телефон</button><button type="button" class=${cx(mode === 'qr' && 'on')} onClick=${() => sw('qr')}>QR-код</button></div>
-        ${ref && html`<div class="ref-note"><${Icon} n="gift" s=${18} /><span>Вас зовёт <b>@${ref}</b>. Зарегистрируйтесь — и вы сразу окажетесь у него в контактах, а обоим дадут по 50 🍃.</span></div>`}
+        ${ref && html`<div class="ref-note"><${Icon} n="gift" s=${18} /><span>Вас зовёт <b>@${ref}</b>. Зарегистрируйтесь — и вы сразу окажетесь у него в контактах, а обоим дадут по 100 🍃.</span></div>`}
         ${mode === 'qr' ? html`<${QrLogin} onToken=${t => done({ token: t })} />` : html`
           <h2>${mode === 'register' ? 'Регистрация' : mode === 'recover' ? 'Восстановление доступа' : mode === 'phone' ? 'Вход по номеру' : 'С возвращением'}</h2>
           ${(mode === 'login' || mode === 'register' || mode === 'recover') && html`
@@ -129,7 +129,8 @@ function QrLogin({ onToken }) {
 // ═════ Каркас ═════
 function Welcome() {
   const fact = DAILY_FACTS[new Date().getDate() % DAILY_FACTS.length];
-  return html`<div class="welcome"><${Logo} s=${96} /><h2>Выберите, кому написать</h2><p>Или не пишите никому. Мы не осуждаем.</p>
+  return html`<div class="welcome"><${Logo} s=${72} /><h2>С чего начнём?</h2><p>Или просто выберите чат слева. Мы не осуждаем.</p>
+    <${StartCards} />
     <div class="tip"><b>Подсказка дня</b><span>${fact}</span></div>
     <div class="row"><button class="btn ghost" onClick=${() => { const c = Object.values(S.chats).find(x => x.type === 'saved'); c ? openChat(c.id) : openUser(S.me.id); }}><${Icon} n="bookmark" s=${16} /> Избранное</button><button class="btn ghost" onClick=${() => { S.ui.boss = true; bump(); }}><${Icon} n="table" s=${16} /> Прикрыться</button></div></div>`;
 }

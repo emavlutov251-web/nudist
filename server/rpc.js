@@ -51,6 +51,10 @@ H['me.update'] = (c, p) => {
   if (p.email !== undefined) { const e = str(p.email, 120); need(!e || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e), 'Некорректный email'); u.email = e || undefined; }
   if (p.profile !== undefined) u.profile = p.profile ? { color: /^#[0-9a-f]{6}$/i.test(p.profile.color) ? p.profile.color : undefined, wall: str(p.profile.wall, 24) || undefined, emoji: str(p.profile.emoji, 16) || undefined } : undefined;
   if (p.private !== undefined) u.private = !!p.private;
+  if (p.hideMeta !== undefined) {      // не хранить IP и название устройства в списке сеансов; уже записанное стираем сразу
+    u.hideMeta = !!p.hideMeta || undefined;
+    if (u.hideMeta) for (const s of Object.values(db.sessions)) if (s.user === u.id) { delete s.ip; s.ua = 'Неизвестное устройство'; }
+  }
   if (p.playing !== undefined) u.playing = str(p.playing, 64) || undefined;
   save(); selfUpdate(u); C.broadcastUser(u);
   return C.selfUser(u);

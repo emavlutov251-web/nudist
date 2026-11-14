@@ -48,7 +48,7 @@ setInterval(() => { const t = now(); for (const [k, a] of buckets) if (!a.length
 // ───── пользователи и сессии
 const AVA_COLORS = 8;
 // Приглашения: новичок пришёл по ссылке друга — обоим листики, сразу в контактах друг у друга и готовый чат.
-const REF_BONUS = 50, REF_DAILY = 5;      // бонус за приглашённого и за скольких в день его платят пригласившему
+const REF_BONUS = 100, REF_DAILY = 5;      // бонус за приглашённого и за скольких в день его платят пригласившему
 const START_LEAVES = (() => { const n = Number(process.env.LEAF_START); return process.env.LEAF_START !== undefined && Number.isInteger(n) && n >= 0 && n <= 1e6 ? n : 500; })();      // сколько листиков у нового аккаунта
 function invitedBy(u, ref) {
   const inv = db.users[C.byName.get(String(ref).replace(/^@/, '').toLowerCase())];
@@ -97,7 +97,8 @@ if (!db.meta.sessHashed) {          // однократный перевод с�
 function createSession(u, meta) {
   if (u.banned) fail('Аккаунт заблокирован администрацией' + (u.banReason ? ': ' + u.banReason : ''));
   const t = token(32), key = sid(t);
-  const s = { id: id(), user: u.id, ua: deviceName(meta.ua), ip: meta.ip, at: now(), seen: now() };
+  const s = u.hideMeta ? { id: id(), user: u.id, ua: 'Неизвестное устройство', at: now(), seen: now() }      // человек попросил не хранить адрес и устройство
+    : { id: id(), user: u.id, ua: deviceName(meta.ua), ip: meta.ip, at: now(), seen: now() };
   db.sessions[key] = s;
   let others = 0;
   if (now() - u.created > 15000) for (const k in db.sessions) if (k !== key && db.sessions[k].user === u.id) { others = 1; break; }      // у только что созданного аккаунта других сеансов нет

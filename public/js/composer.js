@@ -219,13 +219,18 @@ export function Composer({ chat, thread }) {
   const attach = e => showMenu(e, [
     { icon: 'image', label: 'Фото или видео', run: async () => stage(await pickFile('image/*,video/*', true)) },
     { icon: 'file', label: 'Файл', run: async () => stage(await pickFile('', true), true) },
-    { icon: 'layout-grid', label: 'Приложения', hint: 'игры и утилиты', run: () => import('./hub.js').then(h => h.openApps(chat.id)) },
-    chat.type !== 'secret' && { icon: 'wand-sparkles', label: 'Мемогенератор', hint: 'и демотиваторы', run: () => openModal(MemeModal, { onSend: p => post(p) }) },
-    chat.type !== 'secret' && { icon: 'chart-column', label: 'Опрос', run: () => openModal(PollModal, { onSend: p => post(p) }) },
     { icon: 'circle-dot', label: 'Кружочек', run: () => startRec('round') },
-    { icon: 'map-pin', label: 'Геопозиция', run: geo },
-    { icon: 'contact', label: 'Контакт', run: async () => { const ids = await pickUsers({ title: 'Поделиться контактом', ok: 'Отправить' }); if (ids && ids[0]) post({ type: 'contact', contact: { id: ids[0] } }); } },
-    peer && !peer.bot && S.flags.stars && { emoji: '🍃', label: 'Поделиться листиками', run: () => shareLeaves(peer.id) },
+    '-',
+    { icon: 'chart-column', label: 'Опрос, место, контакт', sub: [
+      chat.type !== 'secret' && { icon: 'chart-column', label: 'Опрос', run: () => openModal(PollModal, { onSend: p => post(p) }) },
+      { icon: 'map-pin', label: 'Геопозиция', run: geo },
+      { icon: 'contact', label: 'Контакт', run: async () => { const ids = await pickUsers({ title: 'Поделиться контактом', ok: 'Отправить' }); if (ids && ids[0]) post({ type: 'contact', contact: { id: ids[0] } }); } },
+    ].filter(Boolean) },
+    { icon: 'wand-sparkles', label: 'Приколы', hint: 'мемы, игры, листики', sub: [
+      chat.type !== 'secret' && { icon: 'wand-sparkles', label: 'Мемогенератор', hint: 'и демотиваторы', run: () => openModal(MemeModal, { onSend: p => post(p) }) },
+      { icon: 'layout-grid', label: 'Приложения', hint: 'игры и утилиты', run: () => import('./hub.js').then(h => h.openApps(chat.id)) },
+      peer && !peer.bot && S.flags.stars && { emoji: '🍃', label: 'Поделиться листиками', run: () => shareLeaves(peer.id) },
+    ].filter(Boolean) },
     '-', { icon: 'clock', label: 'Отложенные сообщения', run: () => openModal(ScheduledModal, { chat }) },
   ], { anchor: e.currentTarget });
   const sendMenu = e => showMenu(e, [
