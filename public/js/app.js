@@ -193,6 +193,7 @@ async function handleHash(first) {
   if (/^#hub(=\w+)?$/.test(location.hash)) { const t = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); openHub(['feed', 'music', 'clips', 'live', 'apps', 'help'].includes(t) ? t : 'music'); return; }
   if (/^#shop(=\w+)?$/.test(location.hash)) { const tab = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); import('./shop.js').then(m => m.openShop(tab)); return; }
   if (/^#buy(=[\w]+)?$/.test(location.hash)) { const it = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); import('./pay.js').then(m => (it ? m.buyItem(it) : import('./panels.js').then(p => openModal(p.StarsModal)))); return; }
+  if (/^#stickers(=[\w]+)?$/.test(location.hash)) { const n = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); import('./stickers.js').then(m => m.openImport(n ? { link: 'https://t.me/addstickers/' + n } : {})); return; }
   if (location.hash === '#ask') { history.replaceState(history.state, '', location.pathname); import('./growth.js').then(g => g.openAsk()); return; }
   if (location.hash === '#invite') { history.replaceState(history.state, '', location.pathname); import('./growth.js').then(g => g.openInvite()); return; }
   if (first && pendingRef()) { const r = pendingRef(); clearRef(); if (S.me && r.toLowerCase() !== (S.me.username || '').toLowerCase()) { showProfile(null, r); return; } }      // уже вошедший открыл чужую ссылку-приглашение — покажем, кто звал

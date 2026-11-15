@@ -37,8 +37,9 @@ const nameOf = raw => { const s = String(raw || '').trim(), m = /(?:t\.me|telegr
 const view = p => ({ id: p.id, tg: p.tg, title: p.title, by: p.by, n: p.items.length, items: p.items });
 const mine = u => (u.packs || []).filter(id => db.packs[id]);
 const byTg = name => { const l = name.toLowerCase(); for (const k in db.packs) if (db.packs[k].tg.toLowerCase() === l) return db.packs[k]; return null; };
-function attach(u, p) { const l = mine(u).filter(x => x !== p.id); need(l.length < MAX_MINE, `Больше ${MAX_MINE} наборов не помещается. Уберите лишний.`); u.packs = [p.id, ...l]; save(); }
+function attach(u, p) { const l = mine(u).filter(x => x !== p.id); need(l.length < MAX_MINE, `Больше ${MAX_MINE} наборов не помещается. Уберите лишний.`); u.packs = [p.id, ...l]; pop.t = 0; save(); }
 
+let pop = { t: 0, n: {} };      // сколько человек держит каждый набор; пересчитывается не чаще раза в 30 секунд и после каждого изменения
 const busy = new Map();      // имя набора → обещание: два человека, вставившие одну ссылку, не качают набор дважды
 async function load(name, uid) {
   const token = botToken(); need(token, 'Импорт из Telegram ещё не настроен: владельцу нужно один раз вставить ключ бота.');
@@ -65,10 +66,16 @@ H['pack.token'] = async (c, p) => {
   const t = String(p.token || '').trim(); need(/^\d{5,15}:[\w-]{30,60}$/.test(t), 'Это не похоже на ключ бота. Он выглядит так: 123456789:AAH… (выдаёт @BotFather).');
   const me = await tg(t, 'getMe'); db.meta.tgBot = t; save(); return { ok: true, bot: me.username };
 };
+// Наборы, которые кто-то уже принёс: их можно взять в одно касание, ничего не зная про Telegram. Сверху — самые ходовые.
+const holders = () => { if (now() - pop.t > 30000) { const n = {}; for (const u of Object.values(db.users)) for (const id of u.packs || []) n[id] = (n[id] || 0) + 1; pop = { t: now(), n }; } return pop.n; };
+H['pack.popular'] = c => {
+  const my = new Set(mine(db.users[c.uid])), n = holders();
+  return { packs: Object.values(db.packs).map(p => ({ id: p.id, tg: p.tg, title: p.title, n: p.items.length, users: n[p.id] || 0, mine: my.has(p.id), e: (p.items[0] || {}).e, icons: p.items.map(s => s.thumb || (!s.kind && s.url) || '').filter(Boolean).slice(0, 4) })).sort((a, b) => b.users - a.users || b.n - a.n).slice(0, 40) };
+};
 H['pack.list'] = c => ({ packs: mine(db.users[c.uid]).map(id => view(db.packs[id])) });
 H['pack.get'] = (c, p) => { const k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); return { pack: view(k), mine: mine(db.users[c.uid]).includes(k.id) }; };
 H['pack.add'] = (c, p) => { const k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); attach(db.users[c.uid], k); return { pack: view(k) }; };
-H['pack.remove'] = (c, p) => { const u = db.users[c.uid]; u.packs = mine(u).filter(x => x !== p.id); save(); return { ok: true }; };
+H['pack.remove'] = (c, p) => { const u = db.users[c.uid]; u.packs = mine(u).filter(x => x !== p.id); pop.t = 0; save(); return { ok: true }; };
 // Удалить набор у всех: тот, кто его принёс, или администратор
 H['pack.drop'] = (c, p) => { const u = db.users[c.uid], k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); need(k.by === u.id || isAdmin(u), 'Удалить набор может тот, кто его добавил, или администратор'); delete db.packs[k.id]; save(); C.releaseFiles(k); return { ok: true }; };
 // Импорт идёт в фоне (большой набор качается десятки секунд): ответ приходит сразу, итог — событием pack или pack.fail

@@ -12,27 +12,52 @@ on('pack.fail', d => { TG.pending = Math.max(0, TG.pending - 1); toast(d.error |
 // Картинка для кнопки набора и для сетки: неподвижная, чтобы сотня анимаций не грела телефон
 export const packIcon = p => { const s = p.items[0] || {}; return s.thumb || (!s.kind && s.url) || ''; };
 
-function ImportDlg({ id }) {
-  const [link, setLink] = useState(''), [st, setSt] = useState(null), [tok, setTok] = useState(''), [busy, setBusy] = useState(false);
-  useEffect(() => { rpc('pack.status').then(setSt).catch(() => setSt({ ready: true })); }, []);
+// Забрать набор по ссылке: общий путь для окна, кнопки под ссылкой в чате и адреса #stickers=Имя
+export async function importLink(link) {
+  const r = await rpc('pack.import', { link });
+  if (r.pack) { put(r.pack); toast(`Набор «${r.pack.title}» добавлен. Он уже в ваших стикерах.`); }
+  else { TG.pending++; bump(); toast('Забираем набор из Telegram. Он появится в стикерах примерно через минуту.'); }
+  return r;
+}
+// Окно «Добавить стикеры»: готовые наборы в одно касание, свой набор из Telegram по шагам, стикер из картинки
+function ImportDlg({ id, link: link0, toMy }) {
+  const [link, setLink] = useState(link0 || ''), [st, setSt] = useState(null), [tok, setTok] = useState(''), [busy, setBusy] = useState(false), [pop, setPop] = useState(null);
+  useEffect(() => { rpc('pack.status').then(setSt).catch(() => setSt({ ready: true })); rpc('pack.popular').then(r => setPop(r.packs)).catch(() => setPop([])); }, []);
   const run = async f => { setBusy(true); try { await f(); } catch (e) { toast(e.message || 'Не получилось', 'err'); } finally { setBusy(false); } };
-  const go = e => { e && e.preventDefault(); if (!link.trim()) return toast('Вставьте ссылку на набор', 'err'); run(async () => {
-    const r = await rpc('pack.import', { link }); if (r.pack) { put(r.pack); toast(`Набор «${r.pack.title}» добавлен`); } else { TG.pending++; bump(); toast('Тащим набор из Telegram. Обычно это меньше минуты, окно можно закрыть.'); } closeModal(id); }); };
+  const go = e => { e && e.preventDefault(); if (!link.trim()) return toast('Вставьте ссылку на набор', 'err'); run(async () => { await importLink(link); closeModal(id); }); };
+  const paste = async () => { try { const t = (await navigator.clipboard.readText()).trim(); if (!t) return toast('В буфере пусто. Сначала скопируйте ссылку на набор в Telegram.'); setLink(t.slice(0, 200)); } catch (e) { toast('Браузер не дал прочитать буфер. Нажмите на поле и подержите — появится «Вставить».'); } };
+  const take = p => run(async () => { const r = await rpc('pack.add', { id: p.id }); put(r.pack); setPop(pop.map(x => x.id === p.id ? { ...x, mine: true } : x)); toast(`Набор «${p.title}» добавлен`); });
   const saveTok = () => run(async () => { const r = await rpc('pack.token', { token: tok }); toast('Бот @' + r.bot + ' подключён. Теперь вставьте ссылку на набор.'); setSt({ ...st, ready: true }); });
-  return html`<${Modal} id=${id} title="Стикеры из Telegram" icon="sticker">
-    <form class="form" onSubmit=${go}>
-      ${!st ? html`<${Spinner} />` : !st.ready && st.owner ? html`<div class="note"><span>Чтобы забирать наборы, серверу нужен ключ любого бота Telegram. Это делается один раз: откройте в Telegram ${'@BotFather'}, отправьте ему /newbot, придумайте имя и вставьте сюда ключ, который он пришлёт.</span></div>
+  const ready = st && st.ready;
+  return html`<${Modal} id=${id} title="Добавить стикеры" icon="sticker">
+    <div class="form add-st">
+      ${pop && pop.length > 0 && html`<h4 class="add-h"><i>1</i> Готовые наборы <small>одно касание</small></h4>
+        <div class="pop-list">${pop.map(p => html`<div class="pop-i" key=${p.id}>
+          <button type="button" class="pop-ic" title="Посмотреть набор" onClick=${() => openPack(p.id)}>${p.icons.length ? p.icons.map(u => html`<img src=${u} alt="" loading="lazy" />`) : html`<span>${p.e || '🙂'}</span>`}</button>
+          <div class="pop-t"><b>${p.title}</b><small>${p.n} шт.${p.users > 1 ? ` · у ${p.users} чел.` : ''}</small></div>
+          ${p.mine ? html`<span class="pop-ok"><${Icon} n="check" s=${15} /> Добавлен</span>` : html`<button type="button" class="btn sm" disabled=${busy} onClick=${() => take(p)}>Добавить</button>`}
+        </div>`)}</div>`}
+      <h4 class="add-h"><i>${pop && pop.length ? 2 : 1}</i> Свой набор из Telegram</h4>
+      ${!st ? html`<${Spinner} />` : !ready && st.owner ? html`<div class="note"><span>Чтобы забирать наборы, серверу нужен ключ любого бота Telegram. Это делается один раз: откройте в Telegram ${'@BotFather'}, отправьте ему /newbot, придумайте имя и вставьте сюда ключ, который он пришлёт.</span></div>
         <label class="fld"><span>Ключ бота</span><input value=${tok} onInput=${e => setTok(e.target.value)} placeholder="123456789:AAH…" autocomplete="off" /></label>
         <button type="button" class="btn" disabled=${busy || !tok.trim()} onClick=${saveTok}>Подключить бота</button>`
-      : !st.ready ? html`<div class="note warn"><span>Импорт из Telegram ещё не настроен. Напишите владельцу: ему нужно один раз вставить ключ бота в этом окне. Наборы, которые уже кто-то добавил, можно забрать из чата: нажмите на стикер.</span></div>`
-      : html`<p>Откройте набор в Telegram, нажмите «Поделиться» и скопируйте ссылку. Подходят обычные, анимированные и видеостикеры.</p>
-        <label class="fld"><span>Ссылка на набор</span><input value=${link} onInput=${e => setLink(e.target.value)} placeholder="https://t.me/addstickers/…" autocomplete="off" autofocus /></label>
-        <button class="btn" disabled=${busy}><${Icon} n="download" s=${16} /> Добавить набор</button>
-        <p class="hint">В набор попадают первые 120 стикеров. Стикеры рисовали их авторы: добавляйте то, чем автор сам поделился в Telegram.</p>`}
-    </form>
+      : !ready ? html`<div class="note warn"><span>Импорт из Telegram ещё не настроен: владельцу нужно один раз вставить ключ бота в этом окне. Готовые наборы выше можно брать уже сейчас.</span></div>`
+      : html`<ol class="how">
+          <li>В Telegram нажмите на любой стикер из набора, который хотите забрать.</li>
+          <li>В открывшемся окне набора нажмите <b>⋮</b> или значок «Поделиться» и выберите <b>«Копировать ссылку»</b>.</li>
+          <li>Вернитесь сюда и нажмите <b>«Вставить»</b>, затем «Добавить набор».</li>
+        </ol>
+        <form class="add-row" onSubmit=${go}><input value=${link} onInput=${e => setLink(e.target.value)} placeholder="https://t.me/addstickers/…" autocomplete="off" aria-label="Ссылка на набор" /><button type="button" class="btn ghost" onClick=${paste}>Вставить</button></form>
+        <button type="button" class="btn" disabled=${busy || !link.trim()} onClick=${go}><${Icon} n="download" s=${16} /> Добавить набор</button>
+        <p class="hint">Подходят обычные, анимированные и видеостикеры. Набор загружается около минуты и сам появится в стикерах — окно можно закрыть. Берутся первые 120 стикеров.</p>`}
+      ${toMy && html`<h4 class="add-h"><i>${pop && pop.length ? 3 : 2}</i> Стикер из своей картинки</h4>
+        <p class="hint">Любое фото или картинка с телефона станет стикером. В чате можно и так: нажмите на фото → «Сделать стикером».</p>
+        <button type="button" class="btn ghost" onClick=${() => { closeModal(id); toMy(); }}><${Icon} n="image" s=${16} /> Сделать из картинки</button>`}
+      <details class="add-faq"><summary>Как убрать набор или посмотреть, чей он</summary><p class="hint">Откройте стикеры, выберите набор и нажмите «набор» справа от названия. Там кнопка «Убрать из моих». Набор из чужого сообщения открывается нажатием на стикер — оттуда его можно добавить себе.</p></details>
+    </div>
   <//>`;
 }
-export const openImport = () => openModal(ImportDlg);
+export const openImport = props => openModal(ImportDlg, props && !props.type ? props : {});
 
 function PackDlg({ id, pack }) {
   const [d, setD] = useState(null), [busy, setBusy] = useState(false);

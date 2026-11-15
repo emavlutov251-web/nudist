@@ -108,6 +108,8 @@ function Buttons({ m, chat }) {
   };
   return html`<div class="kbd">${m.btn.map(row => html`<div>${row.map(b => html`<button disabled=${busy === b.d && !!b.d} onClick=${e => { e.stopPropagation(); click(b); }}>${b.t}${b.u ? html`<${Icon} n="arrow-up-right" s=${12} />` : b.app ? html`<${Icon} n="app-window" s=${12} />` : ''}</button>`)}</div>`)}</div>`;
 }
+// Ссылка на набор стикеров Telegram в тексте сообщения: под ней показываем кнопку «Добавить себе»
+const packLink = t => { const m = /(?:https?:\/\/)?(?:t\.me|telegram\.me)\/addstickers\/[A-Za-z0-9_]{1,64}/i.exec(t); return m ? m[0] : ''; };
 function Body({ m, chat, list }) {
   switch (m.type) {
     case 'once': return html`<${OnceMsg} m=${m} />`;
@@ -207,6 +209,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
       ${(m.rq || m.quote) && html`<button class="rq" onClick=${e => { e.stopPropagation(); m.reply && onJump(m.reply); }}><b>${m.rq ? m.rq.name : 'Цитата'}</b><span>${m.quote || (m.rq && (m.rq.text || msgPreview({ type: m.rq.type, text: '' }))) || 'сообщение'}</span></button>`}
       <${Body} m=${m} chat=${chat} list=${list} />
       ${text && html`<div class="txt" dangerouslySetInnerHTML=${{ __html: md(long && !m._open ? clipText(text) : text, mdOpt(chat)) }}></div>`}
+      ${text && packLink(text) && html`<button class="pack-chip" onClick=${e => { e.stopPropagation(); const l = packLink(text); import('./stickers.js').then(s => s.importLink(l)).catch(x => toast(x.message || 'Не получилось забрать набор', 'err')); }}><${Icon} n="sticker" s=${16} /><span><b>Набор стикеров</b><small>${packLink(text).split('/').pop()}</small></span><i>Добавить себе</i></button>`}
       ${long && html`<button class="txt-more" onClick=${e => { e.stopPropagation(); const el = e.currentTarget.closest('.msg'); m._open = !m._open; bump(); if (!m._open && el) setTimeout(() => el.scrollIntoView({ block: 'nearest' }), 30); }}>${m._open ? 'Свернуть' : `Читать полностью · ${readMin(text)}`}</button>`}
       ${m.bad && html`<small class="dim">Откройте чат на устройстве, где он был создан.</small>`}
       ${m._tr && html`<div class="tr"><small>шуточный перевод</small>${m._tr}</div>`}

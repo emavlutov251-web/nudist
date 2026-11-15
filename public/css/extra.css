@@ -207,3 +207,19 @@ video.sticker-img { background: none; pointer-events: auto; }
 .lbl-colors { display: flex; flex-wrap: wrap; margin: 12px -4px 4px; } .utag-sw { width: 30px; height: 30px; margin: 4px; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px var(--line); } .utag-sw.on { border-color: var(--panel); box-shadow: 0 0 0 2px var(--ink); }
 .modal-b > .lbl-colors + .chips { margin-top: 8px; }
 .modal-b > .chips + .hint { margin-top: 12px; }
+
+/* Добавление стикеров: заметная кнопка в выборе, подсказка и окно с шагами */
+.pk-top { display: flex; align-items: flex-start; gap: 6px; flex: none; } .pk-top > .pk-groups { flex: 1; min-width: 0; }
+.pk-add { flex: none; display: flex; align-items: center; gap: 3px; height: 32px; padding: 0 10px 0 7px; border-radius: 8px; font-size: .8em; font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); white-space: nowrap; }
+.pk-tip { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 7px 8px 7px 11px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 9%, transparent); font-size: .84em; flex: none; } .pk-tip > span { flex: 1; min-width: 0; }
+.add-st { gap: 10px; } .add-h { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: 1em; } .add-h:first-child { margin-top: 0; } .add-h > i { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-style: normal; font-size: .8em; font-weight: 700; display: flex; align-items: center; justify-content: center; } .add-h small { font-weight: 400; color: var(--ink3); font-size: .8em; }
+.pop-list { display: flex; flex-direction: column; gap: 2px; max-height: 34vh; overflow-y: auto; margin: 0 -4px; }
+.pop-i { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-radius: 10px; } .pop-i:hover { background: var(--hover, rgba(127,127,127,.08)); }
+.pop-ic { flex: none; display: flex; gap: 2px; padding: 0; background: none; border: 0; cursor: pointer; } .pop-ic img { width: 34px; height: 34px; object-fit: contain; display: block; } .pop-ic span { font-size: 1.7em; width: 34px; text-align: center; }
+.pop-t { flex: 1; min-width: 0; display: flex; flex-direction: column; } .pop-t b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; } .pop-t small { color: var(--ink3); font-size: .8em; }
+.pop-ok { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--ink3); font-size: .84em; }
+.how { margin: 0; padding: 0; list-style: none; counter-reset: how; display: flex; flex-direction: column; gap: 7px; } .how li { counter-increment: how; position: relative; padding-left: 26px; font-size: .92em; line-height: 1.4; } .how li::before { content: counter(how); position: absolute; left: 0; top: 1px; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--accent); color: var(--accent); font-size: .74em; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.add-row { display: flex; gap: 6px; } .add-row input { flex: 1; min-width: 0; }
+.add-faq summary { cursor: pointer; font-size: .86em; color: var(--ink2); } .add-faq p { margin: 6px 0 0; }
+@media (max-width: 420px) { .pop-ic img:nth-child(n+3) { display: none; } }
+.pack-chip { display: flex; align-items: center; gap: 9px; width: 100%; max-width: 320px; margin-top: 6px; padding: 7px 10px; border-radius: 10px; border: 0; background: color-mix(in srgb, var(--accent) 11%, transparent); color: inherit; text-align: left; cursor: pointer; font: inherit; } .pack-chip > span { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; } .pack-chip b { font-size: .9em; } .pack-chip small { font-size: .78em; opacity: .7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .pack-chip > i { flex: none; font-style: normal; font-size: .82em; font-weight: 600; color: var(--accent); }
