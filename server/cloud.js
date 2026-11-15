@@ -69,7 +69,7 @@ async function ensureBucket() {
 }
 
 // ───── Вторая, независимая копия базы в S3 (если заданы S3_*): db/<строка>.gz — свежая, обновляется раз в две минуты;
-// db/<строка>-ГГГГ-ММ-ДД.gz — копия на каждый день (хранится 35 дней, копии за первое число месяца остаются навсегда).
+// db/<строка>-ГГГГ-ММ-ДД.gz — копия на каждый день (хранится 35 дней, потом удаляется: стёртое людьми не должно жить в архивах вечно).
 // Зачем: бесплатный проект Supabase могут приостановить или удалить. Тогда сервер при запуске поднимется из копии в S3
 // и продолжит работать на ней, а не остановится навсегда. На своём сервере без Supabase это просто резервная копия вне диска.
 const MIRROR = S3.enabled && process.env.DB_MIRROR !== 'off';
@@ -115,8 +115,7 @@ async function mirrorDrain() {
     const d = new Date(), day = d.toISOString().slice(0, 10);
     if (mirror.day !== day) {
       await s3put(dayKey(d), buf); mirror.day = day;
-      const old = new Date(d.getTime() - 36 * 864e5);
-      if (old.getUTCDate() !== 1) S3.request('DELETE', dayKey(old)).catch(() => {});      // первое число месяца оставляем как архив
+      for (let i = 36; i <= 50; i++) S3.request('DELETE', dayKey(new Date(d.getTime() - i * 864e5))).catch(() => {});      // с запасом в две недели: если сервер в нужный день не работал, старая копия всё равно уйдёт
     }
     mirror.at = mirror.lastOk = Date.now(); mirror.lastError = ''; mirror.pushes++; mirror.remoteId = mirror.localId;
   } catch (e) {

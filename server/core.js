@@ -159,7 +159,7 @@ const IMPORTERS = new Set(String(process.env.IMPORTERS || '').split(',').map(s =
 const canImport = u => !!u && (IMPORTERS.has(u.id) || isOwner(u));
 // Аккаунты редакции с автоматическими подборками: рядом с именем честно стоит значок «Бот».
 const ROBOTS = new Set(String(process.env.ROBOTS || '').split(',').map(s => s.trim()).filter(Boolean));
-const POLICY = '2026-11-15';      // редакция политики конфиденциальности (public/privacy.html); сменили текст — смените дату, и приложение спросит согласие заново
+const POLICY = '2026-11-16';      // редакция политики конфиденциальности (public/privacy.html); сменили текст — смените дату, и приложение спросит согласие заново
 function selfUser(u) {
   return { ...pubUser(u, u.id), incog: u.incog || undefined, near: nearOf(u), policy: (u.policy || {}).v, policyNeed: POLICY, phone: u.phone, email: u.email, stars: u.stars || 0, premiumUntil: Math.max(u.premiumUntil || 0, u.trialUntil || 0) || undefined, tier: tierOf(u) || undefined, ...(selfHook ? selfHook(u) : null), privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, owner: isOwner(u) || undefined, grant: canGrant(u) || undefined, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, private: !!u.private, hideMeta: !!u.hideMeta, lastDaily: u.lastDaily, dailyRun: u.dailyRun || 0, muted: u.muted > now() ? u.muted : undefined, taps: u.tapDay === today() ? u.taps : 0 };
 }
