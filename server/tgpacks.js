@@ -8,7 +8,7 @@ const { db, save, now, need, str, fail } = C, H = R.H;
 db.packs = db.packs || {};      // id → { id, tg, title, by, ts, items: [{ id, e, url, thumb, kind }] }
 
 const TG = (process.env.TG_API || 'https://api.telegram.org').replace(/\/+$/, '');
-const MAX_ITEMS = 120, MAX_FILE = 700 * 1024, MAX_MINE = 30;
+const MAX_ITEMS = 120, MAX_FILE = 700 * 1024, MAX_MINE = 30, RETRY_MS = Number(process.env.TG_RETRY_MS) || 1200;
 const botToken = () => process.env.TG_BOT_TOKEN || (db.meta && db.meta.tgBot) || '';
 const isAdmin = u => C.isOwner(u) || ['admin', 'superadmin'].includes((u || {}).admin);
 
@@ -22,7 +22,7 @@ async function tg(token, method, params) {
 async function grab(token, fileId, ext) {
   const f = await tg(token, 'getFile', { file_id: fileId });
   if (!f.file_path || !/^[\w./-]+$/.test(f.file_path) || f.file_path.includes('..') || (f.file_size || 0) > MAX_FILE) return null;
-  const r = await fetch(`${TG}/file/bot${token}/${f.file_path}`, { signal: AbortSignal.timeout(30000) }); if (!r.ok) return null;
+  const r = await fetch(`${TG}/file/bot${token}/${f.file_path}`, { signal: AbortSignal.timeout(30000) }); if (!r.ok) throw new Error('файл не отдан: ' + r.status);
   const buf = Buffer.from(await r.arrayBuffer()); if (!buf.length || buf.length > MAX_FILE) return null;
   if (!Cloud.hasRoom(buf.length)) fail('Хранилище файлов заполнено');
   const real = ext || (/\.(webp|png|jpe?g)$/i.exec(f.file_path) || [0, 'webp'])[1].toLowerCase().replace('jpeg', 'jpg');
@@ -44,14 +44,15 @@ async function load(name, uid) {
   const token = botToken(); need(token, 'Импорт из Telegram ещё не настроен: владельцу нужно один раз вставить ключ бота.');
   const set = await tg(token, 'getStickerSet', { name });
   const src = (set.stickers || []).slice(0, MAX_ITEMS); need(src.length, 'В этом наборе нет стикеров');
-  const items = (await pool(src, 5, async s => {
-    try {
-      const kind = s.is_animated ? 'l' : s.is_video ? 'v' : undefined;
-      const url = await grab(token, s.file_id, kind === 'l' ? 'tgs' : kind === 'v' ? 'webm' : null); if (!url) return null;
-      const thumb = kind && s.thumbnail ? await grab(token, s.thumbnail.file_id, null).catch(() => null) : null;
-      return { id: str(s.file_unique_id, 32) || C.id(), e: str(s.emoji, 16) || '🙂', url, thumb: thumb || undefined, kind };
-    } catch (e) { if (/заполнено/.test(e.message)) throw e; return null; }
+  // Сеть и Telegram иногда сбоят на отдельном файле. Без повтора стикер молча пропадал бы из набора навсегда, поэтому три попытки с паузой.
+  const again = async (what, fn) => { for (let n = 1; ; n++) { try { return await fn(); } catch (e) { if (/заполнено/.test(e.message)) throw e; if (n >= 3) { console.warn(`[packs] ${name}: ${what} не скачался: ${e.message}`); return null; } await new Promise(r => setTimeout(r, RETRY_MS * n)); } } };
+  const items = (await pool(src, 4, async (s, k) => {
+    const kind = s.is_animated ? 'l' : s.is_video ? 'v' : undefined;
+    const url = await again('стикер ' + (k + 1), () => grab(token, s.file_id, kind === 'l' ? 'tgs' : kind === 'v' ? 'webm' : null)); if (!url) return null;
+    const thumb = kind && s.thumbnail ? await again('картинка стикера ' + (k + 1), () => grab(token, s.thumbnail.file_id, null)) : null;
+    return { id: str(s.file_unique_id, 32) || C.id(), e: str(s.emoji, 16) || '🙂', url, thumb: thumb || undefined, kind };
   })).filter(Boolean);
+  if (items.length < src.length) console.warn(`[packs] ${name}: в набор попало ${items.length} из ${src.length}`);
   if (!items.length) fail('Не удалось скачать ни одного стикера из набора');
   const old = byTg(set.name || name); if (old) { C.releaseFiles(items); return old; }
   const p = { id: 'tg_' + C.id(), tg: str(set.name || name, 64), title: str(set.title, 64) || name, by: uid, ts: now(), items };
