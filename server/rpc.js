@@ -436,13 +436,15 @@ H['chat.read'] = (c, p) => {
   const ch = getChat(c, p.id), s = st(ch, c.uid);
   const seq = int(p.seq, 0, ch.seq || 0);
   if (seq <= s.read && !s.mentions) return;
-  s.read = Math.max(s.read, seq); s.mentions = 0; save();
+  const hid = !!user(c).incog; if (hid && s.pr === undefined) s.pr = s.read || 0;      /* инкогнито: замораживаем то, что видно другим */
+  s.read = Math.max(s.read, seq); s.mentions = 0; if (!hid && s.pr !== undefined) delete s.pr; save();
   emit(c.uid, 'chat', chatView(ch, c.uid));
+  if (hid) return;
   if (ch.type === 'dm' || ch.type === 'secret' || (ch.type === 'group' && C.size(ch.members) <= 200))
     for (const u in ch.members) if (u !== c.uid) emit(u, 'read', { chat: ch.id, user: c.uid, seq: s.read });
 };
 H['chat.typing'] = (c, p) => {
-  const ch = getChat(c, p.id); if (ch.type === 'channel') return;
+  const ch = getChat(c, p.id); if (ch.type === 'channel' || user(c).incog) return;      /* инкогнито «печатает…» не показывает */
   const d = { chat: ch.id, user: c.uid, kind: str(p.kind, 12) || 'text', text: p.text ? str(p.text, 300) : undefined, thread: p.thread ? str(p.thread, 24) : undefined };
   for (const u of membersOf(ch)) if (u !== c.uid) emit(u, 'typing', d);
 };
@@ -698,7 +700,7 @@ H['msg.who'] = (c, p) => {
   let read = null, readN = null, total = null;
   if (mayRead && chat.type !== 'saved' && chat.members) {
     const all = Object.keys(chat.members).filter(u => u !== m.from && db.users[u] && !db.users[u].deleted && !db.users[u].bot); total = all.length;
-    const got = all.filter(u => (st(chat, u).read || 0) >= m.seq); readN = got.length;
+    const got = all.filter(u => C.pubRead(st(chat, u)) >= m.seq); readN = got.length;
     if (all.length <= 500) { read = got.slice(0, 300); for (const u of read) ids.add(u); }
   }
   return { rx, read, readN, total, users: usersFor(c, [...ids]) };
@@ -798,7 +800,7 @@ H['msg.search'] = (c, p) => {
 H['search'] = (c, p) => {
   const q = str(p.q, 64).toLowerCase().replace(/^@/, ''); need(q.length >= 1, 'Введите запрос');
   const me = user(c);
-  const users = Object.values(db.users).filter(u => !u.deleted && u.id !== me.id && !u.banned && (((u.username || '').toLowerCase().startsWith(q)) || (!u.private && uname(u).toLowerCase().includes(q)) || (me.contacts || []).includes(u.id) && uname(u).toLowerCase().includes(q))).slice(0, 20).map(u => pubUser(u, c.uid));
+  const users = Object.values(db.users).filter(u => !u.deleted && u.id !== me.id && !u.banned && (u.incog ? (u.username || '').toLowerCase() === q || (me.contacts || []).includes(u.id) && uname(u).toLowerCase().includes(q) /* инкогнито находится только по точному @username или у своих контактов */ : ((u.username || '').toLowerCase().startsWith(q)) || (!u.private && uname(u).toLowerCase().includes(q)) || (me.contacts || []).includes(u.id) && uname(u).toLowerCase().includes(q))).slice(0, 20).map(u => pubUser(u, c.uid));
   const chats = db.flags.discovery ? Object.values(db.chats).filter(ch => ch.pub && (ch.type === 'group' || ch.type === 'channel') && !ch.members[c.uid] && ((ch.title || '').toLowerCase().includes(q) || (ch.username || '').toLowerCase().startsWith(q))).slice(0, 20).map(chatPreview) : [];
   const servers = db.flags.discovery ? Object.values(db.servers).filter(s => s.pub && !s.members[c.uid] && s.name.toLowerCase().includes(q)).slice(0, 10).map(serverPreview) : [];
   return { users, chats, servers };
@@ -844,7 +846,7 @@ H['story.post'] = (c, p) => {
   if (s.ts <= now()) { try { require('./retain').story(s, me, v => storyVisible(s, v)); } catch (e) { console.error('[retain]', e.message); } }
   return storyView(s, c.uid);
 };
-H['story.view'] = (c, p) => { const s = db.stories[p.id]; if (!s || !storyVisible(s, user(c)) || s.user === c.uid) return; if (!s.views.some(v => v.u === c.uid)) { s.views.push({ u: c.uid, ts: now() }); save(); emit(s.user, 'story.views', { id: s.id, views: s.views.length }); } };
+H['story.view'] = (c, p) => { const s = db.stories[p.id]; if (!s || !storyVisible(s, user(c)) || s.user === c.uid || user(c).incog) return; if (!s.views.some(v => v.u === c.uid)) { s.views.push({ u: c.uid, ts: now() }); save(); emit(s.user, 'story.views', { id: s.id, views: s.views.length }); } };
 H['story.react'] = (c, p) => {
   const s = db.stories[p.id]; need(s && storyVisible(s, user(c)), 'История не найдена');
   const e = str(p.e, 16), text = str(p.text, 1000);

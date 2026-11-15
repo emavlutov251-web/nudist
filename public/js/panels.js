@@ -67,6 +67,7 @@ function Profile({ id, userId, username, tab: tab0 }) {
       ${!me && !u.deleted && html`<div class="pf-acts"><button onClick=${() => go(() => openUser(u.id))}><${Icon} n="message-circle" /><span>Написать</span></button>${!u.bot && html`<button onClick=${async () => { await openUser(u.id); const c = Object.values(S.chats).find(x => x.type === 'dm' && x.peer === u.id); if (c) go(() => startCall(c.id, false)); }}><${Icon} n="phone" /><span>Позвонить</span></button><button onClick=${secret}><${Icon} n="lock" /><span>Секретный чат</span></button>`}<button onClick=${e => showMenu(e, [
         { icon: contact ? 'user-minus' : 'user-plus', label: contact ? 'Убрать из контактов' : 'В контакты', run: () => call('me.contact', { id: u.id, on: !contact }) },
         S.flags.stars && !u.bot && { emoji: '🎁', label: 'Подарить подарок', run: () => openGiftShop(u.id) },
+        !u.bot && !me && { emoji: '🤍', label: 'Побыть рядом', run: () => import('./calm.js').then(M => M.beNear(u)) },
         !u.bot && !me && u.username && { icon: 'circle-help', label: 'Анонимный вопрос', run: () => window.open('/q/' + encodeURIComponent(u.username), '_blank', 'noopener') },
         S.flags.stars && !u.bot && { emoji: '✨', label: 'Подарить украшение', run: () => openGiftItems(u) },
         !u.bot && valentineOn() && { emoji: '💌', label: 'Отправить валентинку', run: () => sendValentine(u) },
@@ -112,7 +113,7 @@ function Since({ u }) {
 }
 export function StatusDlg({ id }) {
   const u = S.me, [e, setE] = useState((u.status || {}).e || ''), [t, setT] = useState((u.status || {}).t || ''), [play, setPlay] = useState(u.playing || '');
-  const PRE = [['🏖', 'На пляже'], ['🍃', 'Прикрыт листком'], ['💼', 'На работе (в одежде)'], ['😴', 'Сплю без пижамы'], ['🚿', 'В душе'], ['🎮', 'Играю'], ['🤐', 'Не беспокоить'], ['🪫', 'Ноль энергии, отвечу позже'], ['🌞', 'Загораю']];
+  const PRE = [['🏖', 'На пляже'], ['🍃', 'Прикрыт листком'], ['💼', 'На работе (в одежде)'], ['😴', 'Сплю без пижамы'], ['🚿', 'В душе'], ['🎮', 'Играю'], ['🤐', 'Не беспокоить'], ['🪫', 'Нет сил'], ['🌞', 'Загораю']];
   const save = async (clear) => { const r = await call('me.update', { status: clear ? null : { e, t }, playing: clear ? '' : play }); if (r) closeModal(id); };
   return html`<${Modal} id=${id} title="Статус" icon="smile" cls="small" footer=${html`<button class="btn ghost" onClick=${() => save(true)}>Сбросить</button><button class="btn" onClick=${() => save(false)}>Сохранить</button>`}>
     <div class="row"><input class="emoji-in" maxlength="4" value=${e} placeholder="🙂" onInput=${x => setE(x.target.value)} aria-label="Эмодзи статуса" /><input maxlength="80" value=${t} placeholder="Что вы сейчас делаете?" onInput=${x => setT(x.target.value)} autofocus /></div>
@@ -296,6 +297,9 @@ export function chatActions(chat, inList) {
     u && !u.bot && { icon: 'user', label: 'Профиль', run: () => showProfile(u.id) },
     u && !u.deleted && { icon: 'ban', label: (S.me.blocked || []).includes(u.id) ? 'Разблокировать' : 'Заблокировать', run: () => call('me.block', { id: u.id, on: !(S.me.blocked || []).includes(u.id) }) },
     (chat.type === 'group' || chat.type === 'channel') && { icon: 'flag', label: 'Пожаловаться', run: async () => { const t = await promptDlg({ title: 'Жалоба', label: 'Что не так с этим чатом?', area: true, ok: 'Отправить' }); if (t !== null) { const r = await call('report', { type: 'chat', target: chat.id, reason: 'other', text: t }); if (r) toast('Жалоба отправлена'); } } },
+    priv && { icon: 'trash-2', label: 'Стереть без следа', danger: true, run: async () => {
+      const r = await confirmDlg({ title: 'Стереть без следа?', text: `Вся переписка с «${i.title}» исчезнет у вас обоих: сообщения, фото, файлы, голосовые. Чат пропадёт из списков, записи об удалении не останется, вернуть ничего нельзя. Чего это не сотрёт: скриншоты и то, что человек успел сохранить или переслать. Если вам угрожают — сначала пожалуйтесь на сообщение: его копия уйдёт модераторам и сохранится.`, ok: 'Стереть у обоих', danger: true });
+      if (!r) return; try { await rpc('chat.wipe', { id: chat.id }); toast('Переписка стёрта у обоих'); } catch (e) { toast(e.message, 'err'); } } },
     { icon: 'eraser', label: 'Очистить историю', danger: true, run: async () => { const canAll = priv || chat.type === 'saved' || chat.role === 'owner'; const r = await confirmDlg({ title: 'Очистить историю?', text: 'Сообщения исчезнут. Скриншоты у собеседника — нет.', ok: 'Очистить', danger: true, check: canAll && chat.type !== 'saved' ? 'Очистить у всех' : undefined }); if (r) call('chat.clear', { id: chat.id, all: chat.type === 'saved' ? true : !!r.check }); } },
     chat.type !== 'saved' && { icon: priv ? 'trash-2' : 'log-out', label: priv ? 'Удалить чат' : chat.type === 'channel' ? 'Отписаться' : 'Покинуть группу', danger: true, run: leave },
   ];

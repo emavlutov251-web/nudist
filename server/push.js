@@ -174,4 +174,6 @@ H['push.test'] = async (c, p) => { const u = db.users[c.uid];
   }
   need(u.push && u.push.length, 'На этом аккаунте уведомления ещё не включены'); return push(u, { title: 'Нудист', body: 'Уведомления работают. Теперь вы ничего не пропустите.', tag: 'test', url: '/' }); };
 
-module.exports = { notify, poll, encrypt, vapid, keys, apkInfo };
+// Стереть из очереди уведомлений всё, что относится к чату (переписку удалили без следа)
+function forget(uids, tag) { for (const u of uids) { const f = feeds.get(u); if (f && f.q) f.q = f.q.filter(x => x.tag !== tag); } }
+module.exports = { forget, notify, poll, encrypt, vapid, keys, apkInfo };

@@ -99,6 +99,7 @@ function Privacy() {
   const me = S.me, p = me.privacy || {}, blocked = (me.blocked || []).map(id => S.users[id] || { id });
   return html`<div class="form">
     <p class="hint">В «Нудисте» все на виду — кроме того, что вы решите прикрыть. Что и где хранится, написано в <a href="/privacy" target="_blank" rel="noopener">политике конфиденциальности</a>.</p>
+    <${Toggle} label="Режим инкогнито" hint="Никто не видит, что вы в сети и когда заходили. Не уходят отметки «прочитано» и «печатает…», просмотры историй не записываются, в поиске вас находят только по точному @username. Если вы ответили — человек, понятно, увидит, что вы прочитали" on=${!!me.incog} onChange=${async v => { try { await rpc('me.incog', { on: v }); toast(v ? 'Инкогнито включён' : 'Инкогнито выключен'); } catch (e) { toast(e.message, 'err'); } }} />
     ${PRIV.map(([k, l]) => html`<${Sel} label=${l} value=${p[k] || 'all'} opts=${[['all', 'Все'], ['contacts', 'Мои контакты'], ['none', 'Никто']]} onChange=${v => call('me.privacy', { [k]: v })} />`)}
     <${Toggle} label="Закрытый профиль" hint="«О себе», ссылки и город видны только вашим контактам" on=${!!me.private} onChange=${v => call('me.update', { private: v })} />
     <${Toggle} label="Скрывать IP и устройство" hint="Сервер не записывает ваш адрес и название устройства в список сеансов. Уже записанное стирается сразу. Минус: в «Устройствах» сеансы станут неразличимы" on=${!!me.hideMeta} onChange=${v => call('me.update', { hideMeta: v })} />

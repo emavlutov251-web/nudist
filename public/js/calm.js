@@ -49,6 +49,8 @@ function Calm({ id }) {
     ${heavy(M.days) && html`<p class="note">Несколько тяжёлых дней подряд. Так бывает, и это не слабость. Если хочется поговорить — ниже есть, с кем.</p>`}
     <${MoodCal} />
     <h5>Когда совсем тяжело</h5>
+    <${Toggle} label="Статус «Нет сил»" hint="Близкие увидят его у вашего имени и смогут одним нажатием «побыть рядом» — без вопросов и советов. Отвечать никому не нужно" on=${isLow(S.me)} onChange=${v => setLow(v)} />
+    ${(S.me.near || []).length > 0 && html`<p class="note">🤍 Рядом с вами: ${(S.me.near || []).filter(x => S.users[x.u]).map(x => userName(S.users[x.u])).join(', ')}.</p>`}
     ${sos ? html`<div class="calm-sos"><${Avatar} u=${sos} src=${sos.avatar} name=${userName(sos)} color=${sos.color} s=${40} /><div><b>${userName(sos)}</b><small>близкий человек</small></div><button class="btn" onClick=${write}>Написать</button><button class="ib" title="Выбрать другого" aria-label="Выбрать другого" onClick=${choose}><${Icon} n="pencil" s=${16} /></button></div>`
       : html`<button class="btn ghost wide" onClick=${choose}><${Icon} n="user-plus" s=${16} /> Выбрать близкого человека</button><p class="hint">Одной кнопкой ему уйдёт сообщение «мне сейчас нелегко».</p>`}
     <div class="calm-tel"><a class="btn ghost" href="tel:124"><${Icon} n="phone" s=${16} /> 124</a><a class="btn ghost" href="tel:88002000122"><${Icon} n="phone" s=${16} /> 8-800-2000-122</a></div>
@@ -59,6 +61,31 @@ function Calm({ id }) {
     <p class="hint">Тихие часы для уведомлений — в «Настройки → Уведомления». Это место не заменяет врача или психолога, но иногда минуты тишины достаточно.</p><//>`;
 }
 export const openCalm = () => openModal(Calm);
+
+// ───── «Нет сил» и «просто побыть рядом». Без советов и вопросов: человеку приходит тихая отметка, что он не один.
+const LOW = '🪫';
+export const isLow = u => !!(u && u.status && u.status.e === LOW);
+export const setLow = async on => { try { await rpc('me.update', { status: on ? { e: LOW, t: 'Нет сил' } : null }); toast(on ? 'Статус «Нет сил» поставлен. Отвечать никому не обязательно.' : 'Статус снят'); } catch (e) { toast(e.message, 'err'); } };
+export async function beNear(u) {
+  try { await rpc('near.send', { to: u.id }); toast(`Вы рядом. ${userName(u)} это увидит — слова не нужны.`); return true; } catch (e) { toast(e.message, 'err'); return false; }
+}
+/** Полоска в личном чате, когда у собеседника статус «Нет сил». */
+export function NearBar({ user }) {
+  const [sent, setSent] = useState(false);
+  if (!isLow(user) || user.id === S.me.id) return null;
+  return html`<div class="near-bar" role="note"><span><b>${userName(user)} сейчас без сил.</b><small>Советы не нужны. Можно просто побыть рядом — отвечать человеку не придётся.</small></span><button class="btn sm" disabled=${sent} onClick=${async () => { if (await beNear(user)) setSent(true); }}>${sent ? 'Вы рядом' : '🤍 Побыть рядом'}</button></div>`;
+}
+/** Карточка в переписке вместо обычного пузыря. */
+export function NearCard({ m }) {
+  const mine = m.from === S.me.id, u = S.users[m.from] || {};
+  return html`<div class="near-card"><span aria-hidden="true">🤍</span><div><b>${mine ? 'Вы рядом' : `${userName(u)} рядом`}</b><small>${mine ? 'Человек это увидит. Ждать ответа не нужно.' : 'Отвечать не нужно.'}</small></div></div>`;
+}
+/** Полоска над списком чатов: кто был рядом за последние сутки. */
+export function NearStrip() {
+  const l = (S.me.near || []).filter(x => Date.now() - x.ts < 864e5 && S.users[x.u]); if (!l.length) return null;
+  const names = l.slice(0, 3).map(x => userName(S.users[x.u]).split(' ')[0]).join(', ');
+  return html`<div class="near-strip" role="status"><span aria-hidden="true">🤍</span><span><b>Ты не один.</b> Рядом: ${names}${l.length > 3 ? ` и ещё ${l.length - 3}` : ''}</span><button class="ib sm" title="Скрыть" aria-label="Скрыть" onClick=${() => rpc('near.clear').catch(() => {})}><${Icon} n="x" s=${15} /></button></div>`;
+}
 
 // ───── Капсула времени
 function CapsuleDlg({ id, chat }) {

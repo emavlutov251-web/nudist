@@ -11,7 +11,7 @@ import { Streak, openInvite, openAsk, openPush, installApp, isStandalone, StartC
 import { Nm } from './lib.js';
 import { openShop } from './shop.js';
 import { EventStrip } from './events.js';
-import { MoodAsk, openCalm } from './calm.js';
+import { MoodAsk, openCalm, NearStrip } from './calm.js';
 
 // ═════ Рейка ═════
 // Нижние вкладки вместо боковой панели серверов: чаты, лента, хаб, магазин, профиль. Группы (бывшие серверы) живут в списке чатов.
@@ -208,6 +208,7 @@ function HomeSidebar() {
     </header>
     ${q.trim() ? html`<div class="side-b"><${SearchView} q=${q.trim()} /></div>` : focus && (S.settings.searchHistory || []).length ? html`<div class="side-b"><h4 class="sh">Недавние запросы <a onClick=${() => setSetting({ searchHistory: [] })}>очистить</a></h4>${S.settings.searchHistory.map(h => html`<button class="hist-i" onMouseDown=${e => { e.preventDefault(); setQ(h); }}><${Icon} n="history" s=${16} />${h}</button>`)}</div>` : html`
       ${!S.ui.archive && html`<${StoriesRow} />`}
+      ${!S.ui.archive && html`<${NearStrip} />`}
       ${!S.ui.archive && html`<${MoodAsk} />`}
       ${S.ui.archive ? html`<div class="arch-h"><button class="ib" onClick=${() => { S.ui.archive = false; bump(); }}><${Icon} n="arrow-left" /></button><b>Архив</b></div>` : html`<div class="folders" role="tablist">${folders.map(f => { const n = f.id === 'all' ? 0 : count(f.id); return html`<button role="tab" class=${cx(fid === f.id && 'on')} aria-selected=${fid === f.id} onClick=${() => { S.ui.folder = f.id; bump(); }} onContextMenu=${e => f.types && showMenu(e, [{ icon: 'pencil', label: 'Изменить папку', run: () => openModal(FolderEditor, { folder: f }) }, { icon: 'trash-2', label: 'Удалить папку', danger: true, run: () => setSetting({ folders: S.settings.folders.filter(x => x.id !== f.id) }) }])}>${f.icon ? f.icon + ' ' : ''}${f.name}${n > 0 && html`<b>${n}</b>`}</button>`; })}<button class="add" title="Создать папку" onClick=${() => openModal(FolderEditor, {})}><${Icon} n="plus" s=${15} /></button></div>`}
       <div class="side-b" role="list">

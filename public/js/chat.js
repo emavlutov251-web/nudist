@@ -3,7 +3,7 @@ import { svcText, html, useState, useEffect, useRef, useLayoutEffect, S, bump, r
 import { msgKey, loadHistory, openChat, closeChat, openUser, markRead, retryMsg, secretIssue, ensureKey } from './store.js';
 import { Sticker, sfx } from './fun.js';
 import { OnceMsg, Streak, answerAsk } from './growth.js';
-import { CapCard } from './calm.js';
+import { CapCard, NearBar, NearCard } from './calm.js';
 import { Photo, Gif, VideoMsg, RoundMsg, VoiceMsg, AudioMsg, FileMsg, LocMsg } from './media.js';
 import { showProfile, chatActions, openMiniApp, JoinPreview, shareLeaves, E2eeInfo } from './panels.js';
 import { Composer, EmojiPicker, ForwardModal } from './composer.js';
@@ -216,7 +216,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const showAva = !chan || flat ? (flat ? !grouped : multi && !out && !grouped) : false, showName = !grouped && (flat || (multi && !out) || m.hook);
   const bare = (m.type === 'sticker' || m.type === 'round') && !m.reply && !m.fwd;
   const hid = !mine && !m._shown && !!m.text && hitTrigger(m.text);      // личный фильтр слов: сообщение свёрнуто, пока человек сам не откроет
-  const rx = m.rx ? Object.entries(m.rx) : [], text = hid ? '' : m.type !== 'sticker' && m.type !== 'call' ? m.text : '';
+  const rx = m.rx ? Object.entries(m.rx) : [], text = hid || m.near ? '' : m.type !== 'sticker' && m.type !== 'call' ? m.text : '';
   const long = !!text && text.length > 1600;      // длинный текст (новость целиком) показываем началом, остальное — по кнопке
   const yt = text && chat.type !== 'secret' && !oldShell() ? ytFind(text) : null;      // ролик YouTube играет прямо здесь, в окне плеера
   const onClick = e => { if (!sel) return; e.preventDefault(); e.stopPropagation(); S.ui.sel = sel.includes(m.id) ? sel.filter(x => x !== m.id) : [...sel, m.id]; bump(); };
@@ -231,7 +231,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
       ${m.fwd && html`<button class="fwd" onClick=${() => m.fwd.chat && S.chats[m.fwd.chat] ? openChat(m.fwd.chat) : m.fwd.username ? openModal(JoinPreview, { q: '@' + m.fwd.username }) : m.fwd.from && showProfile(m.fwd.from)}><${Icon} n="forward" s=${13} /> Переслано от <b>${m.fwd.name || userName(S.users[m.fwd.from])}</b></button>`}
       ${m.title && html`<h4 class="post-t">${m.title}</h4>`}
       ${(m.rq || m.quote) && html`<button class="rq" onClick=${e => { e.stopPropagation(); m.reply && onJump(m.reply); }}><b>${m.rq ? m.rq.name : 'Цитата'}</b><span>${m.quote || (m.rq && (m.rq.text || msgPreview({ type: m.rq.type, text: '' }))) || 'сообщение'}</span></button>`}
-      ${hid ? html`<button class="trig" onClick=${e => { e.stopPropagation(); m._shown = true; bump(); }}><${Icon} n="eye-off" s=${15} /> Скрыто вашим фильтром слов · Показать</button>` : html`<${Body} m=${m} chat=${chat} list=${list} />`}
+      ${hid ? html`<button class="trig" onClick=${e => { e.stopPropagation(); m._shown = true; bump(); }}><${Icon} n="eye-off" s=${15} /> Скрыто вашим фильтром слов · Показать</button>` : m.near ? html`<${NearCard} m=${m} />` : html`<${Body} m=${m} chat=${chat} list=${list} />`}
       ${text && html`<div class="txt" dangerouslySetInnerHTML=${{ __html: md(long && !m._open ? clipText(text) : text, mdOpt(chat)) }}></div>`}
       ${text && packLink(text) && html`<button class="pack-chip" onClick=${e => { e.stopPropagation(); const l = packLink(text); import('./stickers.js').then(s => s.importLink(l)).catch(x => toast(x.message || 'Не получилось забрать набор', 'err')); }}><${Icon} n="sticker" s=${16} /><span><b>Набор стикеров</b><small>${packLink(text).split('/').pop()}</small></span><i>Добавить себе</i></button>`}
       ${long && html`<button class="txt-more" onClick=${e => { e.stopPropagation(); const el = e.currentTarget.closest('.msg'); m._open = !m._open; bump(); if (!m._open && el) setTimeout(() => el.scrollIntoView({ block: 'nearest' }), 30); }}>${m._open ? 'Свернуть' : `Читать полностью · ${readMin(text)}`}</button>`}
@@ -344,7 +344,7 @@ function Footer({ chat, thread }) {
   if (chat.type === 'group' && !can.send) return note('lock', 'Администраторы запретили участникам писать в эту группу.');
   if (u && u.deleted) return note('ghost', 'Аккаунт удалён. Писать больше некому.');
   if (u && (S.me.blocked || []).includes(u.id)) return note('ban', 'Вы заблокировали этого пользователя.', html`<button class="btn sm" onClick=${() => call('me.block', { id: u.id, on: false })}>Разблокировать</button>`);
-  return html`<${Composer} key=${chat.id + (thread || '')} chat=${chat} thread=${thread} />`;
+  return html`${chat.type === 'dm' && u && !thread && html`<${NearBar} user=${u} />`}<${Composer} key=${chat.id + (thread || '')} chat=${chat} thread=${thread} />`;
 }
 
 export function Main({ chat }) {
