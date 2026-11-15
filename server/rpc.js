@@ -641,6 +641,7 @@ H['msg.history'] = (c, p) => {
 H['msg.edit'] = (c, p) => {
   const chat = getChat(c, p.chat), m = C.findMsg(chat.id, p.id); need(m, 'Сообщение не найдено');
   need(m.from === c.uid && !m.fwd && m.type !== 'service' && m.type !== 'poll' && m.type !== 'sticker', 'Это сообщение нельзя редактировать');
+  need(!(m.cap && !m.cap.open), 'Капсула запечатана. Её можно только отменить');
   if (chat.type === 'secret') { need(p.enc && typeof p.enc.ct === 'string', 'Нужен шифртекст'); m.enc = { iv: String(p.enc.iv).slice(0, 64), ct: p.enc.ct.slice(0, 400000) }; }
   else {
     const text = str(p.text, 4096); need(text || m.media, 'Пустое сообщение'); if (text === m.text) return;
@@ -725,7 +726,7 @@ H['msg.pollclose'] = (c, p) => { const chat = getChat(c, p.chat), m = C.findMsg(
 H['msg.forward'] = (c, p) => {
   const src = getChat(c, p.from); need(src.type !== 'secret', 'Из секретного чата пересылать нельзя. На то он и секретный.');
   const ids = new Set((Array.isArray(p.ids) ? p.ids : []).slice(0, 100));
-  const msgs = (db.msgs[src.id] || []).filter(m => ids.has(m.id) && m.type !== 'service' && m.type !== 'call' && !m.once);
+  const msgs = (db.msgs[src.id] || []).filter(m => ids.has(m.id) && m.type !== 'service' && m.type !== 'call' && !m.once && !(m.cap && !m.cap.open));
   need(msgs.length, 'Нечего пересылать');
   const out = [];
   for (const tid of (Array.isArray(p.to) ? p.to : []).slice(0, 20)) {

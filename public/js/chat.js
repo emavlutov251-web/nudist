@@ -3,6 +3,7 @@ import { svcText, html, useState, useEffect, useRef, useLayoutEffect, S, bump, r
 import { msgKey, loadHistory, openChat, closeChat, openUser, markRead, retryMsg, secretIssue, ensureKey } from './store.js';
 import { Sticker, sfx } from './fun.js';
 import { OnceMsg, Streak, answerAsk } from './growth.js';
+import { CapCard } from './calm.js';
 import { Photo, Gif, VideoMsg, RoundMsg, VoiceMsg, AudioMsg, FileMsg, LocMsg } from './media.js';
 import { showProfile, chatActions, openMiniApp, JoinPreview, shareLeaves, E2eeInfo } from './panels.js';
 import { Composer, EmojiPicker, ForwardModal } from './composer.js';
@@ -241,6 +242,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
       ${!flat && !bare && meta}${!flat && bare && html`<span class="meta float">${meta}</span>`}
       ${rx.length > 0 && html`<div class="rxs">${rx.map(([e, us]) => html`<button class=${cx(us.includes(S.me.id) && 'my')} title=${us.slice(0, 12).map(x => userName(S.users[x])).join(', ') + ' · зажмите, чтобы увидеть всех'} onClick=${ev => { ev.stopPropagation(); react(chat, m, e); }} onContextMenu=${ev => { ev.preventDefault(); ev.stopPropagation(); openModal(WhoModal, { chat, m, tab: rx.length > 1 ? 'e:' + e : 'rx' }); }}>${e}<b>${us.length}</b></button>`)}${chat.type !== 'secret' && html`<button class="rx-who" title="Кто поставил реакции" aria-label="Кто поставил реакции" onClick=${ev => { ev.stopPropagation(); openModal(WhoModal, { chat, m, tab: 'rx' }); }}><${Icon} n="users" s=${13} /></button>`}</div>`}
       ${m.duel && html`<${DuelCard} m=${m} />`}
+      ${m.cap && html`<${CapCard} m=${m} chat=${chat} />`}
       ${m.ask && m.from !== S.me.id && html`<div class="bub-ask">${m.answer && html`<p>${m.answer.text}</p>`}<button class="btn sm ghost" onClick=${ev => { ev.stopPropagation(); answerAsk({ id: m.id, text: String(m.text || '').replace(/^🍃 \*\*Анонимный вопрос\*\*\n\n/, ''), answer: m.answer && m.answer.text }); }}><${Icon} n=${m.answer ? 'pencil' : 'reply'} s=${14} /> ${m.answer ? 'Изменить ответ' : 'Ответить в историях'}</button></div>`}
       ${m.tips > 0 && html`<div class="tipchip" title=${`Чаевые автору: ${m.tipc || 1} раз`}>💰 ${m.tips} 🍃</div>`}
       ${canThread && html`<button class="thr" onClick=${e => { e.stopPropagation(); openChat(chat.id, { thread: m.id, keepServer: true }); }}><${Icon} n="message-square-text" s=${15} /> ${m.tcount ? `${m.tcount} ${chat.type === 'channel' ? plural(m.tcount, ['комментарий', 'комментария', 'комментариев']) : plural(m.tcount, ['ответ', 'ответа', 'ответов'])}` : 'Прокомментировать'}<${Icon} n="chevron-right" s=${15} /></button>`}

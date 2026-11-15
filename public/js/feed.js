@@ -27,7 +27,7 @@ export function Viewers({ id, title, method, target, none }) {
   const open = u => { closeModal(id); import('./panels.js').then(P => P.showProfile(u)); };
   return html`<${Modal} id=${id} title=${title + (d && d.total ? ' · ' + fmtNum(d.total) : '')} icon="eye">
     ${!d ? html`<${Spinner} />` : !d.list.length ? html`<${Empty} icon="eye" text=${none || 'Пока никто не заглядывал. Всё впереди.'} />` : html`
-      <div class="vw-list">${d.list.map(v => { const u = d.users[v.u]; return html`<button class="vw" key=${v.u} onClick=${() => open(v.u)}><${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${36} /><b>${userName(u)} ${u && html`<${Badges} list=${u.badges} s=${14} />`}</b><small>${fmtShort(v.ts)}</small></button>`; })}</div>
+      <div class="vw-list">${d.list.map(v => { const u = d.users[v.u]; return html`<button class="vw" key=${v.u} onClick=${() => open(v.u)}><${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${36} /><b>${userName(u)} ${u && html`<${Badges} list=${(u.badges || []).slice(0, 1)} s=${14} />`}</b><small>${fmtShort(v.ts)}</small></button>`; })}</div>
       <p class="hint center">${d.total > d.list.length ? `Показаны последние ${d.list.length} из ${fmtNum(d.total)}. ` : ''}Этот список видите только вы.</p>`}
   <//>`;
 }
@@ -82,7 +82,7 @@ function Post({ p, users, follows, onChange, onDel, onFollow, onHide }) {
   const toChannel = () => showChannel(p.chat, p.username), toAuthor = () => (ch ? toChannel() : import('./panels.js').then(m => m.showProfile(p.by)));
   return html`<article class="post" ref=${box} data-pid=${p.id}>
     <header class="post-h"><button class="post-ava" onClick=${toAuthor} title=${ch ? 'Открыть канал' : 'Открыть профиль'} aria-label=${ch ? 'Открыть канал ' + p.title : 'Открыть профиль'}><${Avatar} u=${ch ? null : u} src=${ch ? p.avatar : u && u.avatar} name=${ch ? p.title : userName(u)} color=${ch ? p.color : u ? u.color : 0} s=${40} /></button>
-      <div class="post-who" onClick=${toAuthor}><b>${ch ? p.title : userName(u)} ${!ch && u && html`<${Badges} list=${u.badges} s=${14} />`}</b><small>${ch ? 'канал · ' : ''}${fmtShort(p.ts)}</small></div>
+      <div class="post-who" onClick=${toAuthor}><b>${ch ? p.title : userName(u)} ${!ch && u && html`<${Badges} list=${(u.badges || []).slice(0, 1)} s=${14} />`}</b><small>${ch ? 'канал · ' : ''}${fmtShort(p.ts)}</small></div>
       ${!ch && !mine && html`<button class=${cx('btn ghost post-fol', fol && 'on')} onClick=${() => onFollow(p.by, !fol)}><${Icon} n=${fol ? 'user-check' : 'user-plus'} s=${15} /><span>${fol ? 'Вы подписаны' : 'Подписаться'}</span></button>`}
       ${!ch && p.own && (mine || !onHide) && html`<button class="ib" title="Удалить запись" aria-label="Удалить запись" onClick=${del}><${Icon} n="trash-2" s=${16} /></button>`}
       ${onHide && !mine && html`<button class="ib" title="Ещё" aria-label="Ещё" onClick=${e => showMenu(e, [{ icon: ch ? 'megaphone' : 'user', label: ch ? 'Открыть канал' : 'Открыть профиль', run: toAuthor }, { icon: 'eye-off', label: 'Не интересно', hint: ch ? 'скрыть канал' : 'скрыть автора', run: () => onHide(p) }, !ch && p.own && { icon: 'trash-2', label: 'Удалить запись', danger: true, run: del }].filter(Boolean), { anchor: e.currentTarget })}><${Icon} n="ellipsis" s=${18} /></button>`}</header>

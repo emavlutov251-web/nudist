@@ -55,6 +55,7 @@ function Profile({ id, userId, username, tab: tab0 }) {
       ${pr.emoji && html`<span class="pf-deco">${pr.emoji.repeat(1)}</span>`}
       <${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${104} deleted=${u.deleted} onClick=${avatars.length ? () => { S.viewer = { items: avatars.map(a => ({ id: a, type: /\.(mp4|webm)$/.test(a) ? 'video' : 'photo', media: { url: a }, from: u.id })), i: 0 }; bump(); } : undefined} />
       <h2><${Nm} u=${u} /> <${Badges} list=${u.badges} s=${18} /></h2>
+      <${Since} u=${u} />
       <p>${u.status && (u.status.e || u.status.t) ? html`<span class="pf-st">${u.status.e} ${u.status.t}</span>` : ''}${lastSeen(u)}</p>
       ${u.playing && html`<p class="pf-play"><${Icon} n="gamepad-2" s=${14} /> играет в ${u.playing}</p>`}</div>
     <div class="pf-body">
@@ -97,9 +98,14 @@ export function LabelDlg({ id, user }) {
     <div class="chips">${PRE.map(([a, b, col]) => html`<button class=${cx('chip', e === a && t === b && 'on')} onClick=${() => { setE(a); setT(b); setC(col); }}>${a} ${b}</button>`)}</div>
     <p class="hint">Плашку видят все: рядом с именем в чатах, списках и профиле. До 24 знаков. Человеку придёт сообщение, кто её выдал. Свой обычный статус («На пляже») каждый по-прежнему ставит себе сам.</p><//>`;
 }
+/** «🍃 #7 · на пляже с 12 ноября 2026»: номер есть только у первой тысячи, купить его нельзя. */
+function Since({ u }) {
+  if (!u || u.bot || u.deleted || !(u.no || u.since)) return null;
+  return html`<p class="pf-since">${u.no && html`<b title="Порядковый номер по дате регистрации. Есть только у первой тысячи — и это навсегда">🍃 #${u.no}</b>`}${u.since && html`<span>на пляже с ${new Date(u.since).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</span>`}</p>`;
+}
 export function StatusDlg({ id }) {
   const u = S.me, [e, setE] = useState((u.status || {}).e || ''), [t, setT] = useState((u.status || {}).t || ''), [play, setPlay] = useState(u.playing || '');
-  const PRE = [['🏖', 'На пляже'], ['🍃', 'Прикрыт листком'], ['💼', 'На работе (в одежде)'], ['😴', 'Сплю без пижамы'], ['🚿', 'В душе'], ['🎮', 'Играю'], ['🤐', 'Не беспокоить'], ['🌞', 'Загораю']];
+  const PRE = [['🏖', 'На пляже'], ['🍃', 'Прикрыт листком'], ['💼', 'На работе (в одежде)'], ['😴', 'Сплю без пижамы'], ['🚿', 'В душе'], ['🎮', 'Играю'], ['🤐', 'Не беспокоить'], ['🪫', 'Ноль энергии, отвечу позже'], ['🌞', 'Загораю']];
   const save = async (clear) => { const r = await call('me.update', { status: clear ? null : { e, t }, playing: clear ? '' : play }); if (r) closeModal(id); };
   return html`<${Modal} id=${id} title="Статус" icon="smile" cls="small" footer=${html`<button class="btn ghost" onClick=${() => save(true)}>Сбросить</button><button class="btn" onClick=${() => save(false)}>Сохранить</button>`}>
     <div class="row"><input class="emoji-in" maxlength="4" value=${e} placeholder="🙂" onInput=${x => setE(x.target.value)} aria-label="Эмодзи статуса" /><input maxlength="80" value=${t} placeholder="Что вы сейчас делаете?" onInput=${x => setT(x.target.value)} autofocus /></div>
@@ -342,7 +348,7 @@ export function InfoPanel({ chat }) {
   return html`<aside class="panel"><header class="panel-h"><button class="ib" onClick=${close} aria-label="Закрыть панель"><${Icon} n="x" /></button><b>Информация</b>${grp && can.info && html`<button class="ib" title="Управление" onClick=${() => openModal(ChatSettings, { chat: chat.id })}><${Icon} n="settings" /></button>`}</header>
     <div class="panel-b">
       <div class="pn-top"><span onClick=${() => u && showProfile(u.id)} class=${cx(u && 'click')}><${ChatAvatar} chat=${chat} s=${96} /></span><h3>${i.title} ${u ? html`<${Badges} list=${u.badges} s=${17} />` : i.verified ? html`<${Badges} list=${['verified']} s=${17} />` : ''}</h3>
-        <small>${u ? lastSeen(u) : chat.type === 'saved' ? 'только вы и ваши мысли' : `${fmtNum(chat.count || 0)} ${plural(chat.count || 0, chat.type === 'channel' ? ['подписчик', 'подписчика', 'подписчиков'] : ['участник', 'участника', 'участников'])}${chat.pub ? ' · публичн' + (chat.type === 'channel' ? 'ый' : 'ая') : ''}`}</small></div>
+        <small>${u ? lastSeen(u) : chat.type === 'saved' ? 'только вы и ваши мысли' : `${fmtNum(chat.count || 0)} ${plural(chat.count || 0, chat.type === 'channel' ? ['подписчик', 'подписчика', 'подписчиков'] : ['участник', 'участника', 'участников'])}${chat.pub ? ' · публичн' + (chat.type === 'channel' ? 'ый' : 'ая') : ''}`}</small>${u && html`<${Since} u=${u} />`}</div>
       ${u && u.status && (u.status.e || u.status.t) && html`<div class="pf-row"><small>Статус</small><p>${u.status.e} ${u.status.t}</p></div>`}
       ${u && u.bio && html`<div class="pf-row"><small>О себе</small><p>${u.bio}</p></div>`}
       ${u && u.username && html`<button class="pf-row click" onClick=${() => { copyText('@' + u.username); toast('Скопировано'); }}><small>Username</small><p>@${u.username}</p></button>`}

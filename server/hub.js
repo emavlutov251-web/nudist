@@ -232,6 +232,7 @@ const APPS = [
   { id: 'pairs', title: 'Пляжные пары', about: 'Найдите все пары рисованных карточек за меньшее число ходов', cat: 'games', emoji: '🃏', art: 'pairs', url: '/miniapps/pairs.html' },
   { id: 'rp', title: 'Нудищево РП', about: 'Жизнь в провинции: почта, завод, шаурма, пляж со спасателями и мечта о «бэхе»', cat: 'games', emoji: '🏘️', url: '/miniapps/rp.html' },
   { id: 'lot', title: 'Жребий', about: 'Монетка, кубик и «кто идёт за пиццей»', cat: 'tools', emoji: '🎲', url: '/miniapps/lot.html' },
+  { id: 'breath', title: 'Подышать', about: 'Минута спокойного дыхания: «квадрат», 4-7-8 и долгий выдох. Помогает, когда тревожно', cat: 'tools', emoji: '🌬️', url: '/miniapps/breath.html' },
   { id: 'split', title: 'Скинемся', about: 'Делит счёт на компанию с чаевыми', cat: 'tools', emoji: '🧾', url: '/miniapps/split.html' },
 ];
 // ───── Дуэли. Человек играет партию и вызывает другого: «побей мой результат». Вызов приходит сообщением в личку,

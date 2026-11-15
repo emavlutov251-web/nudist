@@ -200,6 +200,7 @@ export function applyTheme() {
   r.dataset.theme = skin || (s.theme === 'system' ? sys : s.theme); if (skin) r.dataset.skin = s.theme; else delete r.dataset.skin;
   // «Мягкий» — стиль по умолчанию. Прежнее значение 'fluent' стояло у всех само собой, поэтому Windows 10 теперь включается отдельным значением 'win10'.
   r.dataset.style = s.style === 'classic' ? 'classic' : s.style === 'win10' ? 'fluent' : 'soft';
+  r.dataset.zen = s.zen ? '1' : '0';
   // «Авто»: размытие — главная черта оформления, поэтому выключаем его только на совсем слабых устройствах (до 1 ГБ памяти или два ядра):
   // там оно тормозит прокрутку. Раньше порог был 4 ГБ, и на большинстве недорогих телефонов размытия не было вовсе.
   const weak = (navigator.deviceMemory && navigator.deviceMemory < 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 3);

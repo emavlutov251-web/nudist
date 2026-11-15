@@ -236,6 +236,7 @@ export function Composer({ chat, thread }) {
       peer && !peer.bot && S.flags.stars && { emoji: '🍃', label: 'Поделиться листиками', run: () => shareLeaves(peer.id) },
     ].filter(Boolean) },
     '-', { icon: 'clock', label: 'Отложенные сообщения', run: () => openModal(ScheduledModal, { chat }) },
+    chat.type === 'dm' && peer && !peer.bot && { icon: 'timer', label: 'Капсула времени', hint: 'откроется в выбранный день', run: () => import('./calm.js').then(M => M.openCapsule(chat)) },
   ], { anchor: e.currentTarget });
   const sendMenu = e => showMenu(e, [
     { icon: 'bell-off', label: 'Отправить без звука', run: () => send(null, { silent: true }) },

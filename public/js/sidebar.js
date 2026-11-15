@@ -11,6 +11,7 @@ import { Streak, openInvite, openAsk, openPush, installApp, isStandalone, StartC
 import { Nm } from './lib.js';
 import { openShop } from './shop.js';
 import { EventStrip } from './events.js';
+import { MoodAsk, openCalm } from './calm.js';
 
 // ═════ Рейка ═════
 // Нижние вкладки вместо боковой панели серверов: чаты, лента, хаб, магазин, профиль. Группы (бывшие серверы) живут в списке чатов.
@@ -22,6 +23,7 @@ function accMenu(e) {
     { icon: 'smile', label: me.status ? 'Изменить статус' : 'Задать статус', run: () => openModal(StatusDlg) },
     { icon: 'leaf', label: 'Листики', hint: fmtNum(me.stars || 0) + ' 🍃', run: () => openModal(StarsModal) },
     { icon: 'user-plus', label: 'Позвать друзей', hint: '+100 🍃', run: openInvite },
+    { icon: 'heart', label: 'Выдохнуть', hint: 'дыхание, настроение', run: openCalm },
     '-',
     { icon: dark ? 'sun' : 'moon', label: dark ? 'Дневной режим' : 'Ночное купание', run: () => setSetting({ theme: dark ? 'light' : 'dark' }) },
     { icon: 'settings', label: 'Настройки', run: () => openSettings() },
@@ -163,6 +165,7 @@ function HomeSidebar() {
   const count = f => live.filter(c => inFolder(c, f) && c.unread > 0 && !isMuted(c)).length;
   const menu = e => showMenu(e, [
     { icon: 'venetian-mask', label: 'Голая правда', hint: 'анонимные вопросы', run: openAsk },
+    { icon: 'heart', label: 'Выдохнуть', hint: 'дыхание, настроение, тишина', run: openCalm },
     { icon: 'bell', label: 'Уведомления', hint: 'когда приложение закрыто', run: openPush },
     { icon: 'store', label: 'Магазин и подписка', hint: 'рамки, темы, Plus', run: () => openShop() },
     { icon: 'user-plus', label: 'Позвать друзей', hint: '+100 🍃', run: openInvite },
@@ -194,6 +197,7 @@ function HomeSidebar() {
     </header>
     ${q.trim() ? html`<div class="side-b"><${SearchView} q=${q.trim()} /></div>` : focus && (S.settings.searchHistory || []).length ? html`<div class="side-b"><h4 class="sh">Недавние запросы <a onClick=${() => setSetting({ searchHistory: [] })}>очистить</a></h4>${S.settings.searchHistory.map(h => html`<button class="hist-i" onMouseDown=${e => { e.preventDefault(); setQ(h); }}><${Icon} n="history" s=${16} />${h}</button>`)}</div>` : html`
       ${!S.ui.archive && html`<${StoriesRow} />`}
+      ${!S.ui.archive && html`<${MoodAsk} />`}
       ${S.ui.archive ? html`<div class="arch-h"><button class="ib" onClick=${() => { S.ui.archive = false; bump(); }}><${Icon} n="arrow-left" /></button><b>Архив</b></div>` : html`<div class="folders" role="tablist">${folders.map(f => { const n = f.id === 'all' ? 0 : count(f.id); return html`<button role="tab" class=${cx(fid === f.id && 'on')} aria-selected=${fid === f.id} onClick=${() => { S.ui.folder = f.id; bump(); }} onContextMenu=${e => f.types && showMenu(e, [{ icon: 'pencil', label: 'Изменить папку', run: () => openModal(FolderEditor, { folder: f }) }, { icon: 'trash-2', label: 'Удалить папку', danger: true, run: () => setSetting({ folders: S.settings.folders.filter(x => x.id !== f.id) }) }])}>${f.icon ? f.icon + ' ' : ''}${f.name}${n > 0 && html`<b>${n}</b>`}</button>`; })}<button class="add" title="Создать папку" onClick=${() => openModal(FolderEditor, {})}><${Icon} n="plus" s=${15} /></button></div>`}
       <div class="side-b" role="list">
         ${!S.ui.archive && fid === 'all' && !S.ui.server && html`<${PushStrip} />`}

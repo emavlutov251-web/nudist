@@ -122,10 +122,11 @@ function badges(u) {
   if (u.label && (u.label.t || u.label.e)) b.push({ t: u.label.t, e: u.label.e, c: u.label.c || 0 });      // особый статус от администрации — плашка рядом с именем
   return b;
 }
+let noHook = () => undefined; const setNoHook = f => { noHook = f; };      // номер «первого» в профиле считает server/calm.js
 function pubUser(u, vid) {
   if (!u) return null;
   if (u.deleted) return { id: u.id, name: 'Удалённый аккаунт', deleted: true, color: 0 };
-  const o = { id: u.id, username: u.username, name: u.name, last: u.last, color: u.color || 0, badges: badges(u), status: u.status, bot: u.bot || undefined, cmds: u.cmds, app: u.app };
+  const o = { id: u.id, username: u.username, name: u.name, last: u.last, color: u.color || 0, badges: badges(u), status: u.status, bot: u.bot || undefined, cmds: u.cmds, app: u.app, no: noHook(u), since: u.bot ? undefined : u.created };
   if (canSee(u, vid, 'avatar')) { o.avatar = u.avatar; o.avatars = u.avatars; }
   if (canSee(u, vid, 'bio')) { o.bio = u.bio; o.links = u.links; o.city = u.city; o.birthday = u.id === vid || !u.birthday ? u.birthday : '2000' + u.birthday.slice(4); o.tz = u.tz; }      // чужим — только день и месяц, год рождения не отдаём
   if (canSee(u, vid, 'phone')) o.phone = u.phone;
@@ -240,7 +241,7 @@ function pollView(p, uid) {
 function msgView(m, uid) {
   if (!m) return null;
   const v = { ...m };
-  delete v.hid; delete v.hist; delete v.clicks; delete v.src; delete v.ytv; delete v.akey;
+  delete v.hid; delete v.hist; delete v.clicks; delete v.src; delete v.ytv; delete v.akey; delete v.capText;
   if (m.views) v.views = m.views.length;
   if (m.poll) v.poll = pollView(m.poll, uid);
   if (m.once) { delete v.media; v.kind = m.type; v.type = 'once'; v.once = m.onceAt ? 'seen' : 'new'; }      // одноразовое: адрес файла не уходит никому, пока получатель не откроет
@@ -404,7 +405,7 @@ function chatView(chat, uid) {
 function emitChat(chat, uids) { for (const u of uids || membersOf(chat)) if (isOnline(u)) emit(u, 'chat', chatView(chat, u)); }
 
 // ───── сообщения
-const MSG_FIELDS = ['text', 'media', 'reply', 'quote', 'fwd', 'poll', 'thread', 'btn', 'silent', 'sticker', 'loc', 'contact', 'enc', 'title', 'as', 'via', 'hook', 'call', 'act', 'dice', 'album', 'fx', 'gift', 'tags', 'rq', 'sig', 'link', 'once', 'files', 'note', 'present', 'duel'];
+const MSG_FIELDS = ['text', 'media', 'reply', 'quote', 'fwd', 'poll', 'thread', 'btn', 'silent', 'sticker', 'loc', 'contact', 'enc', 'title', 'as', 'via', 'hook', 'call', 'act', 'dice', 'album', 'fx', 'gift', 'tags', 'rq', 'sig', 'link', 'once', 'files', 'note', 'present', 'duel', 'cap'];
 const expiring = [];
 for (const cid in db.msgs) for (const m of db.msgs[cid]) if (m.exp) expiring.push({ c: cid, i: m.id, at: m.exp });
 const hooks = { afterPost: [], userGone: [] };
@@ -545,4 +546,4 @@ function senior(scope, rankOf, actor, key, what, peek) {
 }
 const CHAT_RANK = { owner: 3, admin: 2, mod: 1, member: 0 };
 const chatRank = ch => uid => CHAT_RANK[((ch.members || {})[uid] || {}).role] || 0;
-module.exports = { senior, chatRank, CHAT_RANK, canGrant, TIERS, tierOf, setCosHook, setSelfHook, unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { setNoHook, senior, chatRank, CHAT_RANK, canGrant, TIERS, tierOf, setCosHook, setSelfHook, unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
