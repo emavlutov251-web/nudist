@@ -184,7 +184,7 @@ H['year.skip'] = (c, p) => {
   R.spend(u, ev.skip, 'Или просто выполните испытание.'); q.got.push(cur); save(); settle(u, k); R.selfUpdate(u); return view(u, k);
 };
 // «Нудист» открылся в ноябре 2026-го: в альбоме первого года только те события, что ещё можно было застать
-const BORN = Ev.at(2026, 11, 1);
+const BORN = Ev.at(2026, 11, 10);
 H['year.album'] = c => { const u = db.users[c.uid], s = state(u), keys = ORDER.filter(k => Ev.win(k)[1] > BORN); return { y: s.y, stamps: keys.map(k => ({ id: k, e: NAME[k].e, name: NAME[k].name, got: s.stamps.includes(k), from: Ev.win(k)[0] })), goals: ALBUM.filter(([n]) => n <= keys.length).map(([n, p]) => ({ n, prize: prizeText(p), got: s.album >= n })) }; };
 
 // ───── бот: /prediction, /album
