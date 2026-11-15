@@ -246,7 +246,8 @@ function resolveTarget(q) {
   return {};
 }
 const chatPreview = ch => ({ id: ch.id, type: ch.type, title: ch.title, about: ch.about, avatar: ch.avatar, username: ch.username, count: C.size(ch.members), approval: ch.approval, price: ch.price, verified: ch.verified, color: ch.color });
-const serverPreview = s => ({ id: s.id, name: s.name, icon: s.icon, banner: s.banner, about: s.about, count: C.size(s.members), verified: s.verified, boosts: s.boosts || 0, online: Object.keys(s.members).filter(C.isOnline).length });
+const boostLevel = n => (n >= 14 ? 3 : n >= 7 ? 2 : n >= 2 ? 1 : 0);      // уровень сервера по числу бустов
+const serverPreview = s => ({ id: s.id, name: s.name, icon: s.icon, banner: s.banner, about: s.about, count: C.size(s.members), verified: s.verified, boosts: s.boosts || 0, level: boostLevel(s.boosts || 0), online: Object.keys(s.members).filter(C.isOnline).length });
 H['resolve'] = (c, p) => {
   const t = resolveTarget(p.q);
   if (t.user) return { user: pubUser(t.user, c.uid) };
@@ -885,4 +886,4 @@ H['stars.history'] = c => { const u = user(c), list = (u.leafLog || []).slice(0,
 H['premium.buy'] = c => { const u = user(c); spend(u, PREMIUM_PRICE, 'Листики копятся в мини-игре «Листопад», ежедневным бонусом и приглашениями друзей.'); u.premiumUntil = Math.max(u.premiumUntil || 0, now()) + 30 * 864e5; save(); selfUpdate(u); C.broadcastUser(u); return { until: u.premiumUntil }; };
 H['fun.buzz'] = (c, p) => { const ch = getChat(c, p.chat); need(ch.type === 'dm' || ch.type === 'group', 'Пинать можно только в личке и группах'); A.limit('buzz:' + c.uid + ch.id, 1, 15000); for (const u of membersOf(ch)) emit(u, 'buzz', { chat: ch.id, user: c.uid }); };
 
-module.exports = { H, getChat, getUser, uname, usersFor, ensureSaved, joinChat, chatPreview, serverPreview, resolveTarget, checkSend, buildPayload, hooksEdit, selfUpdate, spend, giveCheck, BOOST_PRICE, PREMIUM_PRICE, LEAF, hook };
+module.exports = { H, getChat, getUser, uname, usersFor, ensureSaved, joinChat, chatPreview, serverPreview, resolveTarget, checkSend, buildPayload, hooksEdit, selfUpdate, spend, giveCheck, leafLog, boostLevel, BOOST_PRICE, PREMIUM_PRICE, LEAF, hook };

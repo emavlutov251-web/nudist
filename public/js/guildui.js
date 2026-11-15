@@ -175,6 +175,8 @@ function SsMod({ s }) {
 function SsBoost({ s }) {
   const price = (S.prices || {}).boost || 200, lvl = s.boosts >= 14 ? 3 : s.boosts >= 7 ? 2 : s.boosts >= 2 ? 1 : 0, next = [2, 7, 14][lvl];
   return html`<div class="form boost"><div class="boost-h"><span>🚀</span><div><h3>Уровень ${lvl}</h3><p>Бустов: ${s.boosts || 0}${next ? ` · до следующего уровня: ${next - (s.boosts || 0)}` : ' · максимум, дальше только космос'}</p></div></div><div class="boost-bar"><i style=${`width:${Math.min(100, (s.boosts || 0) / 14 * 100)}%`}></i></div>
-    <ul><li>+10 слотов своих эмодзи за каждый буст</li><li>Строчка «🚀» в каталоге серверов</li><li>Торжественное сообщение в общий чат. Все узнают, кто тут меценат.</li></ul>
-    <button class="btn warn" onClick=${async () => { if (!(await confirmDlg({ title: 'Бустануть сервер?', text: `Спишется ${price} 🍃. У вас ${S.me.stars || 0}.`, ok: 'Бустануть' }))) return; const r = await call('server.boost', { id: s.id }); if (r !== undefined) toast('Сервер бустанут! 🚀'); }}>Бустануть за ${price} 🍃</button></div>`;
+    <ul><li>+10 слотов своих эмодзи за каждый буст</li><li>Чем выше уровень, тем выше сервер в каталоге</li><li>Торжественное сообщение в общий чат. Все узнают, кто тут меценат.</li></ul>
+    ${(s.boosters || []).length > 0 && html`<div class="boosters"><small>Кто бустил</small>${s.boosters.map(b => html`<span key=${b.u}>${userName(S.users[b.u]) === 'Кто-то' ? 'Участник' : userName(S.users[b.u])}${b.n > 1 ? ' ×' + b.n : ''}</span>`)}</div>`}
+    ${S.me.freeBoosts > 0 && html`<p class="hint">У вас ${S.me.freeBoosts} буст(а) в подарок от подписки — листики не спишутся.</p>`}
+    <button class="btn warn" onClick=${async () => { if (!(await confirmDlg({ title: 'Бустануть сервер?', text: S.me.freeBoosts > 0 ? `Потратится буст из подарка подписки (осталось ${S.me.freeBoosts}). Листики не спишутся.` : `Спишется ${price} 🍃. У вас ${S.me.stars || 0}.`, ok: 'Бустануть' }))) return; const r = await call('server.boost', { id: s.id }); if (r !== undefined) toast('Сервер бустанут! 🚀'); }}>${S.me.freeBoosts > 0 ? 'Бустануть бесплатно' : `Бустануть за ${price} 🍃`}</button></div>`;
 }

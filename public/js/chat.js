@@ -11,7 +11,7 @@ import { memberOf } from './guildui.js';
 import { startCall, VoiceRoom, joinVoice, RTC } from './rtc.js';
 import { openDock, ytFind, ytDock, oldShell } from './dock.js';
 import { Nm } from './lib.js';
-import { MsgFx } from './shop.js';
+import { MsgFx, openTip } from './shop.js';
 
 const KIND_LABEL = { text: 'текстовый канал', announce: 'объявления', rules: 'правила', forum: 'форум', voice: 'голосовой канал', stage: 'трибуна' };
 const TYPING = { text: 'печатает', voice: 'записывает голосовое', round: 'записывает кружочек', file: 'отправляет файл', sticker: 'выбирает стикер' };
@@ -148,6 +148,7 @@ function msgMenu(e, m, chat, { thread, onJump }) {
     (priv || can.send !== false || chat.type === 'channel' && thread) && { icon: 'reply', label: quote ? 'Ответить с цитатой' : 'Ответить', run: () => { S.ui.reply = { m, quote }; S.ui.edit = null; bump(); } },
     canThread && { icon: 'message-square-text', label: chat.type === 'channel' ? 'Комментарии' : m.tcount ? 'Открыть тред' : 'Начать тред', run: () => openChat(chat.id, { thread: m.id, keepServer: true }) },
     canEdit && { icon: 'pencil', label: 'Изменить', run: () => { S.ui.edit = m; S.ui.reply = null; bump(); } },
+    !mine && S.flags.stars && m.type !== 'service' && !m.hook && m.type !== 'once' && S.users[m.from] && !S.users[m.from].bot && { icon: 'coins', label: 'Чаевые автору', run: () => openTip(chat, m) },
     text && { icon: 'copy', label: quote ? 'Копировать выделенное' : 'Копировать текст', run: () => { copyText(quote || text); toast('Скопировано'); } },
     (priv || can.pin) && !m.thread && { icon: (chat.pinned || []).includes(m.id) ? 'pin-off' : 'pin', label: (chat.pinned || []).includes(m.id) ? 'Открепить' : 'Закрепить', run: () => call('msg.pin', { chat: chat.id, id: m.id, on: !(chat.pinned || []).includes(m.id) }) },
     chat.type !== 'secret' && m.type !== 'call' && { icon: 'forward', label: 'Переслать', run: () => openModal(ForwardModal, { from: chat.id, ids: [m.id] }) },
@@ -214,6 +215,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
       ${m.btn && html`<${Buttons} m=${m} chat=${chat} />`}
       ${!flat && !bare && meta}${!flat && bare && html`<span class="meta float">${meta}</span>`}
       ${rx.length > 0 && html`<div class="rxs">${rx.map(([e, us]) => html`<button class=${cx(us.includes(S.me.id) && 'my')} title=${us.slice(0, 12).map(x => userName(S.users[x])).join(', ')} onClick=${ev => { ev.stopPropagation(); react(chat, m, e); }}>${e}<b>${us.length}</b></button>`)}</div>`}
+      ${m.tips > 0 && html`<div class="tipchip" title=${`Чаевые автору: ${m.tipc || 1} раз`}>💰 ${m.tips} 🍃</div>`}
       ${canThread && html`<button class="thr" onClick=${e => { e.stopPropagation(); openChat(chat.id, { thread: m.id, keepServer: true }); }}><${Icon} n="message-square-text" s=${15} /> ${m.tcount ? `${m.tcount} ${chat.type === 'channel' ? plural(m.tcount, ['комментарий', 'комментария', 'комментариев']) : plural(m.tcount, ['ответ', 'ответа', 'ответов'])}` : 'Прокомментировать'}<${Icon} n="chevron-right" s=${15} /></button>`}
       ${m.failed && html`<button class="retry" onClick=${() => retryMsg(chat.id, m)}><${Icon} n="circle-alert" s=${14} /> Не отправлено: ${m.failed}. Повторить</button>`}
     </div>

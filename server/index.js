@@ -11,6 +11,7 @@ const Push = require('./push');
 const Ask = require('./ask');
 const Share = require('./share');
 const Pay = require('./pay');
+require('./tips');
 const R = require('./rpc');
 const G = require('./guild');
 const B = require('./bots');

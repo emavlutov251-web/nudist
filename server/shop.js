@@ -37,6 +37,11 @@ const CATALOG = {
   stickers_party: { kind: 'stickers', name: 'Тусовка', emoji: '🪩', price: 800, tier: 'common', pack: 'party', count: 12 },
   stickers_memes: { kind: 'stickers', name: 'Мемы', emoji: '🗿', price: 1500, tier: 'rare', pack: 'memes', count: 16 },
   stickers_anime: { kind: 'stickers', name: 'Аниме-вайб', emoji: '🌸', price: 2500, tier: 'epic', pack: 'anime', count: 16 },
+  // награды пропуска сезона: не продаются и ни в какой тариф не входят
+  frame_wave: { kind: 'frame', name: 'Волна', emoji: '🌊', price: 0, tier: 'season' },
+  grad_coral: { kind: 'gradient', name: 'Коралл', emoji: '🪸', price: 0, tier: 'season', colors: ['#FF6B6B', '#FF9E7D', '#F7B267'] },
+  fx_bubbles: { kind: 'effect', name: 'Пузыри', emoji: '🫧', price: 0, tier: 'season' },
+  frame_trident: { kind: 'frame', name: 'Трезубец', emoji: '🔱', price: 0, tier: 'season' },
 };
 const INCLUDED = { plus: ['common'], pro: ['common', 'rare'], max: ['common', 'rare', 'epic', 'legendary'] };
 const SLOT = { frame: 'frame', gradient: 'grad', effect: 'fx' };      // что «надевается» на сервере; тема и стикеры живут в настройках приложения
@@ -66,6 +71,7 @@ const PACKS = {
   xl: { rub: 999, stars: 15000, name: 'Воз' },
   xxl: { rub: 2499, stars: 42000, name: 'Роща' },
 };
+const RENEW_OFF = 20, RENEW_DAYS = 3;      // скидка на продление того же тарифа за листики в последние дни срока, %
 const FIRST_OFF = 30, CASHBACK = 10;      // скидка на первую покупку украшения и доля листиков пригласившему, %
 
 const tierOf = C.tierOf, rank = t => C.TIERS[t] || 0;
@@ -80,7 +86,7 @@ const touch = u => { R.selfUpdate(u); C.broadcastUser(u); };
 let dealsCache = { day: '', list: [] };
 function dailyDeals() {
   const day = C.today(); if (dealsCache.day === day) return dealsCache.list;
-  const keys = Object.keys(CATALOG), seed = Number(day.replace(/-/g, '')) || 1, list = [], used = new Set();
+  const keys = Object.keys(CATALOG).filter(k => CATALOG[k].price > 0), seed = Number(day.replace(/-/g, '')) || 1, list = [], used = new Set();
   const rand = n => { const x = Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453; return x - Math.floor(x); };
   for (let i = 0; list.length < 3 && i < 40; i++) { const key = keys[Math.floor(rand(i) * keys.length)]; if (used.has(key)) continue; used.add(key); list.push({ key, off: 20 + Math.floor(rand(i + 100) * 31) }); }      // 20–50 %
   dealsCache = { day, list }; return list;
@@ -107,21 +113,37 @@ function cashback(buyer, stars) {
 // ───── подписка
 // Тариф один на человека. Докупаете тот же — срок продлевается. Берёте выше — остаток старого пересчитывается в дни нового по цене,
 // берёте ниже действующего — купленные дни так же пересчитываются в дни действующего. Ничего оплаченного не сгорает.
-function grantPlan(u, tier, days) {
+function grantPlan(u, tier, days, opt) {
   const p = PLANS[tier]; if (!p) return null;
   const cur = (u.premiumUntil || 0) > now() ? (PLANS[u.premiumTier] ? u.premiumTier : 'plus') : null, left = cur ? u.premiumUntil - now() : 0, ms = days * 864e5;
   if (!cur || cur === tier) { u.premiumUntil = now() + left + ms; u.premiumTier = tier; }
   else if (rank(tier) > rank(cur)) { u.premiumUntil = now() + ms + Math.floor(left * PLANS[cur].rub / p.rub); u.premiumTier = tier; }
   else u.premiumUntil = now() + left + Math.floor(ms * p.rub / PLANS[cur].rub);
-  if (p.boosts) u.freeBoosts = Math.min(50, (u.freeBoosts || 0) + p.boosts);
+  if (p.boosts && !(opt && opt.noBoosts)) u.freeBoosts = Math.min(50, (u.freeBoosts || 0) + p.boosts);
   return { tier: u.premiumTier, until: u.premiumUntil };
 }
+// Автопродления нет, поэтому за три дня до конца срока напоминаем и даём скидку на продление того же тарифа за листики.
+const paidTier = u => ((u.premiumUntil || 0) > now() ? (PLANS[u.premiumTier] ? u.premiumTier : 'plus') : null);
+const renewOff = (u, tier) => (paidTier(u) === tier && u.premiumUntil - now() < RENEW_DAYS * 864e5 ? RENEW_OFF : 0);
+const planPrice = (u, tier) => Math.floor(PLANS[tier].stars * (100 - renewOff(u, tier)) / 100);
 function buyPlan(u, tier) {
   const p = PLANS[tier]; need(p, 'Такого тарифа нет');
-  R.spend(u, p.stars, 'Листики можно накопить или докупить в магазине.');
-  const r = grantPlan(u, tier, p.days); u.shopN = (u.shopN || 0) + 1; cashback(u, p.stars); save(); touch(u);
-  return { ok: true, ...r, stars: u.stars };
+  const price = planPrice(u, tier);
+  R.spend(u, price, 'Листики можно накопить или докупить в магазине.');
+  const r = grantPlan(u, tier, p.days); u.shopN = (u.shopN || 0) + 1; cashback(u, price); save(); touch(u);
+  return { ok: true, ...r, price, stars: u.stars };
 }
+function remind() {
+  const sys = db.meta.sys; if (!sys || !db.users[sys]) return;
+  for (const u of Object.values(db.users)) {
+    if (u.bot || u.deleted || u.banned) continue;
+    const t = paidTier(u); if (!t || u.premiumUntil - now() > RENEW_DAYS * 864e5 || u.renewNote === u.premiumUntil) continue;
+    u.renewNote = u.premiumUntil; const p = PLANS[t], date = new Date(u.premiumUntil + 3 * 3600e3).toISOString().slice(0, 10).split('-').reverse().join('.');
+    try { C.postMessage(C.openDm(sys, u.id), sys, { text: `⏳ **Подписка «Нудист ${p.name}» закончится ${date}.**\nСама она не продлевается и ничего не списывает. Если хотите продлить — до конца срока это можно сделать за листики со скидкой ${RENEW_OFF} %: ${planPrice(u, t)} 🍃 вместо ${p.stars} 🍃. Меню → «Магазин и подписка» → «Подписка».` }, { quiet: true }); } catch (e) { console.warn('[shop]', e.message); }
+    save();
+  }
+}
+setInterval(remind, 3600e3).unref(); setTimeout(remind, (Number(process.env.REMIND_AFTER_S) || 90) * 1000).unref();
 
 // ───── сезон: календарный месяц, задания считаются сами, награду забирают кнопкой
 const TASKS = [
@@ -133,21 +155,38 @@ const TASKS = [
   { id: 'invite5', text: 'Позвать 5 друзей', n: 5, stars: 700, on: 'invite' },
 ];
 const DAY_CAP = { msg: 100, react: 40 };      // в зачёт за день: чтобы задание не превращалось в спам
+// Пропуск сезона: опыт за ту же активность, 50 уровней, две дорожки наград — обычная для всех и «Премиум» (покупается за листики, в тарифе Max бесплатна).
+const XP = { msg: 1, react: 1, gift: 5, tip: 10, boost: 25, invite: 20, daily: 50 };
+const PASS = { levels: 50, per: 100, price: 990 };
+const SEASON_ITEMS = { 10: 'frame_wave', 20: 'grad_coral', 30: 'fx_bubbles', 50: 'frame_trident' }, DUPE = 300;      // если вещь уже есть — вместо неё листики
+function reward(lvl, prem) {
+  if (!prem) return { stars: lvl % 10 === 0 ? 100 : lvl % 5 === 0 ? 50 : 15 };
+  if (SEASON_ITEMS[lvl]) return { item: SEASON_ITEMS[lvl] };
+  if (lvl === 40) return { plan: 'pro', days: 3 };
+  return { stars: lvl % 5 === 0 ? 150 : 40 };
+}
+const levelOf = s => Math.min(PASS.levels, Math.floor((s.xp || 0) / PASS.per));
+const passOn = (u, s) => !!s.pass || tierOf(u) === 'max';
 const seasonId = () => C.today().slice(0, 7);
-function seasonOf(u) { const sid = seasonId(); if (!u.season || u.season.id !== sid) u.season = { id: sid, n: {}, got: [] }; return u.season; }
+function seasonOf(u) { const sid = seasonId(); if (!u.season || u.season.id !== sid) u.season = { id: sid, n: {}, got: [] }; if (!u.season.lv) u.season.lv = []; return u.season; }
 function bump(uid, on) {
   const u = db.users[uid]; if (!u || u.bot) return;
   const s = seasonOf(u), cap = DAY_CAP[on];
   if (cap) { const d = C.today(); if (s.day !== d) { s.day = d; s.dayN = {}; } if ((s.dayN[on] || 0) >= cap) return; s.dayN[on] = (s.dayN[on] || 0) + 1; }
-  const before = TASKS.filter(t => t.on === on && (s.n[on] || 0) >= t.n).length;
-  s.n[on] = (s.n[on] || 0) + 1;
+  const before = TASKS.filter(t => t.on === on && (s.n[on] || 0) >= t.n).length, lv0 = levelOf(s);
+  s.n[on] = (s.n[on] || 0) + 1; s.xp = (s.xp || 0) + (XP[on] || 0);
   if (TASKS.filter(t => t.on === on && s.n[on] >= t.n).length > before) { try { C.emit(uid, 'season.done', {}); } catch (e) { /* не в сети */ } }
+  if (levelOf(s) > lv0) { try { C.emit(uid, 'season.level', { level: levelOf(s) }); } catch (e) { /* не в сети */ } }
   save();
 }
 const seasonMult = u => (planOf(u) || { season: 1 }).season;
 function seasonView(u) {
   const s = seasonOf(u), mult = seasonMult(u), end = new Date(Date.UTC(Number(s.id.slice(0, 4)), Number(s.id.slice(5, 7)), 1)).getTime();
-  return { id: s.id, end, mult, tasks: TASKS.map(t => ({ id: t.id, text: t.text, n: t.n, stars: Math.round(t.stars * mult), base: t.stars, progress: Math.min(t.n, s.n[t.on] || 0), done: (s.n[t.on] || 0) >= t.n, claimed: s.got.includes(t.id) })) };
+  const lvl = levelOf(s), prem = passOn(u, s);
+  const pass = { xp: s.xp || 0, level: lvl, levels: PASS.levels, per: PASS.per, price: PASS.price, premium: prem, auto: !s.pass && prem, xpFor: XP, cap: DAY_CAP,
+    track: Array.from({ length: PASS.levels }, (_, i) => { const l = i + 1, pr = reward(l, true); return { lvl: l, free: reward(l, false), prem: pr.item ? { item: pr.item, name: CATALOG[pr.item].name, emoji: CATALOG[pr.item].emoji, kind: CATALOG[pr.item].kind } : pr, gotF: s.lv.includes('f' + l), gotP: s.lv.includes('p' + l) }; }) };
+  pass.ready = pass.track.filter(t => t.lvl <= lvl && (!t.gotF || (prem && !t.gotP))).length;
+  return { id: s.id, end, mult, pass, tasks: TASKS.map(t => ({ id: t.id, text: t.text, n: t.n, stars: Math.round(t.stars * mult), base: t.stars, progress: Math.min(t.n, s.n[t.on] || 0), done: (s.n[t.on] || 0) >= t.n, claimed: s.got.includes(t.id) })) };
 }
 H['season.get'] = c => seasonView(db.users[c.uid]);
 H['season.claim'] = (c, p) => {
@@ -155,6 +194,30 @@ H['season.claim'] = (c, p) => {
   need((s.n[t.on] || 0) >= t.n, 'Задание ещё не выполнено'); need(!s.got.includes(t.id), 'Награда уже получена');
   const n = Math.round(t.stars * seasonMult(u)); u.stars = (u.stars || 0) + n; s.got.push(t.id); save(); R.selfUpdate(u);
   return { ok: true, n, stars: u.stars, season: seasonView(u) };
+};
+// Пропуск: купить «Премиум»-дорожку и забрать награды. { lvl, prem } — одну, { all: true } — все доступные разом.
+H['season.pass.buy'] = c => {
+  const u = db.users[c.uid], s = seasonOf(u); need(!s.pass, 'Премиум-дорожка этого сезона уже куплена'); need(tierOf(u) !== 'max', 'В тарифе Max премиум-дорожка уже открыта');
+  R.spend(u, PASS.price, 'Листики можно накопить или докупить в магазине.'); s.pass = now(); u.shopN = (u.shopN || 0) + 1; cashback(u, PASS.price); save(); R.selfUpdate(u);
+  return { ok: true, stars: u.stars, season: seasonView(u) };
+};
+function give(u, s, lvl, prem) {
+  const r = reward(lvl, prem), out = { lvl, prem };
+  if (r.stars) { u.stars = (u.stars || 0) + r.stars; out.stars = r.stars; }
+  if (r.item) { if (owns(u, r.item)) { u.stars = (u.stars || 0) + DUPE; out.stars = DUPE; } else { own(u, r.item); equipIfEmpty(u, r.item); out.item = r.item; out.name = CATALOG[r.item].name; } }
+  if (r.plan) { grantPlan(u, r.plan, r.days, { noBoosts: true }); out.plan = r.plan; out.days = r.days; }
+  s.lv.push((prem ? 'p' : 'f') + lvl); return out;
+}
+H['season.pass.claim'] = (c, p) => {
+  const u = db.users[c.uid], s = seasonOf(u), lvl = levelOf(s), prem = passOn(u, s), got = [];
+  if (p.all) { for (let l = 1; l <= lvl; l++) { if (!s.lv.includes('f' + l)) got.push(give(u, s, l, false)); if (prem && !s.lv.includes('p' + l)) got.push(give(u, s, l, true)); } need(got.length, 'Пока забирать нечего'); }
+  else {
+    const l = Math.floor(Number(p.lvl) || 0), pr = !!p.prem; need(l >= 1 && l <= PASS.levels, 'Такого уровня нет'); need(l <= lvl, 'Уровень ещё не достигнут');
+    need(!pr || prem, 'Премиум-дорожка не открыта'); need(!s.lv.includes((pr ? 'p' : 'f') + l), 'Награда уже получена');
+    got.push(give(u, s, l, pr));
+  }
+  save(); touch(u);
+  return { ok: true, got, stars: u.stars, n: got.reduce((a, g) => a + (g.stars || 0), 0), season: seasonView(u) };
 };
 // Задания сезона считаются там, где действие уже произошло и проверено.
 R.hook.sent = (uid, chat) => {
@@ -164,7 +227,9 @@ R.hook.sent = (uid, chat) => {
 };
 R.hook.reacted = (uid, m) => { if (m.from !== uid) bump(uid, 'react'); };
 const after = (name, fn) => { const f = H[name]; if (!f) return console.warn('[shop] нет обработчика', name); H[name] = (c, p) => { const r = f(c, p); try { fn(c, p, r); } catch (e) { console.warn('[shop]', e.message); } return r; }; };
-after('gift.send', c => bump(c.uid, 'gift'));
+after('gift.send', (c, p) => { if (p.to !== c.uid) bump(c.uid, 'gift'); });
+after('stars.daily', c => bump(c.uid, 'daily'));
+require('./tips').setOnTip(uid => bump(uid, 'tip'));
 after('server.boost', c => bump(c.uid, 'boost'));
 A.hooks.onInvite.push(inv => bump(inv.id, 'invite'));
 // Прибавки подписчикам
@@ -186,7 +251,7 @@ H['shop.catalog'] = c => {
   return {
     stars: u.stars || 0, tier: tierOf(u), first: !u.shopN ? FIRST_OFF : 0, cashback: { pct: CASHBACK, got: u.cashback || 0 }, pay: Pay.enabled(), freeBoosts: u.freeBoosts || 0,
     items: Object.entries(CATALOG).map(([id, it]) => ({ id, ...it, base: it.price, ...priceFor(u, id), owned: owns(u, id), included: included(u, id) })),
-    plans: Object.values(PLANS).map(p => ({ id: p.id, name: p.name, emoji: p.emoji, stars: p.stars, rub: rub('plan_' + p.id), days: p.days, perks: p.perks })),
+    plans: Object.values(PLANS).map(p => ({ id: p.id, name: p.name, emoji: p.emoji, stars: planPrice(u, p.id), full: p.stars, off: renewOff(u, p.id), rub: rub('plan_' + p.id), days: p.days, perks: p.perks })),
     trial: { days: TRIAL_DAYS, used: !!u.trialUsed, until: (u.trialUntil || 0) > now() ? u.trialUntil : 0, can: !u.trialUsed && rank(tierOf(u)) < rank('pro') },
     bundles: Object.entries(BUNDLES).map(([id, b]) => { const f = bundleFor(u, b); return { id, name: b.name, emoji: b.emoji, items: b.items, price: f.price, full: f.full, fresh: f.fresh.length }; }),
     packs: Object.entries(PACKS).map(([id, s]) => ({ id: 'leaves_' + id, name: s.name, stars: s.stars, rub: rub('leaves_' + id), bonus: Math.round((s.stars / s.rub) / (PACKS.s.stars / PACKS.s.rub) * 100 - 100) })),
@@ -194,7 +259,7 @@ H['shop.catalog'] = c => {
 };
 H['shop.buy'] = (c, p) => {
   const u = db.users[c.uid], id = str(p.id, 64), it = CATALOG[id]; need(it, 'Такой вещи в магазине нет');
-  need(!owns(u, id), 'Это у вас уже куплено'); need(!included(u, id), 'Эта вещь входит в вашу подписку — платить не нужно');
+  need(!owns(u, id), 'Это у вас уже куплено'); need(it.tier !== 'season', 'Эта вещь не продаётся: её дают в пропуске сезона'); need(!included(u, id), 'Эта вещь входит в вашу подписку — платить не нужно');
   const { price } = priceFor(u, id);
   R.spend(u, price, 'Листики можно накопить или докупить в магазине.');
   own(u, id); equipIfEmpty(u, id); u.shopN = (u.shopN || 0) + 1; cashback(u, price); save(); touch(u);
