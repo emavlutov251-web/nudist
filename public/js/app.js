@@ -108,6 +108,7 @@ function Auth() {
           ${mode === 'login' && html`<p class="auth-alt">Впервые здесь? <a onClick=${() => sw('register')}>Создать аккаунт</a> · <a onClick=${() => sw('recover')}>Забыли пароль?</a></p>`}
           ${mode === 'register' && html`<p class="auth-alt">Уже есть аккаунт? <a onClick=${() => sw('login')}>Войти</a></p><p class="hint">Номер телефона не нужен. Первый зарегистрированный аккаунт становится администратором сервиса.</p>`}
           ${mode === 'recover' && html`<p class="auth-alt"><a onClick=${() => sw('login')}>Вспомнил пароль</a></p><p class="hint">Коды восстановления выдаются при включении двухфакторной защиты. Без них пароль не сбросить — мы честно его не знаем.</p>`}`}
+        <p class="auth-legal"><a href="/pay" target="_blank" rel="noopener">Цены и оплата</a> · <a href="/offer" target="_blank" rel="noopener">Оферта</a> · <a href="/contacts" target="_blank" rel="noopener">Контакты и реквизиты</a></p>
         ${S.adding && acc.length > 0 && html`<p class="auth-alt"><a onClick=${() => { S.adding = false; login(acc[0].token); }}>← Вернуться в аккаунт ${acc[0].name}</a></p>`}
       </form>
     </section>${policy && html`<${PolicyView} onClose=${() => setPolicy(false)} />`}</div>`;
@@ -190,6 +191,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('click', () => { try { if ('Notification' in window && Notification.permission === 'default' && S.ready && S.settings.notif && !local.get('askedNotif')) { local.set('askedNotif', 1); Notification.requestPermission(); } } catch (e) { /* игнор */ } }, { passive: true });
 async function handleHash(first) {
   if (/^#hub(=\w+)?$/.test(location.hash)) { const t = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); openHub(['feed', 'music', 'clips', 'live', 'apps', 'help'].includes(t) ? t : 'music'); return; }
+  if (/^#buy(=[\w]+)?$/.test(location.hash)) { const it = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); import('./pay.js').then(m => (it ? m.buyItem(it) : import('./panels.js').then(p => openModal(p.StarsModal)))); return; }
   if (location.hash === '#ask') { history.replaceState(history.state, '', location.pathname); import('./growth.js').then(g => g.openAsk()); return; }
   if (location.hash === '#invite') { history.replaceState(history.state, '', location.pathname); import('./growth.js').then(g => g.openInvite()); return; }
   if (first && pendingRef()) { const r = pendingRef(); clearRef(); if (S.me && r.toLowerCase() !== (S.me.username || '').toLowerCase()) { showProfile(null, r); return; } }      // уже вошедший открыл чужую ссылку-приглашение — покажем, кто звал

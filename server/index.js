@@ -10,6 +10,7 @@ require('./feed');
 const Push = require('./push');
 const Ask = require('./ask');
 const Share = require('./share');
+const Pay = require('./pay');
 const R = require('./rpc');
 const G = require('./guild');
 const B = require('./bots');
@@ -190,6 +191,7 @@ const server = http.createServer(async (req, res) => {
       try { A.limit('clog:' + ipOf(req), 20, 600e3); const b = (await readBody(req, 6000)).toString('utf8').replace(/[\r\n]+/g, ' ').slice(0, 1500); console.log('[client]', (req.headers['user-agent'] || '').slice(0, 200), '|', b); } catch (e) { /* лимит или мусор */ }
       return json(res, 200, { ok: true });
     }
+    if (p === '/api/yookassa/hook' && req.method === 'POST') { try { A.limit('ykh:' + ipOf(req), 600, 60e3); await Pay.hook(await readJson(req)); } catch (e) { console.warn('[pay] уведомление:', e.message); return json(res, 500, { error: 'retry' }); } return json(res, 200, { ok: true }); }      // уведомления ЮKassa об оплате
     if (p === '/api/ask/info' && req.method === 'GET') return json(res, 200, Ask.info(url.searchParams.get('u'), ipOf(req)));
     if (p === '/api/ask' && req.method === 'POST') return json(res, 200, Ask.send(await readJson(req), ipOf(req)));
     if (p.startsWith('/api/admin/')) { const r = Adm.httpApi(p, req.headers.authorization); return json(res, r.code, r.body); }
@@ -208,6 +210,12 @@ const server = http.createServer(async (req, res) => {
     if (p === '/admin' || p === '/admin/') return serveStatic(req, res, 'admin.html');
     if (/^\/(start|download)\/?$/.test(p)) return serveStatic(req, res, 'start.html');
     if (/^\/(privacy|policy)\/?$/.test(p)) return serveStatic(req, res, 'privacy.html');      // политика конфиденциальности   // страница для новых людей: скачать APK
+    const shop = /^\/(pay|tariffs|prices)\/?$/.test(p) ? 'pay' : /^\/(offer|oferta|terms)\/?$/.test(p) ? 'offer' : /^\/(contacts|rekvizity|requisites)\/?$/.test(p) ? 'contacts' : '';      // цены, оферта, реквизиты — открытые страницы платных услуг
+    if (shop) {
+      const body = shop === 'pay' ? await Pay.payPage(url.searchParams.get('order')) : shop === 'offer' ? Pay.offerPage() : Pay.contactsPage();
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache', 'content-security-policy': CSP, 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff' });
+      return res.end(req.method === 'HEAD' ? undefined : body);
+    }
     const pm = /^\/p\/([\w.-]{1,90})\/?$/.exec(p);      // открытая страница одной записи: ею делятся за пределами «Нудиста»
     if (pm) {
       try { A.limit('pp:' + ipOf(req), 180, 60e3); } catch (e) { res.writeHead(429, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('Слишком часто. Передохните минутку.'); }

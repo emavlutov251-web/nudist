@@ -235,3 +235,11 @@ article.post footer { font-size: inherit; color: inherit; }
 /* ── значок сквозного шифрования в шапке секретного чата */
 .e2ee { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: .68em; font-weight: 700; letter-spacing: .03em; color: #fff; background: #1F9D57; cursor: pointer; vertical-align: middle; }
 .e2ee-info { display: flex; flex-direction: column; gap: 10px; } .e2ee-info p { line-height: 1.45; }
+
+/* ── покупки за рубли */
+.payb { padding: 14px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: var(--r-l, 12px); background: var(--card); } .payb h3 { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; } .payb h5 { margin: 10px 0 6px; color: var(--ink2); font-size: .78em; text-transform: uppercase; letter-spacing: .05em; }
+.payb-g { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .payb-i { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border: 1px solid var(--line); border-radius: var(--r, 10px); background: var(--panel); color: var(--ink); transition: transform .12s var(--ease), border-color .15s; }
+.payb-i:hover { border-color: var(--accent); } .payb-i:active { transform: scale(.96); } .payb-i b { font-size: .92em; } .payb-i span { font-weight: 700; color: var(--accent); } .payb .hint { margin-top: 10px; }
+.buy { display: flex; flex-direction: column; gap: 10px; } .buy-i { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; border-radius: var(--r, 10px); background: var(--panel); border: 1px solid var(--line); } .buy-p { font-size: 1.25em; font-weight: 700; white-space: nowrap; } .buy-off { color: var(--warn); }
+
+.auth-legal { margin-top: 14px; font-size: .8em; color: var(--ink3); text-align: center; line-height: 1.7; } .auth-legal a { color: inherit; text-decoration: underline; }
