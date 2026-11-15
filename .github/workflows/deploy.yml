@@ -67,9 +67,10 @@ jobs:
           auth="Authorization: Bearer $RENDER_API_KEY"
           id=""
           for try in 1 2 3 4 5; do
-            id=$(curl -sS --max-time 40 -X POST "$api/deploys" -H "$auth" -H 'Content-Type: application/json' -d "{\"commitId\":\"$GITHUB_SHA\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
+            code=$(curl -sS --max-time 40 -o /tmp/render.json -w '%{http_code}' -X POST "$api/deploys" -H "$auth" -H 'Content-Type: application/json' -d "{\"commitId\":\"$GITHUB_SHA\"}" || echo 000)
+            id=$(python3 -c "import sys,json; print(json.load(open('/tmp/render.json')).get('id',''))" 2>/dev/null || true)
             [ -n "$id" ] && break
-            echo "Render не ответил, попытка $try"; sleep 30
+            echo "Render не принял запрос (HTTP $code): $(head -c 200 /tmp/render.json 2>/dev/null), попытка $try"; sleep 30
           done
           [ -n "$id" ] || { echo "::error::Render не принял запрос на выкладку"; exit 1; }
           echo "Выкладка $id, коммит $GITHUB_SHA"
