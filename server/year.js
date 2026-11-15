@@ -44,7 +44,7 @@ function settle(u, k) {
   }
   if (!q.done && q.got.length === ev.tasks.length) {
     q.done = T(); changed = true; const s = state(u); if (!s.stamps.includes(k)) s.stamps.push(k); award(u, ev.prize);
-    Ev.tell(u, `${NAME[k].e} **«${NAME[k].name}» пройдено.** Марка в альбоме, награда — ${prizeText(ev.prize)}. Марок в этом году: ${s.stamps.length} из ${ORDER.length}.`);
+    Ev.tell(u, `${NAME[k].e} **«${NAME[k].name}» пройдено.** Марка в альбоме, награда — ${prizeText(ev.prize)}. Марок в этом году: ${s.stamps.length}.`);
     for (const [n, p] of ALBUM) if (s.stamps.length >= n && s.album < n) { s.album = n; award(u, p); Ev.tell(u, `📮 **Альбом: ${n} ${n < 5 ? 'марки' : 'марок'}.** Награда — ${prizeText(p)}.`); }
   }
   if (changed) { save(); Shop.touch(u); }
@@ -183,7 +183,9 @@ H['year.skip'] = (c, p) => {
   const u = db.users[c.uid], k = str(p.id, 12), ev = CAL[k]; need(ev && ev.seq && Ev.on(k), 'Сейчас пропускать нечего'); const q = quest(u, k), cur = ev.tasks.findIndex((x, i) => !q.got.includes(i)); need(cur >= 0, 'Все испытания пройдены');
   R.spend(u, ev.skip, 'Или просто выполните испытание.'); q.got.push(cur); save(); settle(u, k); R.selfUpdate(u); return view(u, k);
 };
-H['year.album'] = c => { const u = db.users[c.uid], s = state(u); return { y: s.y, stamps: ORDER.map(k => ({ id: k, e: NAME[k].e, name: NAME[k].name, got: s.stamps.includes(k), from: Ev.win(k)[0] })), goals: ALBUM.map(([n, p]) => ({ n, prize: prizeText(p), got: s.album >= n })) }; };
+// «Нудист» открылся в ноябре 2026-го: в альбоме первого года только те события, что ещё можно было застать
+const BORN = Ev.at(2026, 11, 1);
+H['year.album'] = c => { const u = db.users[c.uid], s = state(u), keys = ORDER.filter(k => Ev.win(k)[1] > BORN); return { y: s.y, stamps: keys.map(k => ({ id: k, e: NAME[k].e, name: NAME[k].name, got: s.stamps.includes(k), from: Ev.win(k)[0] })), goals: ALBUM.filter(([n]) => n <= keys.length).map(([n, p]) => ({ n, prize: prizeText(p), got: s.album >= n })) }; };
 
 // ───── бот: /prediction, /album
 const PRED = ['Сегодня вас не узнают без одежды. Впрочем, как и всегда.', 'Звёзды советуют ответить на то сообщение, которое вы читаете третий день.', 'Вас ждёт встреча с холодильником. Не сопротивляйтесь.', 'Кто-то поставит вам реакцию. Скорее всего, по ошибке.', 'День удачный для того, чтобы ничего не делать. Как и вчера.', 'Сегодня вы найдёте носок. Второй — нет.', 'Меркурий ретроградный, поэтому в чате опять спорят.', 'Вас ждёт богатство: целых 30 листиков, если не лениться.', 'К вечеру вы пожалеете о голосовом на четыре минуты.', 'Ваш питомец думает о вас. И о еде. В основном о еде.', 'Вас добавят в клуб, из которого неудобно выйти.', 'Сегодня шутка зайдёт. Но не ваша.', 'Вам напишет тот, кого вы не ждали. Это бот.', 'Отличный день сменить аватар. Старый видел слишком многое.', 'Судьба готовит подарок. Судьба — это вы сами, магазин открыт.', 'Сегодня вы будете правы. Жаль, что никто не спросит.'];

@@ -149,8 +149,8 @@ function Album() {
   if (!a) return null; const n = a.stamps.filter(s => s.got).length;
   return html`<section class="album"><div class="album-h"><b>Альбом ${a.y}</b><span>${n} из ${a.stamps.length} марок</span></div>
     <div class="album-g">${a.stamps.map(s => html`<span key=${s.id} class=${cx('stamp', s.got && 'got')} title=${s.name}><i>${s.e}</i><small>${new Date(s.from + MSK).toLocaleDateString('ru-RU', { month: 'short', timeZone: 'UTC' }).replace('.', '')}</small></span>`)}</div>
-    <div class="album-goals">${a.goals.map(g => html`<span key=${g.n} class=${cx(g.got && 'got')}>${g.n} ${g.n < 5 ? 'марки' : 'марок'} — ${g.prize}</span>`)}</div>
-    <small class="album-hint">Марку дают за три задания события. Пропустили месяц — марка останется пустой до следующего года.</small></section>`;
+    <div class="album-goals" hidden=${!a.goals.length}>${a.goals.map(g => html`<span key=${g.n} class=${cx(g.got && 'got')}>${g.n} ${g.n < 5 ? 'марки' : 'марок'} — ${g.prize}</span>`)}</div>
+    <small class="album-hint">${a.goals.length ? 'Марку дают за три задания события. Пропустили месяц — марка останется пустой до следующего года.' : 'Марку дают за три задания события. Большой альбом на 12 марок с наградами начнётся с «Голого января».'}</small></section>`;
 }
 
 const BODY = { advent: Advent, santa: Santa, snow: Snow, feb: Valentines };
