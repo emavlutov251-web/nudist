@@ -1,8 +1,9 @@
 // Точка входа: экран входа, каркас приложения, глобальные клавиши и маршруты.
 import { html, render, useState, useEffect, useRef, S, bump, useStore, http, rpc, call, toast, Icon, Logo, Avatar, cx, closeMenu, closeModal, confirmDlg, local, openModal, userName, applyTheme, Spinner } from './lib.js';
+import { SnowFx } from './events.js';
 import { boot, login, logout, openChat, closeChat, onReady, accounts, switchAccount, openUser } from './store.js';
 import { BossScreen, funKeys, DAILY_FACTS, sfx } from './fun.js';
-import { Rail, Sidebar } from './sidebar.js';
+import { NavBar, Sidebar } from './sidebar.js';
 import { Main } from './chat.js';
 import { InfoPanel, JoinPreview, QR, showProfile } from './panels.js';
 import { CallLayer } from './rtc.js';
@@ -81,7 +82,7 @@ function Auth() {
       <div class="auth-logo"><${Logo} s=${132} /></div>
       <h1 class="wordmark">НУДИСТ</h1>
       <p class="slogan">${slogan}</p>
-      <ul class="auth-points"><li><${Icon} n="message-circle" s=${18} /> Чаты, группы и каналы — как в Telegram</li><li><${Icon} n="headphones" s=${18} /> Серверы, роли и голосовые — как в Discord</li><li><${Icon} n="leaf" s=${18} /> Спойлеры под фиговым листком, мемы и кнопка «Прикрыться»</li></ul>
+      <ul class="auth-points"><li><${Icon} n="message-circle" s=${18} /> Чаты, группы и каналы — как в Telegram</li><li><${Icon} n="headphones" s=${18} /> Клубы, роли и голосовые — как в Discord</li><li><${Icon} n="leaf" s=${18} /> Спойлеры под фиговым листком, мемы и кнопка «Прикрыться»</li></ul>
     </section>
     <section class="auth-form">
       <form class="card" onSubmit=${submit}>
@@ -157,11 +158,13 @@ function App() {
   if (S.ready && S.me && S.me.policyNeed && S.me.policy !== S.me.policyNeed) return html`<${PolicyGate} /><${Toasts} />`;
   if (!S.ready) return html`<div class="splash"><${Logo} s=${88} /><p>${S.offline ? 'Связь потеряна. Переподключаемся…' : 'Снимаем лишнее…'}</p></div><${Toasts} />`;
   const chat = S.chats[S.ui.chat];
-  return html`<div class=${cx('shell', !S.ui.list && chat && 'in-chat', S.ui.panel && chat && 'with-panel')}>
-    <${Rail} /><${Sidebar} />
+  return html`<div class=${cx('shell', !S.ui.list && chat && 'in-chat', S.ui.panel && chat && 'with-panel', S.ui.hub && 'hub-open')}>
+    <${Sidebar} />
     <main class="main">${S.offline && html`<div class="offline"><${Icon} n="refresh-cw" s=${15} /> Нет связи с сервером. Переподключаемся…</div>`}<${AudioBar} />${chat ? html`<${Main} key=${chat.id + (S.ui.thread || '')} chat=${chat} />` : html`<${Welcome} />`}</main>
     ${S.ui.panel && chat && html`<${InfoPanel} chat=${chat} />`}
     <${Hub} />
+    <${NavBar} />
+    <${SnowFx} />
   </div>
   <${Dock} />
   <${CallLayer} /><${Modals} />${S.viewer && html`<${MediaViewer} />`}${S.storyView && html`<${StoryViewer} />`}<${Menu} /><${Toasts} />${S.ui.boss && html`<${BossScreen} />`}`;
@@ -190,7 +193,8 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('click', () => { try { if ('Notification' in window && Notification.permission === 'default' && S.ready && S.settings.notif && !local.get('askedNotif')) { local.set('askedNotif', 1); Notification.requestPermission(); } } catch (e) { /* игнор */ } }, { passive: true });
 async function handleHash(first) {
-  if (/^#hub(=\w+)?$/.test(location.hash)) { const t = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); openHub(['feed', 'music', 'clips', 'live', 'apps', 'help'].includes(t) ? t : 'music'); return; }
+  if (/^#hub(=\w+)?$/.test(location.hash)) { const t = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); openHub(['feed', 'events', 'music', 'clips', 'live', 'tv', 'apps', 'help'].includes(t) ? t : 'music'); return; }
+  if (location.hash === '#events') { history.replaceState(history.state, '', location.pathname); openHub('events'); return; }
   if (/^#shop(=\w+)?$/.test(location.hash)) { const tab = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); import('./shop.js').then(m => m.openShop(tab)); return; }
   if (/^#buy(=[\w]+)?$/.test(location.hash)) { const it = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); import('./pay.js').then(m => (it ? m.buyItem(it) : import('./panels.js').then(p => openModal(p.StarsModal)))); return; }
   if (/^#stickers(=[\w]+)?$/.test(location.hash)) { const n = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); import('./stickers.js').then(m => m.openImport(n ? { link: 'https://t.me/addstickers/' + n } : {})); return; }

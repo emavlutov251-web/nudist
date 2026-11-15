@@ -6,14 +6,15 @@ import { openMiniApp } from './panels.js';
 import { Feed, Viewers } from './feed.js';
 import { openDock } from './dock.js';
 import { TV } from './tv.js';
+import { Events } from './events.js';
 
-const TABS = [['feed', 'list', 'Лента'], ['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['tv', 'tv', 'Телевизор'], ['apps', 'layout-grid', 'Приложения'], ['help', 'life-buoy', 'Поддержка']];
+const TABS = [['feed', 'list', 'Лента'], ['events', 'party-popper', 'События'], ['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['tv', 'tv', 'Телевизор'], ['apps', 'layout-grid', 'Приложения'], ['help', 'life-buoy', 'Поддержка']];
 const isStaff = () => ['moderator', 'admin', 'superadmin'].includes((S.me || {}).admin);
 const err = e => toast(e.message || String(e), 'err');
 let MB = 45;      // предел размера файла, сервер уточняет
 const who = id => S.users[id] || { name: 'Кто-то', color: 0 };
 
-export function openHub(tab) { S.ui.hub = tab || local.get('hub.tab') || 'feed'; local.set('hub.tab', S.ui.hub); S.ui.boss = false; bump(); }
+export function openHub(tab) { const keep = local.get('hub.tab'); S.ui.hub = tab || (keep && keep !== 'feed' ? keep : 'music'); if (S.ui.hub !== 'feed') local.set('hub.tab', S.ui.hub); S.ui.boss = false; bump(); }
 export function closeHub() { if (LV.cur && !leaveGuard()) return; S.ui.hub = null; bump(); }
 // Не даём случайно уронить эфир переключением вкладки.
 function leaveGuard() { if (!LV.cur) return true; if (LV.role === 'host' && !confirm('Эфир идёт. Завершить его?')) return false; leaveLive(); return true; }
@@ -23,10 +24,10 @@ export function Hub() {
   const tab = S.ui.hub; if (!tab) return null;
   return html`<section class=${cx('hub', 'hub-' + tab)} aria-label="Развлечения">
     <header class="hub-h">
-      <nav class="hub-tabs" role="tablist">${TABS.map(([k, ic, name]) => html`<button role="tab" aria-selected=${tab === k} class=${cx(tab === k && 'on')} onClick=${() => setTab(k)} title=${name}><${Icon} n=${ic} s=${19} /><span>${name}</span>${k === 'live' && LIVE.n > 0 && html`<b class="hub-dot">${LIVE.n}</b>`}</button>`)}</nav>
+      ${tab === 'feed' ? html`<h2 class="hub-title"><${Icon} n="list" s=${20} /> Лента</h2>` : html`<nav class="hub-tabs" role="tablist">${TABS.filter(t => t[0] !== 'feed').map(([k, ic, name]) => html`<button role="tab" aria-selected=${tab === k} class=${cx(tab === k && 'on')} onClick=${() => setTab(k)} title=${name}><${Icon} n=${ic} s=${19} /><span>${name}</span>${k === 'live' && LIVE.n > 0 && html`<b class="hub-dot">${LIVE.n}</b>`}</button>`)}</nav>`}
       <button class="ib" onClick=${closeHub} title="Закрыть и вернуться к чатам"><${Icon} n="x" /></button>
     </header>
-    <div class="hub-b">${tab === 'feed' ? html`<${Feed} />` : tab === 'music' ? html`<${Music} />` : tab === 'clips' ? html`<${Clips} />` : tab === 'live' ? html`<${Live} />` : tab === 'tv' ? html`<${TV} />` : tab === 'apps' ? html`<div class="hub-pad"><${AppsCatalog} /></div>` : html`<${Help} />`}</div>
+    <div class="hub-b">${tab === 'feed' ? html`<${Feed} />` : tab === 'music' ? html`<${Music} />` : tab === 'clips' ? html`<${Clips} />` : tab === 'live' ? html`<${Live} />` : tab === 'tv' ? html`<${TV} />` : tab === 'events' ? html`<${Events} />` : tab === 'apps' ? html`<div class="hub-pad"><${AppsCatalog} /></div>` : html`<${Help} />`}</div>
     ${tab !== 'clips' && !(tab === 'live' && LV.cur) && html`<${AudioBar} />`}
   </section>`;
 }
@@ -345,9 +346,11 @@ export const openApps = chat => openModal(AppsModal, { chat });
 
 // ───────────────────────────── поддержка
 const FAQ = [
+  ['Что за события и где их искать?', 'Внизу «Хаб» → «События». Там расписание: «Чёрная пятница» (24–30 ноября), адвент-календарь (1–25 декабря), «Тайный Санта» (запись 10–24 декабря), гонка «Снежный ком» (весь декабрь) и «Голый Новый год» (с 20:00 31 декабря, 48 часов). Время — московское. Вещи событий продаются только пока идёт событие, купленное остаётся навсегда. Боту «Нудист» можно написать /events.'],
+  ['Где лента, клубы и настройки?', 'Внизу пять вкладок: «Чаты», «Лента», «Хаб» (музыка, клипы, эфиры, телевизор, игры), «Магазин» и «Профиль» (настройки, листики, выход). Клубы — это бывшие серверы: они лежат прямо в списке чатов, рядом с группами и каналами.'],
   ['Как позвать друга?', 'Меню ☰ → «Позвать друзей». Там личная ссылка и QR-код. Друг открывает ссылку в браузере, регистрируется — и вы сразу друг у друга в контактах, обоим по 100 🍃.'],
   ['Сайт не открывается или грузится вечно', 'Сервер стоит на зарубежном хостинге, и у части российских операторов без VPN он работает с перебоями. Попробуйте другую сеть. Если приложение зависло на заставке, нажмите «Повторить».'],
-  ['Как добавить свои стикеры?', 'В чате нажмите на смайлик → «Стикеры» → «Добавить». Там три способа: взять готовый набор в одно касание, забрать свой набор из Telegram (в Telegram нажмите на стикер → ⋮ → «Копировать ссылку» и вставьте её) или сделать стикер из своей картинки. Если кто-то прислал стикер, который понравился, — нажмите на него и выберите «Добавить себе».'],
+  ['Как добавить свои стикеры?', 'В чате нажмите на смайлик → «Стикеры» → «Добавить». Там три способа: взять готовый набор в одно касание, забрать свой набор из Telegram (в Telegram нажмите на стикер → ⋮ → «Копировать ссылку» и вставьте её) или сделать стикер из своей картинки. Понравился чужой стикер — нажмите на него: набор можно попросить у хозяина, он разрешит одним касанием.'],
   ['Как загрузить музыку?', 'Вкладка «Музыка» → «Загрузить». Подходят mp3, m4a, ogg, wav и flac. Трек по умолчанию слышите только вы; в меню трека его можно выложить в «Общую волну».'],
   ['Как выложить клип и начать эфир?', 'Клип: вкладка «Клипы» → «Выложить клип», вертикальное видео до 3 минут. Эфир: вкладка «Эфиры» → «Начать эфир», нужны камера или экран. В зале помещается до 30 зрителей.'],
   ['Где мини-приложения?', 'В чате нажмите на скрепку → «Приложения», или откройте вкладку «Приложения» здесь. Игры и утилиты запускаются поверх чата и умеют отправлять в него результат.'],

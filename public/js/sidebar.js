@@ -1,4 +1,4 @@
-// Левая часть: рейка серверов, список чатов с папками и историями, каналы сервера, поиск.
+// Левая часть: рейка клубов, список чатов с папками и историями, каналы клуба, поиск.
 import { html, useState, useEffect, useRef, useMemo, S, bump, rpc, call, toast, Icon, Logo, Avatar, ChatAvatar, Badges, cx, showMenu, openModal, chatInfo, msgPreview, fmtShort, isMuted, userName, lastSeen, kindIcon, setSetting, debounce, addUsers, Empty, Spinner, local, plural, fmtNum, md, confirmDlg, promptDlg, fmtFull, openAdmin, Modal, closeModal } from './lib.js';
 import { openChat, openUser, logout, accounts, switchAccount, addAccount, totalUnread } from './store.js';
 import { CreateChat, ContactsModal, showProfile, StatusDlg, BotsCatalog, StarsModal, chatActions, JoinPreview, CallsModal, FolderEditor } from './panels.js';
@@ -10,41 +10,66 @@ import { openHub, openApps, openSupport } from './hub.js';
 import { Streak, openInvite, openAsk, openPush, installApp, isStandalone, StartCards } from './growth.js';
 import { Nm } from './lib.js';
 import { openShop } from './shop.js';
+import { EventStrip } from './events.js';
 
 // ═════ Рейка ═════
-export function Rail() {
-  const servers = Object.values(S.servers);
-  const stat = sid => { let n = 0, m = 0; for (const c of Object.values(S.chats)) if (c.server === sid) { if (!isMuted(c)) n += c.unread || 0; m += c.mentions || 0; } return { n, m }; };
-  const home = totalUnread();
-  return html`<nav class="rail" aria-label="Серверы">
-    <button class=${cx('rail-b home', !S.ui.server && !S.ui.hub && 'on')} onClick=${() => { S.ui.server = null; S.ui.list = true; S.ui.hub = null; bump(); }} title="Чаты" aria-label="Чаты"><${Logo} s=${30} />${home > 0 && html`<b class="rb">${home > 99 ? '99+' : home}</b>`}</button>
-    <hr />
-    <div class="rail-list">${servers.map(s => { const st = stat(s.id); return html`<button key=${s.id} class=${cx('rail-b', S.ui.server === s.id && 'on', st.n > 0 && 'unread')} title=${s.name} onClick=${() => { S.ui.server = s.id; S.ui.list = true; const cur = S.chats[S.ui.chat]; if (!cur || cur.server !== s.id) { const last = local.get('srv.' + s.id); const c = S.chats[last] || Object.values(S.chats).filter(x => x.server === s.id && x.kind === 'text').sort((a, b) => a.pos - b.pos)[0]; if (c && innerWidth > 800) openChat(c.id); else { S.ui.chat = null; } } bump(); }}
-        onContextMenu=${e => showMenu(e, serverMenu(s))}>
-        <${Avatar} src=${s.icon} name=${s.name} color=${s.color} s=${44} square />${st.m > 0 && html`<b class="rb">@${st.m > 9 ? '9+' : st.m}</b>`}<i class="pill"></i></button>`; })}
-      <button class="rail-b add" title="Создать сервер или войти по приглашению" onClick=${() => openModal(CreateServer)}><${Icon} n="plus" /></button>
-      <button class="rail-b add" title="Каталог серверов" onClick=${() => openModal(Discover)}><${Icon} n="compass" /></button>
-    </div>
-    <i class="rail-sep"></i>
-    <button class=${cx('rail-b add hubb', S.ui.hub && 'on')} title="Хаб: лента, музыка, клипы, эфиры, телевизор, приложения" aria-label="Хаб" onClick=${() => openHub()}><${Icon} n="layout-grid" /></button>
-    <button class="rail-b add cover" title="Прикрыться: спрятать переписку за таблицей (Esc Esc)" aria-label="Прикрыться" onClick=${() => { S.ui.boss = true; bump(); }}><${Icon} n="table" /></button>
-    <button class="rail-b add" title="Настройки (Ctrl+,)" onClick=${() => openSettings()}><${Icon} n="settings" /></button>
+// Нижние вкладки вместо боковой панели серверов: чаты, лента, хаб, магазин, профиль. Клубы (бывшие серверы) живут в списке чатов.
+const goChats = () => { S.ui.server = null; S.ui.list = true; S.ui.hub = null; bump(); };
+function accMenu(e) {
+  const me = S.me, dark = document.documentElement.dataset.theme === 'dark';
+  showMenu(e, [
+    { icon: 'user', label: 'Мой профиль', run: () => showProfile(me.id) },
+    { icon: 'smile', label: me.status ? 'Изменить статус' : 'Задать статус', run: () => openModal(StatusDlg) },
+    { icon: 'leaf', label: 'Листики', hint: fmtNum(me.stars || 0) + ' 🍃', run: () => openModal(StarsModal) },
+    { icon: 'user-plus', label: 'Позвать друзей', hint: '+100 🍃', run: openInvite },
+    '-',
+    { icon: dark ? 'sun' : 'moon', label: dark ? 'Дневной режим' : 'Ночное купание', run: () => setSetting({ theme: dark ? 'light' : 'dark' }) },
+    { icon: 'settings', label: 'Настройки', run: () => openSettings() },
+    { icon: 'table', label: 'Прикрыться', hint: 'Esc Esc', run: () => { S.ui.boss = true; bump(); } },
+    { icon: 'life-buoy', label: 'Помощь и поддержка', run: () => openHub('help') },
+    '-',
+    ...accounts().filter(a => a.token !== S.token && a.name).map(a => ({ icon: 'circle-user', label: a.name, hint: a.username ? '@' + a.username : '', run: () => switchAccount(a.token) })),
+    { icon: 'plus', label: 'Добавить аккаунт', run: addAccount },
+    me.admin && { icon: 'shield', label: 'Админ-панель', run: openAdmin },
+    '-',
+    { icon: 'log-out', label: 'Выйти', danger: true, run: async () => { if (await confirmDlg({ title: 'Выйти из аккаунта?', text: 'Секретные чаты этого устройства после выхода прочитать не получится.', ok: 'Выйти', danger: true })) logout(); } },
+  ], { head: html`<div class="menu-head"><${Avatar} u=${me} src=${me.avatar} name=${userName(me)} color=${me.color} s=${40} /><div><b>${userName(me)}</b><small>${me.username ? '@' + me.username : me.phone}</small></div></div>` });
+}
+export function NavBar() {
+  const me = S.me, tab = S.ui.hub === 'feed' ? 'feed' : S.ui.hub ? 'hub' : 'chats';
+  let n = totalUnread(); for (const c of Object.values(S.chats)) if (c.server && !isMuted(c)) n += c.unread || 0;
+  const due = !!(S.flags || {}).stars && me.lastDaily !== new Date().toISOString().slice(0, 10);      // сегодняшний бонус ещё не собран
+  const hubTab = () => { const t = local.get('hub.tab'); return t && t !== 'feed' ? t : 'music'; };
+  return html`<nav class="nav" aria-label="Разделы">
+    <button class=${cx(tab === 'chats' && 'on')} onClick=${goChats} aria-label="Чаты"><span class="nav-i"><${Icon} n="message-circle" s=${22} />${n > 0 && html`<b class="rb">${n > 99 ? '99+' : n}</b>`}</span><small>Чаты</small></button>
+    <button class=${cx(tab === 'feed' && 'on')} onClick=${() => openHub('feed')} aria-label="Лента"><span class="nav-i"><${Icon} n="list" s=${22} /></span><small>Лента</small></button>
+    <button class=${cx(tab === 'hub' && 'on')} onClick=${() => openHub(hubTab())} aria-label="Хаб: музыка, клипы, эфиры, телевизор, игры"><span class="nav-i"><${Icon} n="layout-grid" s=${22} /></span><small>Хаб</small></button>
+    <button onClick=${() => openShop()} aria-label="Магазин"><span class="nav-i"><${Icon} n="store" s=${22} />${due && html`<b class="rb dot"></b>`}</span><small>Магазин</small></button>
+    <button onClick=${accMenu} aria-label="Профиль и настройки"><span class="nav-i"><${Avatar} u=${me} src=${me.avatar} name=${userName(me)} color=${me.color} s=${24} /></span><small>Профиль</small></button>
   </nav>`;
+}
+// Строка клуба в общем списке чатов
+function ClubItem({ s, st }) {
+  const open = () => { S.ui.server = s.id; S.ui.list = true; const last = local.get('srv.' + s.id); const c = S.chats[last] || Object.values(S.chats).filter(x => x.server === s.id && x.kind === 'text').sort((a, b) => a.pos - b.pos)[0]; if (c && innerWidth > 800) openChat(c.id); bump(); };
+  return html`<button class="ci club" onClick=${open} onContextMenu=${e => showMenu(e, serverMenu(s))}>
+    <${Avatar} src=${s.icon} name=${s.name} color=${s.color} s=${48} />
+    <span class="ci-m"><span class="ci-t"><b>${s.name}</b>${s.verified && html`<${Badges} list=${['verified']} s=${14} />`}<time>${st.ts ? fmtShort(st.ts) : ''}</time></span>
+      <span class="ci-p"><span><i class="who">Клуб</i> · комнат: ${st.rooms}${s.boosts > 0 ? ` · 🚀 ${s.boosts}` : ''}</span>${st.m > 0 && html`<b class="cnt at">@</b>`}${st.n > 0 && html`<b class="cnt">${fmtNum(st.n)}</b>`}</span></span></button>`;
 }
 function serverMenu(s) {
   const p = s.me.perms || {}, adm = p.admin;
   return [
     (adm || p.invite) && { icon: 'user-plus', label: 'Пригласить людей', run: () => openModal(InviteModal, { server: s.id }) },
-    (adm || p.channels) && { icon: 'settings', label: 'Настройки сервера', run: () => openServerSettings(s.id) },
+    (adm || p.channels) && { icon: 'settings', label: 'Настройки клуба', run: () => openServerSettings(s.id) },
     (adm || p.channels) && { icon: 'plus', label: 'Создать канал', run: () => openModal(ChannelDlg, { server: s.id }) },
     (adm || p.channels) && { icon: 'folder', label: 'Создать категорию', run: async () => { const n = await promptDlg({ title: 'Новая категория', label: 'Название', max: 60 }); if (n) call('server.cat', { server: s.id, name: n }); } },
     { icon: 'calendar', label: 'События', hint: (s.events || []).length || '', run: () => openModal(EventsModal, { server: s.id }) },
     (adm || p.roles) && { icon: 'mouse-pointer-click', label: 'Роли по кнопке', run: () => openModal(RoleMsgDlg, { server: s.id }) },
-    { icon: 'rocket', label: 'Бустануть сервер', hint: (S.prices.boost || 200) + ' 🍃', run: async () => { if (await confirmDlg({ title: 'Буст сервера', text: `Потратить ${S.prices.boost} листиков, чтобы у «${s.name}» стало больше слотов эмодзи и повод для гордости?`, ok: 'Бустануть' })) call('server.boost', { id: s.id }); } },
+    { icon: 'rocket', label: 'Бустануть клуб', hint: (S.prices.boost || 200) + ' 🍃', run: async () => { if (await confirmDlg({ title: 'Буст клуба', text: `Потратить ${S.prices.boost} листиков, чтобы у «${s.name}» стало больше слотов эмодзи и повод для гордости?`, ok: 'Бустануть' })) call('server.boost', { id: s.id }); } },
     (adm || p.audit) && { icon: 'history', label: 'Журнал аудита', run: () => openServerSettings(s.id, 'audit') },
     '-',
-    { icon: 'flag', label: 'Пожаловаться', run: async () => { const t = await promptDlg({ title: 'Жалоба на сервер', label: 'Что не так?', area: true, max: 500 }); if (t != null) { await call('report', { type: 'server', target: s.id, reason: 'other', text: t }); toast('Жалоба отправлена модераторам'); } } },
-    s.owner !== S.me.id && { icon: 'log-out', label: 'Покинуть сервер', danger: true, run: async () => { if (await confirmDlg({ title: 'Покинуть сервер?', text: `Вы уйдёте с сервера «${s.name}». Вернуться можно будет по приглашению.`, ok: 'Уйти', danger: true })) call('server.leave', { id: s.id }); } },
+    { icon: 'flag', label: 'Пожаловаться', run: async () => { const t = await promptDlg({ title: 'Жалоба в клуб', label: 'Что не так?', area: true, max: 500 }); if (t != null) { await call('report', { type: 'server', target: s.id, reason: 'other', text: t }); toast('Жалоба отправлена модераторам'); } } },
+    s.owner !== S.me.id && { icon: 'log-out', label: 'Покинуть клуб', danger: true, run: async () => { if (await confirmDlg({ title: 'Покинуть клуб?', text: `Вы уйдёте с клуба «${s.name}». Вернуться можно будет по приглашению.`, ok: 'Уйти', danger: true })) call('server.leave', { id: s.id }); } },
   ];
 }
 
@@ -117,7 +142,7 @@ function SearchView({ q }) {
     ${localChats.length > 0 && html`<h4>Ваши чаты</h4>${localChats.map(c => html`<${ChatItem} chat=${c} />`)}`}
     ${g && g.users.filter(u => !localUserIds.has(u.id)).length > 0 && html`<h4>Люди и боты</h4>${g.users.filter(u => !localUserIds.has(u.id)).map(u => html`<button class="ci" onClick=${() => { remember(); S.users[u.id] = u; openUser(u.id); }}><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${44} online=${u.online && !u.bot} /><span class="ci-m"><span class="ci-t"><b>${userName(u)}</b><${Badges} list=${u.badges} s=${14} /></span><span class="ci-p"><span>${u.username ? '@' + u.username + ' · ' : ''}${lastSeen(u)}</span></span></span></button>`)}`}
     ${g && g.chats.length > 0 && html`<h4>Публичные группы и каналы</h4>${g.chats.map(c => html`<button class="ci" onClick=${() => { remember(); openModal(JoinPreview, { chat: c }); }}><${Avatar} src=${c.avatar} name=${c.title} color=${c.color} s=${44} /><span class="ci-m"><span class="ci-t"><b>${c.title}</b>${c.verified && html`<${Badges} list=${['verified']} s=${14} />`}</span><span class="ci-p"><span>${c.type === 'channel' ? 'канал' : 'группа'} · ${fmtNum(c.count)} ${plural(c.count, ['участник', 'участника', 'участников'])}</span></span></span></button>`)}`}
-    ${g && g.servers.length > 0 && html`<h4>Серверы</h4>${g.servers.map(s => html`<button class="ci" onClick=${() => openModal(JoinPreview, { server: s })}><${Avatar} src=${s.icon} name=${s.name} s=${44} square /><span class="ci-m"><span class="ci-t"><b>${s.name}</b></span><span class="ci-p"><span>сервер · ${fmtNum(s.count)} ${plural(s.count, ['участник', 'участника', 'участников'])}</span></span></span></button>`)}`}
+    ${g && g.servers.length > 0 && html`<h4>Клубы</h4>${g.servers.map(s => html`<button class="ci" onClick=${() => openModal(JoinPreview, { server: s })}><${Avatar} src=${s.icon} name=${s.name} s=${44} square /><span class="ci-m"><span class="ci-t"><b>${s.name}</b></span><span class="ci-p"><span>клуб · ${fmtNum(s.count)} ${plural(s.count, ['участник', 'участника', 'участников'])}</span></span></span></button>`)}`}
     ${m && m.msgs.length > 0 && html`<h4>Сообщения</h4>${m.msgs.map(x => { const c = S.chats[x.chat]; if (!c) return null; const i = chatInfo(c); return html`<button class="ci" onClick=${() => { remember(); openChat(c.id, { jump: x.thread ? undefined : x.id, thread: x.thread }); }}><${ChatAvatar} chat=${c} s=${44} online=${false} /><span class="ci-m"><span class="ci-t"><b>${c.server ? '#' : ''}${i.title}</b><time>${fmtShort(x.ts)}</time></span><span class="ci-p"><span><i class="who">${x.from === S.me.id ? 'Вы' : userName(S.users[x.from]).split(' ')[0]}: </i>${msgPreview(x)}</span></span></span></button>`; })}`}
     ${busy && !res && html`<${Spinner} />`}
     ${res && !busy && !localChats.length && !(g && (g.users.length || g.chats.length || g.servers.length)) && !(m && m.msgs.length) && html`<${Empty} icon="search" title="Ничего не нашлось" text="Поиск раздел всё догола — и пусто. Попробуйте другой запрос." />`}
@@ -131,6 +156,9 @@ function HomeSidebar() {
   const fid = folders.some(f => f.id === S.ui.folder) ? S.ui.folder : 'all';
   const sort = l => l.sort((a, b) => (b.pin || 0) - (a.pin || 0) || ((b.last ? b.last.ts : b.created) || 0) - ((a.last ? a.last.ts : a.created) || 0));
   const list = sort((S.ui.archive ? archived : live).filter(c => S.ui.archive || inFolder(c, fid)));
+  // Клубы стоят в общем списке вместе с чатами и сортируются по последнему сообщению в любой из своих комнат
+  const clubs = S.ui.archive || fid !== 'all' ? [] : Object.values(S.servers).map(sv => { const st = { club: sv, n: 0, m: 0, ts: 0, rooms: 0 }; for (const c of Object.values(S.chats)) if (c.server === sv.id) { st.rooms++; if (!isMuted(c)) st.n += c.unread || 0; st.m += c.mentions || 0; st.ts = Math.max(st.ts, (c.last ? c.last.ts : 0) || 0); } return st; });
+  const rows = clubs.length ? [...list, ...clubs].sort((a, b) => (b.pin || 0) - (a.pin || 0) || ((b.club ? b.ts : (b.last ? b.last.ts : b.created)) || 0) - ((a.club ? a.ts : (a.last ? a.last.ts : a.created)) || 0)) : list;
   const count = f => live.filter(c => inFolder(c, f) && c.unread > 0 && !isMuted(c)).length;
   const menu = e => showMenu(e, [
     { icon: 'venetian-mask', label: 'Голая правда', hint: 'анонимные вопросы', run: openAsk },
@@ -139,14 +167,12 @@ function HomeSidebar() {
     { icon: 'user-plus', label: 'Позвать друзей', hint: '+100 🍃', run: openInvite },
     !isStandalone() && { icon: 'smartphone', label: 'Установить как приложение', run: installApp },
     '-',
-    { icon: 'list', label: 'Лента', run: () => openHub('feed') },
-    { icon: 'music', label: 'Музыка, клипы и эфиры', run: () => openHub() },
     { icon: 'layout-grid', label: 'Приложения', run: () => openApps(S.ui.chat) },
     { icon: 'life-buoy', label: 'Помощь и поддержка', run: () => openHub('help') },
     '-',
     { icon: 'users', label: 'Новая группа', run: () => openModal(CreateChat, { type: 'group' }) },
     { icon: 'megaphone', label: 'Новый канал', run: () => openModal(CreateChat, { type: 'channel' }) },
-    { icon: 'server', label: 'Новый сервер', run: () => openModal(CreateServer) },
+    { icon: 'server', label: 'Новый клуб', run: () => openModal(CreateServer) },
     { icon: 'lock', label: 'Секретный чат', run: () => openModal(ContactsModal, { secret: true }) },
     '-',
     { icon: 'bookmark', label: 'Избранное', run: () => openUser(S.me.id) },
@@ -163,16 +189,17 @@ function HomeSidebar() {
     <header class="side-h">
       <button class="ib" onClick=${menu} aria-label="Меню"><${Icon} n="menu" /></button>
       <label class="search"><${Icon} n="search" s=${17} /><input id="search" value=${q} placeholder="Поиск (Ctrl+K)" onInput=${e => setQ(e.target.value)} onFocus=${() => setFocus(true)} onBlur=${() => setTimeout(() => setFocus(false), 200)} onKeyDown=${e => e.key === 'Escape' && (setQ(''), e.target.blur())} autocomplete="off" />${q && html`<button class="ib sm" onClick=${() => setQ('')} aria-label="Очистить"><${Icon} n="x" s=${15} /></button>`}</label>
-      <button class="ib" title="Создать: чат, группу, канал или сервер" aria-label="Создать" onClick=${() => openModal(CreateMenu)}><${Icon} n="square-pen" /></button>
+      <button class="ib" title="Создать: чат, группу, канал или клуб" aria-label="Создать" onClick=${() => openModal(CreateMenu)}><${Icon} n="square-pen" /></button>
     </header>
     ${q.trim() ? html`<div class="side-b"><${SearchView} q=${q.trim()} /></div>` : focus && (S.settings.searchHistory || []).length ? html`<div class="side-b"><h4 class="sh">Недавние запросы <a onClick=${() => setSetting({ searchHistory: [] })}>очистить</a></h4>${S.settings.searchHistory.map(h => html`<button class="hist-i" onMouseDown=${e => { e.preventDefault(); setQ(h); }}><${Icon} n="history" s=${16} />${h}</button>`)}</div>` : html`
       ${!S.ui.archive && html`<${StoriesRow} />`}
       ${S.ui.archive ? html`<div class="arch-h"><button class="ib" onClick=${() => { S.ui.archive = false; bump(); }}><${Icon} n="arrow-left" /></button><b>Архив</b></div>` : html`<div class="folders" role="tablist">${folders.map(f => { const n = f.id === 'all' ? 0 : count(f.id); return html`<button role="tab" class=${cx(fid === f.id && 'on')} aria-selected=${fid === f.id} onClick=${() => { S.ui.folder = f.id; bump(); }} onContextMenu=${e => f.types && showMenu(e, [{ icon: 'pencil', label: 'Изменить папку', run: () => openModal(FolderEditor, { folder: f }) }, { icon: 'trash-2', label: 'Удалить папку', danger: true, run: () => setSetting({ folders: S.settings.folders.filter(x => x.id !== f.id) }) }])}>${f.icon ? f.icon + ' ' : ''}${f.name}${n > 0 && html`<b>${n}</b>`}</button>`; })}<button class="add" title="Создать папку" onClick=${() => openModal(FolderEditor, {})}><${Icon} n="plus" s=${15} /></button></div>`}
       <div class="side-b" role="list">
+        ${!S.ui.archive && fid === 'all' && !S.ui.server && html`<${EventStrip} />`}
         ${!S.ui.archive && archived.length > 0 && fid === 'all' && html`<button class="ci arch" onClick=${() => { S.ui.archive = true; bump(); }}><span class="ava" style="width:48px;height:48px;background:var(--hover);color:var(--ink2)"><${Icon} n="archive" s=${22} /></span><span class="ci-m"><span class="ci-t"><b>Архив</b></span><span class="ci-p"><span>${archived.map(c => chatInfo(c).title).join(', ')}</span>${archived.reduce((a, c) => a + (c.unread || 0), 0) > 0 && html`<b class="cnt mute">${archived.reduce((a, c) => a + (c.unread || 0), 0)}</b>`}</span></span></button>`}
-        ${list.map(c => html`<${ChatItem} key=${c.id} chat=${c} />`)}
+        ${rows.map(r => r.club ? html`<${ClubItem} key=${r.club.id} s=${r.club} st=${r} />` : html`<${ChatItem} key=${r.id} chat=${r} />`)}
         ${!S.ui.archive && fid === 'all' && !S.ui.server && html`<${StartCards} side=${true} />`}
-        ${!list.length && html`<${Empty} icon=${S.ui.archive ? 'archive' : 'message-circle'} title=${S.ui.archive ? 'Архив пуст' : 'Здесь пока голо'} text=${S.ui.archive ? 'Чаты из архива возвращаются сами, когда в них пишут.' : fid === 'all' ? 'Найдите людей через поиск или заведите свою группу, канал или сервер.' : 'В этой папке нет чатов.'}>${!S.ui.archive && fid === 'all' && html`<button class="btn" onClick=${() => openModal(CreateMenu)}><${Icon} n="plus" s=${16} /> Создать</button>`}<//>`}
+        ${!rows.length && html`<${Empty} icon=${S.ui.archive ? 'archive' : 'message-circle'} title=${S.ui.archive ? 'Архив пуст' : 'Здесь пока голо'} text=${S.ui.archive ? 'Чаты из архива возвращаются сами, когда в них пишут.' : fid === 'all' ? 'Найдите людей через поиск или заведите свою группу, канал или клуб.' : 'В этой папке нет чатов.'}>${!S.ui.archive && fid === 'all' && html`<button class="btn" onClick=${() => openModal(CreateMenu)}><${Icon} n="plus" s=${16} /> Создать</button>`}<//>`}
       </div>`}
     <${MeBar} />
   </aside>`;
@@ -180,30 +207,14 @@ function HomeSidebar() {
 
 // ═════ Нижняя плашка: я и голос ═════
 function MeBar() {
-  const me = S.me, vc = RTC.chat && S.chats[RTC.chat], due = !!(S.flags || {}).stars && me.lastDaily !== new Date().toISOString().slice(0, 10);      // сегодняшний бонус ещё не собран
-  const accMenu = e => showMenu(e, [
-    { icon: 'user', label: 'Мой профиль', run: () => showProfile(me.id) },
-    { icon: 'smile', label: me.status ? 'Изменить статус' : 'Задать статус', run: () => openModal(StatusDlg) },
-    { icon: 'leaf', label: 'Листики', hint: fmtNum(me.stars || 0) + ' 🍃', run: () => openModal(StarsModal) },
-    { icon: 'store', label: 'Магазин и подписка', hint: me.tier ? ({ plus: 'Plus', pro: 'Pro', max: 'Max' })[me.tier] : '', run: () => openShop() },
-    '-',
-    ...accounts().filter(a => a.token !== S.token && a.name).map(a => ({ icon: 'circle-user', label: a.name, hint: a.username ? '@' + a.username : '', run: () => switchAccount(a.token) })),
-    { icon: 'plus', label: 'Добавить аккаунт', run: addAccount },
-    me.admin && { icon: 'shield', label: 'Админ-панель', run: openAdmin },
-    '-',
-    { icon: 'log-out', label: 'Выйти', danger: true, run: async () => { if (await confirmDlg({ title: 'Выйти из аккаунта?', text: 'Секретные чаты этого устройства после выхода прочитать не получится.', ok: 'Выйти', danger: true })) logout(); } },
-  ], { head: html`<div class="menu-head"><${Avatar} u=${me} src=${me.avatar} name=${userName(me)} color=${me.color} s=${40} /><div><b>${userName(me)}</b><small>${me.username ? '@' + me.username : me.phone}</small></div></div>` });
+  const vc = RTC.chat && S.chats[RTC.chat]; if (!vc) return null;      // профиль и настройки теперь во вкладке «Профиль»; здесь остаётся только идущий голосовой разговор
   return html`<div class="mebar">
-    ${vc && html`<div class="vbar"><div class="vbar-i"><span class=${cx('sig', RTC.connected && 'ok')}><${Icon} n="signal" s=${16} /></span><div onClick=${() => openChat(vc.id)}><b>${RTC.connected ? 'Голос подключён' : 'Подключение…'}</b><small>${vc.server ? vc.title + ' · ' + (S.servers[vc.server] || {}).name : chatInfo(vc).title}</small></div></div>
-      <button class="ib danger" title="Отключиться" onClick=${() => leaveVoice()}><${Icon} n="phone-off" s=${18} /></button></div>`}
-    <div class="me-row">
-      <button class="me-u" onClick=${accMenu}><${Avatar} u=${me} src=${me.avatar} name=${userName(me)} color=${me.color} s=${36} online /><span><b><${Nm} u=${me} /></b><small>${me.status ? (me.status.e || '') + ' ' + (me.status.t || '') : me.playing ? '🎮 ' + me.playing : 'в сети'}</small></span></button>
-      ${vc ? html`<button class=${cx('ib', RTC.muted && 'off')} title=${RTC.muted ? 'Включить микрофон' : 'Выключить микрофон'} onClick=${toggleMute}><${Icon} n=${RTC.muted ? 'mic-off' : 'mic'} s=${18} /></button><button class=${cx('ib', RTC.deaf && 'off')} title=${RTC.deaf ? 'Включить звук' : 'Выключить звук'} onClick=${toggleDeaf}><${Icon} n=${RTC.deaf ? 'headphone-off' : 'headphones'} s=${18} /></button>` : html`<button class=${cx('ib', due && 'due')} title=${due ? 'Ежедневный бонус ждёт — заберите листики' : 'Листики'} onClick=${() => openModal(StarsModal)}><span class="stars-chip">${fmtNum(me.stars || 0)} 🍃</span>${due && html`<i class="due-dot"></i>`}</button>`}
-      <button class="ib" title="Настройки" onClick=${() => openSettings()}><${Icon} n="settings" s=${18} /></button>
-    </div></div>`;
+    <div class="vbar"><div class="vbar-i"><span class=${cx('sig', RTC.connected && 'ok')}><${Icon} n="signal" s=${16} /></span><div onClick=${() => openChat(vc.id)}><b>${RTC.connected ? 'Голос подключён' : 'Подключение…'}</b><small>${vc.server ? vc.title + ' · ' + (S.servers[vc.server] || {}).name : chatInfo(vc).title}</small></div></div>
+      <button class=${cx('ib', RTC.muted && 'off')} title=${RTC.muted ? 'Включить микрофон' : 'Выключить микрофон'} onClick=${toggleMute}><${Icon} n=${RTC.muted ? 'mic-off' : 'mic'} s=${18} /></button>
+      <button class="ib danger" title="Отключиться" onClick=${() => leaveVoice()}><${Icon} n="phone-off" s=${18} /></button></div></div>`;
 }
 
-// ═════ Каналы сервера ═════
+// ═════ Каналы клуба ═════
 function ServerSidebar({ s }) {
   const [col, setCol] = useState(() => local.get('col.' + s.id, {}));
   const chans = Object.values(S.chats).filter(c => c.server === s.id).sort((a, b) => a.pos - b.pos);
@@ -220,7 +231,7 @@ function ServerSidebar({ s }) {
   ];
   return html`<aside class="side srv">
     <header class=${cx('srv-h', s.banner && 'has-banner')} style=${s.banner ? `background-image:linear-gradient(transparent 30%,var(--panel)),url(${s.banner})` : ''} onClick=${e => showMenu(e, serverMenu(s), { anchor: e.currentTarget })}>
-      <b>${s.name}</b>${s.verified && html`<${Badges} list=${['verified']} />`}${s.boosts > 0 && html`<span class="boost" title="Бусты сервера">🚀 ${s.boosts}</span>`}<${Icon} n="chevron-down" s=${18} />
+      <button class="ib srv-back" title="К списку чатов" aria-label="К списку чатов" onClick=${e => { e.stopPropagation(); goChats(); }}><${Icon} n="arrow-left" s=${19} /></button><b>${s.name}</b>${s.verified && html`<${Badges} list=${['verified']} />`}${s.boosts > 0 && html`<span class="boost" title="Бусты клуба">🚀 ${s.boosts}</span>`}<${Icon} n="chevron-down" s=${18} />
     </header>
     <div class="side-b">
       ${next && html`<button class="event-chip" onClick=${() => openModal(EventsModal, { server: s.id })}><${Icon} n="calendar" s=${16} /><span><b>${next.title}</b><small>${fmtFull(next.at)} · идёт ${next.going.length}</small></span></button>`}
@@ -232,17 +243,17 @@ function ServerSidebar({ s }) {
             <${Icon} n=${kindIcon(c.kind)} s=${18} /><span>${c.title}</span>${c.allow && c.allow.length ? html`<${Icon} n="lock" s=${12} cls="lock" />` : ''}${c.mentions > 0 ? html`<b class="cnt at">@${c.mentions}</b>` : c.unread > 0 && !isMuted(c) && !voice ? html`<b class="cnt">${fmtNum(c.unread)}</b>` : ''}</button>
             ${voice && room && room.peers.length > 0 && html`<div class="vpeers">${room.peers.map(pr => { const u = S.users[pr.user]; return html`<div class=${cx('vp', RTC.speaking[pr.id] && 'talk')} onClick=${() => showProfile(pr.user)}><${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${22} /><span>${userName(u)}</span>${pr.hand && html`<i>✋</i>`}${pr.screen && html`<${Icon} n="monitor-up" s=${13} />`}${pr.cam && html`<${Icon} n="video" s=${13} />`}${pr.muted && html`<${Icon} n="mic-off" s=${13} />`}${pr.deaf && html`<${Icon} n="headphone-off" s=${13} />`}</div>`; })}</div>`}</div>`; })}
       </div>`)}
-      ${!chans.length && html`<${Empty} icon="hash" title="Каналов нет" text="Создайте первый канал через меню сервера." />`}
+      ${!chans.length && html`<${Empty} icon="hash" title="Каналов нет" text="Создайте первый канал через меню клуба." />`}
     </div>
     <${MeBar} />
   </aside>`;
 }
-// ═════ «Создать»: любой человек может завести свою группу, канал или сервер — никаких особых прав не нужно ═════
+// ═════ «Создать»: любой человек может завести свою группу, канал или клуб — никаких особых прав не нужно ═════
 const MAKE = [
   ['user', 'Написать человеку', 'Найти по имени или @username и начать личный чат', () => openModal(ContactsModal)],
   ['users', 'Своя группа', 'Общий чат для друзей, класса или двора. Вы — владелец: зовёте людей и назначаете админов', () => openModal(CreateChat, { type: 'group' })],
   ['megaphone', 'Свой канал', 'Вы пишете — подписчики читают. Можно сделать публичным, со ссылкой', () => openModal(CreateChat, { type: 'channel' })],
-  ['server', 'Свой сервер', 'Как в Discord: текстовые и голосовые комнаты, роли, события', () => openModal(CreateServer)],
+  ['server', 'Свой клуб', 'Как в Discord: текстовые и голосовые комнаты, роли, события', () => openModal(CreateServer)],
   ['lock', 'Секретный чат', 'Переписка со сквозным шифрованием для двоих', () => openModal(ContactsModal, { secret: true })],
 ];
 export function CreateMenu({ id }) {

@@ -118,6 +118,7 @@ function badges(u) {
   const b = [...(u.badges || [])];
   const tier = tierOf(u); if (tier) b.push(tier === 'plus' ? 'premium' : tier);
   if (u.bot || ROBOTS.has(u.id)) b.push('bot');
+  if (u.snowWin) b.push('snow');      // золотой значок десятки лучших в «Снежном коме»
   if (u.label && (u.label.t || u.label.e)) b.push({ t: u.label.t, e: u.label.e, c: u.label.c || 0 });      // особый статус от администрации — плашка рядом с именем
   return b;
 }

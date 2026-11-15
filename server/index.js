@@ -17,6 +17,7 @@ const G = require('./guild');
 const B = require('./bots');
 const Adm = require('./admin');
 require('./gifts');
+require('./events');
 require('./tgpacks');
 require('./tunes');
 require('./common');

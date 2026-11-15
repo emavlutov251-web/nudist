@@ -35,6 +35,15 @@ async function pool(list, n, fn) { let i = 0; const out = new Array(list.length)
 
 const nameOf = raw => { const s = String(raw || '').trim(), m = /(?:t\.me|telegram\.me|telegram\.dog)\/add(?:stickers|emoji)\/([A-Za-z0-9_]+)/i.exec(s) || /[?&]set=([A-Za-z0-9_]+)/i.exec(s) || /^@?([A-Za-z][A-Za-z0-9_]{0,63})$/.exec(s); return m ? m[1] : ''; };
 const view = p => ({ id: p.id, tg: p.tg, title: p.title, by: p.by, n: p.items.length, items: p.items });
+// У набора есть хозяин — тот, кто принёс его из Telegram. Остальные берут набор с его разрешения: один раз спросили — дальше набор их.
+// Хозяин может открыть набор для всех (open). Если хозяина больше нет (аккаунт удалён) или это служебный аккаунт-бот, спрашивать некого — набор свободный.
+const ownerOf = p => { const o = db.users[p.by]; return o && !o.deleted && !o.bot ? o : null; };
+const free = (p, u) => p.by === u.id || !!p.open || (p.ok || []).includes(u.id) || !ownerOf(p);
+const stateOf = (p, u) => mine(u).includes(p.id) ? 'mine' : free(p, u) ? 'free' : (p.asks || {})[u.id] ? 'asked' : 'ask';
+const brief = p => ({ id: p.id, title: p.title, n: p.items.length, icon: (p.items.map(s => s.thumb || (!s.kind && s.url) || '').filter(Boolean))[0] || '', e: (p.items[0] || {}).e });
+const tell = (uid, ev, d) => { for (const o of C.conns.get(uid) || []) o.send(ev, d); };
+const sysBot = () => db.users[db.meta.sys];
+const nameOfUser = u => R.uname ? R.uname(u) : (u.name || 'Кто-то');
 const mine = u => (u.packs || []).filter(id => db.packs[id]);
 const byTg = name => { const l = name.toLowerCase(); for (const k in db.packs) if (db.packs[k].tg.toLowerCase() === l) return db.packs[k]; return null; };
 function attach(u, p) { const l = mine(u).filter(x => x !== p.id); need(l.length < MAX_MINE, `Больше ${MAX_MINE} наборов не помещается. Уберите лишний.`); u.packs = [p.id, ...l]; pop.t = 0; save(); }
@@ -70,18 +79,50 @@ H['pack.token'] = async (c, p) => {
 const holders = () => { if (now() - pop.t > 30000) { const n = {}; for (const u of Object.values(db.users)) for (const id of u.packs || []) n[id] = (n[id] || 0) + 1; pop = { t: now(), n }; } return pop.n; };
 H['pack.popular'] = c => {
   const my = new Set(mine(db.users[c.uid])), n = holders();
-  return { packs: Object.values(db.packs).map(p => ({ id: p.id, tg: p.tg, title: p.title, n: p.items.length, users: n[p.id] || 0, mine: my.has(p.id), e: (p.items[0] || {}).e, icons: p.items.map(s => s.thumb || (!s.kind && s.url) || '').filter(Boolean).slice(0, 4) })).sort((a, b) => b.users - a.users || b.n - a.n).slice(0, 40) };
+  return { packs: Object.values(db.packs).map(p => ({ id: p.id, tg: p.tg, title: p.title, n: p.items.length, users: n[p.id] || 0, mine: my.has(p.id), state: stateOf(p, db.users[c.uid]), owner: ownerOf(p) && p.by !== c.uid ? nameOfUser(ownerOf(p)) : '', e: (p.items[0] || {}).e, icons: p.items.map(s => s.thumb || (!s.kind && s.url) || '').filter(Boolean).slice(0, 4) })).sort((a, b) => b.users - a.users || b.n - a.n).slice(0, 40) };
 };
 H['pack.list'] = c => ({ packs: mine(db.users[c.uid]).map(id => view(db.packs[id])) });
-H['pack.get'] = (c, p) => { const k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); return { pack: view(k), mine: mine(db.users[c.uid]).includes(k.id) }; };
-H['pack.add'] = (c, p) => { const k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); attach(db.users[c.uid], k); return { pack: view(k) }; };
+H['pack.get'] = (c, p) => { const u = db.users[c.uid], k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); const o = ownerOf(k); return { pack: view(k), mine: mine(u).includes(k.id), state: stateOf(k, u), open: !!k.open, owner: o ? { id: o.id, name: nameOfUser(o) } : null, asks: k.by === u.id ? Object.keys(k.asks || {}).filter(id => db.users[id] && !db.users[id].deleted).map(id => ({ user: C.pubUser(db.users[id]), ts: k.asks[id] })) : undefined }; };
+H['pack.add'] = (c, p) => { const u = db.users[c.uid], k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); need(free(k, u), 'Этот набор принёс другой человек. Сначала попросите у него разрешение.'); attach(u, k); return { pack: view(k) }; };
+// Попросить набор у хозяина. Хозяину приходит сообщение от служебного бота с кнопками «Разрешить» и «Отказать»; запрос виден и в окне «Добавить стикеры».
+function ask(u, k) {
+  if (free(k, u)) { attach(u, k); return { pack: view(k) }; }
+  const o = ownerOf(k); k.asks = k.asks || {};
+  if (k.asks[u.id]) return { asked: true, owner: nameOfUser(o), title: k.title };
+  need(!(k.no || {})[u.id] || now() - k.no[u.id] > 864e5, 'Хозяин набора уже отказал. Спросить ещё раз можно через сутки.');
+  need(mine(u).length < MAX_MINE, `Больше ${MAX_MINE} наборов не помещается. Уберите лишний.`);
+  A.limit('packask:' + u.id, 10, 3600e3);
+  k.asks[u.id] = now(); if (k.no) delete k.no[u.id]; save();
+  tell(o.id, 'pack.ask', { pack: brief(k), user: C.pubUser(u) });
+  const bot = sysBot(); if (bot) try { const m = C.postMessage(C.openDm(bot.id, o.id), bot.id, { text: `🧩 **${nameOfUser(u)}**${u.username ? ' (@' + u.username + ')' : ''} просит ваш набор стикеров **«${k.title}»**.\nРазрешите — и набор появится у него в стикерах. Чтобы больше не спрашивали, откройте набор и включите «Разрешать всем».`, btn: [[{ t: '✅ Разрешить', d: `pk:ok:${k.id}:${u.id}` }, { t: 'Отказать', d: `pk:no:${k.id}:${u.id}` }]] }, { quiet: true }); k.askMsg = k.askMsg || {}; if (m) k.askMsg[u.id] = m.id; } catch (e) { console.error('[packs] запрос', e.message); }
+  return { asked: true, owner: nameOfUser(o), title: k.title };
+}
+// Ответ хозяина: из окна стикеров (pack.answer) или кнопкой под сообщением бота
+function answer(owner, k, uid, ok) {
+  need(k.by === owner.id, 'Отвечать на запрос может только хозяин набора'); need((k.asks || {})[uid], 'Этот запрос уже закрыт');
+  const u = db.users[uid]; delete k.asks[uid];
+  if (ok && u && !u.deleted) { k.ok = [...new Set([...(k.ok || []), uid])].slice(-5000); try { attach(u, k); tell(uid, 'pack', { pack: view(k) }); } catch (e) { tell(uid, 'pack.fail', { name: k.tg, error: `Набор «${k.title}» вам разрешили, но он не поместился: ${e.message}` }); } }
+  else if (u) { k.no = k.no || {}; k.no[uid] = now(); tell(uid, 'pack.fail', { name: k.tg, error: `Хозяин набора «${k.title}» не разрешил его добавить.` }); }
+  // под сообщением бота убираем кнопки и дописываем итог
+  const bot = sysBot(), mid = (k.askMsg || {})[uid]; if (k.askMsg) delete k.askMsg[uid];
+  if (bot && mid) try { const ch = C.openDm(bot.id, owner.id), m = C.findMsg(ch.id, mid); if (m && m.btn) { delete m.btn; m.text += ok ? '\n\n✅ Вы разрешили.' : '\n\n🚫 Вы отказали.'; C.updateMsg(ch, m); } } catch (e) { /* сообщение могли удалить */ }
+  save(); tell(owner.id, 'pack.asks', {});
+  return { ok: true };
+}
+H['pack.ask'] = (c, p) => { const k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); return ask(db.users[c.uid], k); };
+H['pack.answer'] = (c, p) => { const k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); return answer(db.users[c.uid], k, str(p.user, 40), !!p.ok); };
+H['pack.asks'] = c => { const out = []; for (const k of Object.values(db.packs)) if (k.by === c.uid) for (const id of Object.keys(k.asks || {})) if (db.users[id] && !db.users[id].deleted) out.push({ pack: brief(k), user: C.pubUser(db.users[id]), ts: k.asks[id] }); return { asks: out.sort((a, b) => b.ts - a.ts).slice(0, 100) }; };
+H['pack.open'] = (c, p) => { const k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); need(k.by === c.uid, 'Это может только хозяин набора'); k.open = !!p.on || undefined; if (k.open) for (const id of Object.keys(k.asks || {})) try { answer(db.users[c.uid], k, id, true); } catch (e) { /* закрыт */ } save(); return { open: !!k.open }; };
+// Кнопки под сообщением бота (msg.cb → pk:ok|no:<набор>:<кто просит>)
+function button(c, data) { const [, act, pid, uid] = data.split(':'), k = db.packs[pid]; need(k, 'Набора уже нет'); answer(db.users[c.uid], k, uid, act === 'ok'); return { toast: act === 'ok' ? 'Разрешили. Набор уже у человека.' : 'Отказали.' }; }
+R.hook.packOk = (u, id) => !db.packs[id] || mine(u).includes(id);
 H['pack.remove'] = (c, p) => { const u = db.users[c.uid]; u.packs = mine(u).filter(x => x !== p.id); pop.t = 0; save(); return { ok: true }; };
 // Удалить набор у всех: тот, кто его принёс, или администратор
 H['pack.drop'] = (c, p) => { const u = db.users[c.uid], k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); need(k.by === u.id || isAdmin(u), 'Удалить набор может тот, кто его добавил, или администратор'); delete db.packs[k.id]; save(); C.releaseFiles(k); return { ok: true }; };
 // Импорт идёт в фоне (большой набор качается десятки секунд): ответ приходит сразу, итог — событием pack или pack.fail
 H['pack.import'] = (c, p) => {
   const u = db.users[c.uid], name = nameOf(p.link); need(name, 'Вставьте ссылку на набор: https://t.me/addstickers/…');
-  const have = byTg(name); if (have) { attach(u, have); return { pack: view(have) }; }
+  const have = byTg(name); if (have) return ask(u, have);      // набор уже на сервере: свой или свободный добавится сразу, чужой — через запрос хозяину
   need(botToken(), C.isOwner(u) ? 'Сначала вставьте ключ бота Telegram' : 'Импорт из Telegram ещё не настроен. Напишите владельцу: ему нужно один раз вставить ключ бота.');
   need(mine(u).length < MAX_MINE, `Больше ${MAX_MINE} наборов не помещается. Уберите лишний.`);
   if (!isAdmin(u)) A.limit('pack:' + u.id, 6, 3600e3);
@@ -93,4 +134,4 @@ H['pack.import'] = (c, p) => {
   return { pending: true, name };
 };
 // Аккаунт удалён — его список наборов не нужен; сами наборы общие и остаются
-module.exports = { nameOf };
+module.exports = { nameOf, button };

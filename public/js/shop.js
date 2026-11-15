@@ -7,15 +7,16 @@ import { GiftMarket } from './gifts.js';
 const num = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 const TIER = { plus: 'Plus', pro: 'Pro', max: 'Max' };
 const INCLUDED = { plus: ['common'], pro: ['common', 'rare'], max: ['common', 'rare', 'epic', 'legendary'] };
-const RARITY = { common: 'обычная', rare: 'редкая', epic: 'эпическая', legendary: 'легендарная', season: 'награда пропуска' };
+const RARITY = { common: 'обычная', rare: 'редкая', epic: 'эпическая', legendary: 'легендарная', season: 'награда пропуска', event: 'только на событии' };
 // Редкость вещей: нужна, чтобы без запроса к серверу понять, входит ли вещь в тариф (стикеры в панели, темы в настройках).
 const ITEM_TIER = { stickers_space: 'common', stickers_party: 'common', stickers_memes: 'rare', stickers_anime: 'epic', theme_sand: 'common', theme_forest: 'rare', theme_neon: 'epic', theme_void: 'epic' };
 export const SHOP_THEMES = [['sand', 'Песок'], ['forest', 'Лес'], ['neon', 'Неон'], ['void', 'Пустота']];
+export const EVENT_THEMES = [['nightbeach', 'Ночной пляж'], ['newyear', 'Новый год']];      // темы событий: в настройках видны только тем, кто их купил
 export const hasItem = id => { const me = S.me || {}; return (me.owned || []).includes(id) || !!(me.tier && ITEM_TIER[id] && INCLUDED[me.tier].includes(ITEM_TIER[id])); };
 export const openShop = tab => openModal(ShopModal, { tab });
 
 // ───── эффект сообщения: короткая вспышка над пузырём, когда сообщение только что пришло
-const FX = { sparkle: ['✨', '⭐', '💫'], hearts: ['💕', '❤️', '💖'], confetti: ['🎉', '🎊', '✨'], lightning: ['⚡', '💥', '⚡'], bubbles: ['🫧', '💧', '🫧'] };
+const FX = { sparkle: ['✨', '⭐', '💫'], hearts: ['💕', '❤️', '💖'], confetti: ['🎉', '🎊', '✨'], lightning: ['⚡', '💥', '⚡'], bubbles: ['🫧', '💧', '🫧'], goldsand: ['✨', '🟡', '⏳'], firework: ['🎆', '🎇', '✨'] };
 const played = new Set();
 export function fxBurst(el, kind) {
   const set = FX[kind]; if (!el || !set || S.settings.anim === false || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
@@ -50,7 +51,7 @@ function ShopModal({ id, tab: tab0 }) {
   const need = n => (me.stars || 0) < n ? (toast(`Не хватает ${num(n - (me.stars || 0))} 🍃. Листики можно докупить на вкладке «Листики».`), true) : false;
   const buy = async it => {
     if (need(it.price)) return;
-    if (!(await confirmDlg({ title: it.name, text: `Купить за ${num(it.price)} 🍃?${it.off ? ` Скидка ${it.off} %${it.deal ? ' — сегодняшняя' : ' на первую покупку'}.` : ''} Вещь останется у вас навсегда.`, ok: 'Купить' }))) return;
+    if (!(await confirmDlg({ title: it.name, text: `Купить за ${num(it.price)} 🍃?${it.off ? ` Скидка ${it.off} %${it.sale ? ' — ' + it.sale : it.deal ? ' — сегодняшняя' : ' на первую покупку'}.` : ''} Вещь останется у вас навсегда.`, ok: 'Купить' }))) return;
     const r = await run(() => rpc('shop.buy', { id: it.id })); if (!r) return;
     sfx('coin'); confetti();
     if (it.kind === 'theme') setSetting({ theme: it.id.slice(6) });
@@ -102,7 +103,8 @@ function ShopModal({ id, tab: tab0 }) {
         ${d.first > 0 && html`<p class="shop-note">Первая покупка украшения — со скидкой ${d.first} %.</p>`}
         ${KINDS.map(([k, title, sub]) => html`<h4 class="shop-h">${title}${sub && html`<small>${sub}</small>`}</h4>
           <div class="shop-grid">${d.items.filter(i => i.kind === k).map(it => { const mine = it.owned || it.included, onNow = mine && isOn(it); return html`<div class=${cx('shop-card', 'r-' + it.tier, mine && 'mine', onNow && 'worn')} key=${it.id}>
-            ${it.deal && !mine && it.tier !== 'season' && html`<i class="shop-deal" title="Скидка дня: только сегодня">−${it.off} %</i>`}
+            ${(it.deal || it.sale) && !mine && it.tier !== 'season' && html`<i class="shop-deal" title=${it.sale ? it.sale + ': скидка до конца события' : 'Скидка дня: только сегодня'}>−${it.off} %</i>`}
+            ${it.till && !mine && html`<i class="shop-till" title="Вещь события: потом её будет не купить">до ${new Date(it.till - 1).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</i>`}
             <div class="shop-pv"><${Preview} it=${it} /></div>
             <b>${it.name}</b><small class="shop-r">${RARITY[it.tier]}${it.count ? ` · ${it.count} шт.` : ''}</small>
             ${mine ? html`<button class=${cx('btn sm', onNow ? 'ghost' : '')} disabled=${busy || it.kind === 'stickers'} onClick=${() => wear(it)}>${it.kind === 'stickers' ? 'В панели стикеров' : onNow ? (it.kind === 'theme' ? 'Выключить' : 'Снять') : (it.kind === 'theme' ? 'Включить' : 'Надеть')}</button>${!it.owned && html`<small class="shop-inc">входит в тариф</small>`}`
@@ -139,7 +141,7 @@ function ShopModal({ id, tab: tab0 }) {
           ${t.gotF ? html`<span class="pass-c got"><${Icon} n="check" s=${13} /> ${rw(t.free)}</span>` : html`<button class="pass-c" disabled=${!open} onClick=${() => claimPass(t.lvl, false)}>${rw(t.free)}</button>`}
           ${t.gotP ? html`<span class="pass-c prem got"><${Icon} n="check" s=${13} /> ${rw(t.prem)}</span>` : html`<button class=${cx('pass-c prem', !season.pass.premium && 'lock')} disabled=${!open || !season.pass.premium} onClick=${() => claimPass(t.lvl, true)}>${!season.pass.premium && html`<${Icon} n="lock" s=${12} /> `}${rw(t.prem)}</button>`}
         </div>`; })}</div>
-        <p class="hint">Опыт: сообщение и реакция — по 1, подарок — 5, чаевые — 10, приглашённый друг — 20, буст сервера — 25, ежедневный бонус — 50. Левая награда — всем, правая — на премиум-дорожке.</p>
+        <p class="hint">Опыт: сообщение и реакция — по 1, подарок — 5, чаевые — 10, приглашённый друг — 20, буст клуба — 25, ежедневный бонус — 50. Левая награда — всем, правая — на премиум-дорожке.</p>
         <h4 class="shop-h">Задания месяца</h4>
         <p class="shop-note">Сезон — это месяц. Задания считаются сами, награду забираете кнопкой. До конца сезона ${Math.max(1, Math.ceil((season.end - Date.now()) / 864e5))} дн.${season.mult > 1 ? ` С вашим тарифом награды ×${String(season.mult).replace('.', ',')}.` : ' С тарифом Pro награды в полтора раза больше, с Max — вдвое.'}</p>
         <div class="shop-tasks">${season.tasks.map(t => html`<div class=${cx('shop-task', t.done && 'done', t.claimed && 'got')} key=${t.id}>

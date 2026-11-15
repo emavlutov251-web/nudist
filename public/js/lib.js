@@ -5,7 +5,7 @@ export { html, render, Component, useState, useEffect, useRef, useMemo, useCallb
 
 // ───── состояние
 export const DEFAULT_SETTINGS = {
-  theme: 'system', style: 'fluent', acrylic: 'auto', accent: '', fontSize: 15, wallpaper: 'leaves', anim: true, contrast: false, flat: 'auto', enterSend: true, timeFmt: 24,
+  theme: 'system', style: 'soft', acrylic: 'auto', accent: '', fontSize: 15, wallpaper: 'leaves', anim: true, contrast: false, flat: 'auto', enterSend: true, timeFmt: 24,
   sound: true, notif: true, preview: true, notifSound: 'ding', notifDm: true, notifGroup: true, notifChannel: false, notifServer: false, dnd: { on: false, from: '23:00', to: '08:00' },
   emojiAuto: true, stickerSize: 160, compress: 'high', autoDl: { photo: true, video: true, gif: true }, nakedTyping: false,
   noise: true, echo: true, ptt: false, scale: 1, transcribe: false, folders: [], recentEmoji: ['👍', '❤️', '😂', '🔥', '🍃', '😮', '😢', '🙏'], gifs: [], stickers: [], hiddenPacks: [], searchHistory: [], autoArchive: false, beta: false, bossTitle: 'Отчёт_Q3_финал_v7.xlsx',
@@ -192,13 +192,14 @@ export function setSetting(patch, sync = true) {
   try { localStorage.setItem(LS('settings.' + (S.me ? S.me.id : '')), JSON.stringify(S.settings)); } catch (e) { /* переполнено */ }
   applyTheme(); if (sync) pushSettings(); bump();
 }
-export const SKINS = { sand: 'light', forest: 'dark', neon: 'dark', void: 'dark' };
+export const SKINS = { sand: 'light', forest: 'dark', neon: 'dark', void: 'dark', nightbeach: 'dark', newyear: 'dark' };
 export function applyTheme() {
   const s = S.settings, r = document.documentElement;
   const sys = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   const skin = SKINS[s.theme];      // тема из магазина: поверх обычной светлой или тёмной
   r.dataset.theme = skin || (s.theme === 'system' ? sys : s.theme); if (skin) r.dataset.skin = s.theme; else delete r.dataset.skin;
-  r.dataset.style = s.style === 'classic' ? 'classic' : 'fluent';
+  // «Мягкий» — стиль по умолчанию. Прежнее значение 'fluent' стояло у всех само собой, поэтому Windows 10 теперь включается отдельным значением 'win10'.
+  r.dataset.style = s.style === 'classic' ? 'classic' : s.style === 'win10' ? 'fluent' : 'soft';
   // «Авто»: размытие — главная черта оформления, поэтому выключаем его только на совсем слабых устройствах (до 1 ГБ памяти или два ядра):
   // там оно тормозит прокрутку. Раньше порог был 4 ГБ, и на большинстве недорогих телефонов размытия не было вовсе.
   const weak = (navigator.deviceMemory && navigator.deviceMemory < 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 3);
@@ -268,7 +269,7 @@ export function ChatAvatar({ chat, s = 44, online = true }) {
   if (chat && chat.server) return html`<span class="ava" style=${`width:${s}px;height:${s}px;background:var(--hover);color:var(--ink2)`}><${Icon} n=${kindIcon(chat.kind)} s=${Math.round(s * 0.5)} /></span>`;
   return html`<${Avatar} u=${i.user} src=${i.avatar} name=${i.title} color=${i.color} s=${s} saved=${i.saved} deleted=${i.user && i.user.deleted} online=${online && i.user && i.user.online && !i.user.bot} />`;
 }
-const BADGES = { verified: ['badge-check', 'Подтверждённый аккаунт', 'var(--sea)'], premium: ['leaf', 'Нудист Plus', 'var(--warn)'], pro: ['flame', 'Нудист Pro', '#F2622E'], max: ['crown', 'Нудист Max', '#E0A800'], bot: ['bot', 'Бот', 'var(--ink3)'], staff: ['shield', 'Команда «Нудиста»', 'var(--accent)'], developer: ['wrench', 'Разработчик', 'var(--ink2)'] };
+const BADGES = { verified: ['badge-check', 'Подтверждённый аккаунт', 'var(--sea)'], premium: ['leaf', 'Нудист Plus', 'var(--warn)'], pro: ['flame', 'Нудист Pro', '#F2622E'], max: ['crown', 'Нудист Max', '#E0A800'], bot: ['bot', 'Бот', 'var(--ink3)'], staff: ['shield', 'Команда «Нудиста»', 'var(--accent)'], developer: ['wrench', 'Разработчик', 'var(--ink2)'], snow: ['sparkles', 'Десятка лучших в «Снежном коме»', '#E0A800'] };
 // Особый статус — плашка от администрации; сервер кладёт его в список значков объектом { t, e, c }
 export const LABEL_COLORS = ['Зелёный', 'Синий', 'Фиолетовый', 'Розовый', 'Красный', 'Оранжевый', 'Золотой', 'Графит'];
 export const userLabel = u => ((u && u.badges) || []).find(b => b && typeof b === 'object') || null;

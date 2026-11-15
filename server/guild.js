@@ -1,5 +1,5 @@
 'use strict';
-// Серверы в стиле Discord: каналы, категории, роли, приглашения, события, вебхуки + голосовые комнаты и звонки (сигналинг WebRTC).
+// Клубы в стиле Discord: каналы, категории, роли, приглашения, события, вебхуки + голосовые комнаты и звонки (сигналинг WebRTC).
 const C = require('./core');
 const R = require('./rpc');
 const { db, save, now, id, token, fail, need, str, int, emit, sCan, chatView, pubUser, audit, isUpload, service, postMessage } = C;
@@ -12,7 +12,7 @@ const TEMPLATES = {
   study: { cats: [['Деканат', [['объявления', 'announce'], ['правила', 'rules']]], ['Учёба', [['общий', 'text'], ['домашка', 'text'], ['вопросы', 'forum']]], ['Аудитории', [['Читальный зал', 'voice'], ['Лекция', 'stage']]]] },
   memes: { cats: [['Вход', [['правила-пляжа', 'rules'], ['объявления', 'announce']]], ['Основное', [['болталка', 'text'], ['мемы', 'text'], ['кринж', 'text'], ['срач-по-расписанию', 'text'], ['вопросы-и-ответы', 'forum']]], ['Голосовые', [['Курилка', 'voice'], ['Шезлонги', 'voice'], ['Сцена: стендап', 'stage']]]] },
 };
-const getServer = (c, sid, act) => { const s = db.servers[typeof sid === 'string' ? sid : '']; need(s && s.members[c.uid], 'Сервер не найден'); if (act) need(sCan(s, c.uid, act), 'Недостаточно прав на сервере'); return s; };
+const getServer = (c, sid, act) => { const s = db.servers[typeof sid === 'string' ? sid : '']; need(s && s.members[c.uid], 'Клуб не найден'); if (act) need(sCan(s, c.uid, act), 'Недостаточно прав в клубе'); return s; };
 function serverView(s, uid) {
   return { id: s.id, name: s.name, icon: s.icon, banner: s.banner, about: s.about, owner: s.owner, pub: s.pub, roles: s.roles, cats: s.cats, emojis: s.emojis || [], boosts: s.boosts || 0, level: R.boostLevel(s.boosts), boosters: Object.entries(s.boosters || {}).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([u, n]) => ({ u, n })), events: s.events || [], count: C.size(s.members), verified: s.verified, color: s.color, automod: sCan(s, uid, 'channels') ? s.automod : undefined, afk: s.afk,
     me: { roles: s.members[uid].roles, nick: s.members[uid].nick, perms: C.sPerms(s, uid) } };
@@ -32,13 +32,13 @@ function createServer(owner, name, tpl, extra) {
   return s;
 }
 function joinServer(s, uid, quiet, role) {
-  need(!(s.banned || []).includes(uid), 'Вы забанены на этом сервере');
+  need(!(s.banned || []).includes(uid), 'Вы забанены на этом клубе');
   if (s.members[uid]) return;
   s.members[uid] = { roles: role ? [role] : [], at: now() };
   const u = db.users[uid]; u.servers = u.servers || []; if (!u.servers.includes(s.id)) u.servers.push(s.id);
   for (const cid of s.channels) { const ch = db.chats[cid]; if (ch) C.st(ch, uid).read = ch.seq || 0; }
   audit(s, uid, 'join');
-  if (!quiet && C.size(s.members) <= 200) { const first = s.channels.map(x => db.chats[x]).find(ch => ch && ch.kind === 'text'); if (first) service(first, uid, 'запрыгнул(а) на сервер. Все прикрылись!'); }
+  if (!quiet && C.size(s.members) <= 200) { const first = s.channels.map(x => db.chats[x]).find(ch => ch && ch.kind === 'text'); if (first) service(first, uid, 'запрыгнул(а) в клуб. Все прикрылись!'); }
   save();
   emit(uid, 'server', serverView(s, uid));
   emit(uid, 'server.channels', { server: s.id, chats: s.channels.map(x => db.chats[x]).filter(ch => ch && sCan(s, uid, 'view', ch)).map(ch => chatView(ch, uid)) });
@@ -69,8 +69,8 @@ function destroyServer(s) {
 }
 
 H['server.create'] = (c, p) => {
-  const name = str(p.name, 60); need(name, 'У сервера должно быть имя');
-  need((db.users[c.uid].servers || []).length < 50, 'Слишком много серверов');
+  const name = str(p.name, 60); need(name, 'У клуба должно быть имя');
+  need((db.users[c.uid].servers || []).length < 50, 'Слишком много клубов');
   const s = createServer(c.uid, name, str(p.template, 16), { icon: isUpload(p.icon) ? p.icon : undefined });
   return serverView(s, c.uid);
 };
@@ -85,9 +85,9 @@ H['server.update'] = (c, p) => {
   audit(s, c.uid, 'server.update', Object.keys(p).filter(k => k !== 'id').join(', '));
   save(); emitServer(s);
 };
-H['server.delete'] = (c, p) => { const s = getServer(c, p.id); need(s.owner === c.uid, 'Удалить сервер может только владелец'); destroyServer(s); };
+H['server.delete'] = (c, p) => { const s = getServer(c, p.id); need(s.owner === c.uid, 'Удалить клуб может только владелец'); destroyServer(s); };
 H['server.leave'] = (c, p) => {
-  const s = getServer(c, p.id); need(s.owner !== c.uid || C.size(s.members) === 1, 'Владелец не может уйти: передайте владение или удалите сервер');
+  const s = getServer(c, p.id); need(s.owner !== c.uid || C.size(s.members) === 1, 'Владелец не может уйти: передайте владение или удалите клуб');
   if (C.size(s.members) === 1) return destroyServer(s);
   audit(s, c.uid, 'leave'); leaveServer(s, c.uid);
 };
@@ -95,14 +95,14 @@ H['server.transfer'] = (c, p) => { const s = getServer(c, p.id); need(s.owner ==
 H['server.join'] = (c, p) => {
   let s, role, inv;
   if (p.invite) { const t = R.resolveTarget(p.invite); need(t.invite && t.server, 'Приглашение недействительно'); s = t.server; role = t.invite.role; inv = t.invite; }
-  else { s = db.servers[p.id]; need(s && s.pub, 'Сервер приватный: нужна ссылка-приглашение'); }
+  else { s = db.servers[p.id]; need(s && s.pub, 'Клуб приватный: нужна ссылка-приглашение'); }
   if (!s.members[c.uid]) { joinServer(s, c.uid, false, role); if (inv) inv.uses = (inv.uses || 0) + 1; }
   return serverView(s, c.uid);
 };
 H['server.discover'] = (c, p) => {
   need(db.flags.discovery, 'Каталог отключён администратором');
   const q = str(p.q, 64).toLowerCase();
-  return Object.values(db.servers).filter(s => s.pub && (!q || s.name.toLowerCase().includes(q) || (s.about || '').toLowerCase().includes(q))).sort((a, b) => R.boostLevel(b.boosts) - R.boostLevel(a.boosts) || C.size(b.members) - C.size(a.members)).slice(0, 50).map(s => ({ ...R.serverPreview(s), member: !!s.members[c.uid] }));      // серверы с уровнем выше — выше в каталоге
+  return Object.values(db.servers).filter(s => s.pub && (!q || s.name.toLowerCase().includes(q) || (s.about || '').toLowerCase().includes(q))).sort((a, b) => R.boostLevel(b.boosts) - R.boostLevel(a.boosts) || C.size(b.members) - C.size(a.members)).slice(0, 50).map(s => ({ ...R.serverPreview(s), member: !!s.members[c.uid] }));      // клубы с уровнем выше — выше в каталоге
 };
 H['server.members'] = (c, p) => {
   const s = getServer(c, p.id); const q = str(p.q, 64).toLowerCase();
@@ -173,7 +173,7 @@ H['server.member'] = (c, p) => {
     m.roles = next; audit(s, c.uid, 'member.roles', R.uname(db.users[p.user]));
   }
   if (p.nick !== undefined) { need(p.user === c.uid || sCan(s, c.uid, 'kick'), 'Недостаточно прав'); m.nick = str(p.nick, 40) || undefined; }
-  if (p.muted !== undefined) { need(p.user !== c.uid, 'Себя на сервере не глушат'); need(sCan(s, c.uid, 'kick') && p.user !== s.owner, 'Недостаточно прав'); m.muted = !!p.muted || undefined; audit(s, c.uid, p.muted ? 'mute' : 'unmute', R.uname(db.users[p.user])); }
+  if (p.muted !== undefined) { need(p.user !== c.uid, 'Себя в клубе не глушат'); need(sCan(s, c.uid, 'kick') && p.user !== s.owner, 'Недостаточно прав'); m.muted = !!p.muted || undefined; audit(s, c.uid, p.muted ? 'mute' : 'unmute', R.uname(db.users[p.user])); }
   save(); emit(p.user, 'server', serverView(s, p.user)); emitChannels(s);
 };
 H['server.kick'] = (c, p) => {
@@ -207,7 +207,7 @@ function eventReminders() {
       e.reminded = true;
       const ch = db.chats[e.chat] && db.chats[e.chat].kind !== 'voice' && db.chats[e.chat].kind !== 'stage' ? db.chats[e.chat] : s.channels.map(x => db.chats[x]).find(x => x && (x.kind === 'announce' || x.kind === 'text'));
       if (ch) postMessage(ch, db.meta.sys, { text: `📅 Начинается событие **${e.title}**! ${e.going.map(u => db.users[u] && db.users[u].username ? '@' + db.users[u].username : '').filter(Boolean).join(' ')}` }, { quiet: true });
-      for (const u of e.going) emit(u, 'toast', { text: `📅 Событие «${e.title}» на сервере «${s.name}» начинается!` });
+      for (const u of e.going) emit(u, 'toast', { text: `📅 Событие «${e.title}» в клубе «${s.name}» начинается!` });
       save();
     }
     if (e.at < t - 6 * 3600e3) { s.events = s.events.filter(x => x !== e); save(); }
@@ -217,10 +217,10 @@ function eventReminders() {
 H['server.emoji'] = (c, p) => {
   const s = getServer(c, p.server, 'channels'); s.emojis = s.emojis || [];
   if (p.del) s.emojis = s.emojis.filter(e => e.name !== p.del);
-  else { const name = str(p.name, 24).toLowerCase().replace(/[^a-z0-9_]/g, ''); need(name.length >= 2 && isUpload(p.url), 'Нужны имя (латиница) и картинка'); need(s.emojis.length < 50 + (s.boosts || 0) * 10, 'Слоты эмодзи закончились. Бустаните сервер!'); need(!s.emojis.some(e => e.name === name), 'Такое имя уже есть'); s.emojis.push({ name, url: p.url }); }
+  else { const name = str(p.name, 24).toLowerCase().replace(/[^a-z0-9_]/g, ''); need(name.length >= 2 && isUpload(p.url), 'Нужны имя (латиница) и картинка'); need(s.emojis.length < 50 + (s.boosts || 0) * 10, 'Слоты эмодзи закончились. Бустаните клуб!'); need(!s.emojis.some(e => e.name === name), 'Такое имя уже есть'); s.emojis.push({ name, url: p.url }); }
   audit(s, c.uid, 'emoji', str(p.name || p.del, 24)); save(); emitServer(s);
 };
-H['server.boost'] = (c, p) => { const s = getServer(c, p.id); const u = db.users[c.uid]; if (u.freeBoosts > 0) u.freeBoosts--; else R.spend(u, R.BOOST_PRICE); s.boosts = (s.boosts || 0) + 1; (s.boosters = s.boosters || {})[c.uid] = (s.boosters[c.uid] || 0) + 1; audit(s, c.uid, 'boost'); save(); R.selfUpdate(u); emitServer(s); const ch = s.channels.map(x => db.chats[x]).find(x => x && x.kind === 'text'); if (ch) service(ch, c.uid, 'бустанул(а) сервер! 🚀 Теперь бустов: ' + s.boosts); };
+H['server.boost'] = (c, p) => { const s = getServer(c, p.id); const u = db.users[c.uid]; if (u.freeBoosts > 0) u.freeBoosts--; else R.spend(u, R.BOOST_PRICE); const k = require('./events').on('ny') ? 2 : 1; s.boosts = (s.boosts || 0) + k; (s.boosters = s.boosters || {})[c.uid] = (s.boosters[c.uid] || 0) + k; audit(s, c.uid, 'boost'); save(); R.selfUpdate(u); emitServer(s); const ch = s.channels.map(x => db.chats[x]).find(x => x && x.kind === 'text'); if (ch) service(ch, c.uid, 'бустанул(а) клуб! 🚀 Теперь бустов: ' + s.boosts); };
 // вебхуки (Discord/Slack-совместимый приём JSON {content|text, username})
 H['hook.new'] = (c, p) => { const ch = db.chats[p.chat]; need(ch && ch.server, 'Канал не найден'); const s = getServer(c, ch.server, 'channels'); const h = { id: id(), token: token(18), chat: ch.id, name: str(p.name, 40) || 'Вебхук', by: c.uid, at: now() }; db.hooks[h.id] = h; audit(s, c.uid, 'webhook.new', h.name); save(); return h; };
 H['hook.list'] = (c, p) => { const s = getServer(c, p.server, 'channels'); return Object.values(db.hooks).filter(h => s.channels.includes(h.chat)); };

@@ -17,6 +17,10 @@ const GIFTS = [
   { id: 'shell', e: '🐚', name: 'Ракушка', price: 20 }, { id: 'icecream', e: '🍦', name: 'Мороженое', price: 20 }, { id: 'shades', e: '🕶️', name: 'Тёмные очки', price: 60 }, { id: 'coconut', e: '🥥', name: 'Кокос', price: 80 },
   { id: 'cocktail', e: '🍹', name: 'Коктейль', price: 300 }, { id: 'palm', e: '🌴', name: 'Пальма', price: 500 }, { id: 'umbrella', e: '⛱️', name: 'Зонтик', price: 800 }, { id: 'surf', e: '🏄', name: 'Сёрф', price: 1500 },
   { id: 'yacht', e: '🛥️', name: 'Яхта', price: 5000 }, { id: 'nudiamond', e: '💠', name: 'Алмаз нудиста', price: 10000 },
+  // зимняя коллекция и подарки событий: на витрине только пока идёт событие `ev` (server/events.js); подаренное остаётся навсегда
+  { id: 'snowball', e: '❄️', name: 'Снежок', price: 100, ev: 'winter' }, { id: 'mulled', e: '🍷', name: 'Глинтвейн', price: 300, ev: 'winter' }, { id: 'scarf', e: '🧣', name: 'Шарф', price: 500, ev: 'winter' },
+  { id: 'tree', e: '🎄', name: 'Ёлка', price: 1500, ev: 'winter' }, { id: 'deer', e: '🦌', name: 'Олень', price: 5000, ev: 'winter' }, { id: 'champagne', e: '🍾', name: 'Шампанское', price: 400, ev: 'ny' },
+  { id: 'santa', e: '🎅', name: 'Дед Мороз в шортах', price: 30000, lim: 50, ev: 'winter' }, { id: 'pearl', e: '🖤', name: 'Чёрная жемчужина', price: 15000, lim: 50, ev: 'bf' },
   // лимитированные: тираж на всё приложение, больше не выпускаются
   { id: 'sunset', e: '🌅', name: 'Редкий закат', price: 30000, lim: 100 }, { id: 'aurora', e: '🌌', name: 'Северное сияние', price: 75000, lim: 50 }, { id: 'unicorn', e: '🦄', name: 'Единорог пляжа', price: 200000, lim: 10 },
 ];
@@ -24,16 +28,17 @@ const FEE = 10, MIN_ASK = 30;      // рынок: комиссия с прода
 const issued = gid => ((db.meta.editions || {})[gid] || 0), left = g => (g.lim ? Math.max(0, g.lim - issued(g.id)) : undefined);
 const BY = new Map(GIFTS.map(g => [g.id, g])), SELL = 0.8, KEEP = 300;      // продать можно за 80% цены; в профиле хранится не больше 300 подарков
 const sellPrice = g => Math.floor(g.price * SELL);
+const live = g => !g.ev || require('./events').on(g.ev);      // подарок события: продаётся только пока оно идёт
 const ofUser = uid => Object.values(db.gifts).filter(x => x.to === uid).sort((a, b) => b.ts - a.ts);
 // Что видит зритель: скрытые подарки — только хозяин; имя анонимного дарителя — только хозяин и сам даритель.
 function view(x, vid) {
   const g = BY.get(x.g) || { e: '🎁', name: 'Подарок', price: 0 }, mine = x.to === vid, showFrom = !x.anon || mine || x.from === vid;
-  return { id: x.id, g: x.g, e: g.e, name: g.name, price: g.price, sell: mine && !g.lim ? sellPrice(g) : undefined, no: x.no, lim: g.lim, ask: x.ask, to: x.to, from: showFrom ? x.from : undefined, anon: x.anon || undefined, hidden: x.hidden || undefined, ts: x.ts, text: x.text };
+  return { id: x.id, g: x.g, e: g.e, name: g.name, price: g.price, sell: mine && !g.lim && !x.free ? sellPrice(g) : undefined, no: x.no, lim: g.lim, ask: x.ask, to: x.to, from: showFrom ? x.from : undefined, anon: x.anon || undefined, hidden: x.hidden || undefined, ts: x.ts, text: x.text };
 }
-H['gift.catalog'] = () => ({ gifts: GIFTS.map(g => (g.lim ? { ...g, left: left(g) } : g)), sell: SELL, fee: FEE, minAsk: MIN_ASK });
+H['gift.catalog'] = () => ({ gifts: GIFTS.filter(live).map(g => (g.lim ? { ...g, left: left(g) } : g)), sell: SELL, fee: FEE, minAsk: MIN_ASK });
 H['gift.send'] = (c, p) => {
   const u = db.users[c.uid], o = db.users[typeof p.to === 'string' ? p.to : '']; need(o && !o.deleted, 'Пользователь не найден');
-  const g = BY.get(str(p.gift, 24)); need(g, 'Такого подарка на витрине нет');
+  const g = BY.get(str(p.gift, 24)); need(g && live(g), 'Такого подарка на витрине нет');
   const self = o.id === u.id; need(!self || g.lim, 'Себе дарить — это просто перекладывание');      // себе можно взять только лимитированный, в коллекцию
   if (!self) R.giveCheck(u, o); else need(db.flags.stars, 'Листики временно отключены');
   need(!g.lim || left(g) > 0, 'Тираж разошёлся. Теперь этот подарок можно купить только на рынке, у владельцев.');
@@ -61,6 +66,7 @@ H['gift.hide'] = (c, p) => { const x = own(c, p); x.hidden = p.on === false ? un
 H['gift.sell'] = (c, p) => {
   const x = own(c, p), g = BY.get(x.g), n = g ? sellPrice(g) : 0, u = db.users[c.uid];
   need(!(g && g.lim), 'Лимитированный подарок в магазин не сдаётся. Его можно выставить на рынок.');
+  need(!x.free, 'Этот подарок достался бесплатно, на листики он не меняется.');
   delete db.gifts[x.id]; u.stars = (u.stars || 0) + n; save(); R.selfUpdate(u);
   return { n, stars: u.stars };
 };
@@ -78,7 +84,7 @@ H['gift.offer'] = (c, p) => {
 H['gift.market'] = c => {
   const list = Object.values(db.gifts).filter(x => x.ask && BY.get(x.g) && db.users[x.to] && !db.users[x.to].banned).sort((a, b) => a.ask - b.ask).slice(0, 100), users = {};
   for (const x of list) users[x.to] = pubUser(db.users[x.to], c.uid);
-  return { list: list.map(x => view(x, c.uid)), users, fee: FEE, editions: GIFTS.filter(g => g.lim).map(g => ({ id: g.id, e: g.e, name: g.name, price: g.price, lim: g.lim, left: left(g) })) };
+  return { list: list.map(x => view(x, c.uid)), users, fee: FEE, editions: GIFTS.filter(g => g.lim && (live(g) || issued(g.id) > 0)).map(g => ({ id: g.id, e: g.e, name: g.name, price: g.price, lim: g.lim, left: left(g) })) };
 };
 H['gift.buy'] = (c, p) => {
   const x = db.gifts[typeof p.id === 'string' ? p.id : ''], b = db.users[c.uid]; need(x && x.ask, 'Этот подарок уже продан или снят с продажи');
@@ -95,4 +101,4 @@ H['gift.buy'] = (c, p) => {
   return { gift: view(x, b.id), price, fee, stars: b.stars };
 };
 
-module.exports = { GIFTS, FEE };
+module.exports = { GIFTS, FEE, BY, KEEP, ofUser, live };

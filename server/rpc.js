@@ -502,6 +502,7 @@ function buildPayload(c, chat, p) {
     const s = p.sticker || {}; out.type = 'sticker';
     out.sticker = { pack: str(s.pack, 32), id: str(s.id, 32), e: str(s.e, 16), t: str(s.t, 64), bg: str(s.bg, 32), anim: str(s.anim, 16), snd: str(s.snd, 16), url: isUpload(s.url) ? s.url : undefined, thumb: isUpload(s.thumb) ? s.thumb : undefined, kind: s.kind === 'v' || s.kind === 'l' ? s.kind : undefined };
     need(out.sticker.e || out.sticker.url, 'Пустой стикер');
+    need(!/^tg_/.test(out.sticker.pack) || !c || !db.users[c.uid] || hook.packOk(db.users[c.uid], out.sticker.pack), 'Этого набора у вас нет. Нажмите на стикер и добавьте набор себе.');
   } else if (type === 'loc') {
     const l = p.loc || {}; need(Math.abs(l.lat) <= 90 && Math.abs(l.lon) <= 180, 'Некорректные координаты');
     out.type = 'loc'; out.loc = { lat: +(+l.lat).toFixed(6), lon: +(+l.lon).toFixed(6), title: str(l.title, 100) || undefined, addr: str(l.addr, 200) || undefined };
@@ -817,7 +818,7 @@ H['story.del'] = (c, p) => { const s = db.stories[p.id]; need(s && s.user === c.
 // ══════════ ЛИСТИКИ (внутренняя валюта) И ПРЕМИУМ ══════════
 const PREMIUM_PRICE = 1500, BOOST_PRICE = 200;
 // Точки, в которые встраивается магазин (server/shop.js): прибавки подписчикам, эффект сообщения, задания сезона.
-const hook = { dailyExtra: () => 0, tapPct: () => 0, fx: () => null, sent: null, reacted: null };
+const hook = { dailyExtra: () => 0, tapPct: () => 0, fx: () => null, sent: null, reacted: null, packOk: () => true };
 // Сколько листиков и как быстро можно добыть. Числа меняются переменными окружения (см. README), применяются после перезапуска.
 const envInt = (k, d, min, max) => { const n = Number(process.env[k]); return process.env[k] !== undefined && Number.isFinite(n) && n >= min && n <= max ? Math.floor(n) : d; };
 const LEAF = {

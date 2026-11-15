@@ -42,7 +42,18 @@ const CATALOG = {
   grad_coral: { kind: 'gradient', name: 'Коралл', emoji: '🪸', price: 0, tier: 'season', colors: ['#FF6B6B', '#FF9E7D', '#F7B267'] },
   fx_bubbles: { kind: 'effect', name: 'Пузыри', emoji: '🫧', price: 0, tier: 'season' },
   frame_trident: { kind: 'frame', name: 'Трезубец', emoji: '🔱', price: 0, tier: 'season' },
+  // вещи событий (server/events.js): продаются только пока идёт событие `ev`, ни в какой тариф не входят, купленное остаётся навсегда
+  frame_blackleaf: { kind: 'frame', name: 'Чёрный лист', emoji: '🖤', price: 1800, tier: 'event', ev: 'bf' },
+  fx_goldsand: { kind: 'effect', name: 'Золотой песок', emoji: '⏳', price: 1500, tier: 'event', ev: 'bf' },
+  theme_nightbeach: { kind: 'theme', name: 'Ночной пляж', emoji: '🌙', price: 1500, tier: 'event', ev: 'bf' },
+  frame_snow: { kind: 'frame', name: 'Снежинка', emoji: '❄️', price: 1200, tier: 'event', ev: 'winter' },
+  frame_gift: { kind: 'frame', name: 'Подарочная лента', emoji: '🎀', price: 1500, tier: 'event', ev: 'winter' },
+  theme_newyear: { kind: 'theme', name: 'Новый год', emoji: '🎄', price: 1500, tier: 'event', ev: 'winter' },
+  fx_firework: { kind: 'effect', name: 'Фейерверк', emoji: '🎆', price: 2000, tier: 'event', ev: 'ny' },
+  frame_crown27: { kind: 'frame', name: 'Корона 2027', emoji: '👑', price: 2500, tier: 'event', ev: 'ny' },
 };
+// Что знает о событиях магазин: идёт ли событие, скидка события на вещь, до какого времени вещь в продаже. Заполняет server/events.js.
+const ev = { on: () => false, off: () => 0, till: () => 0, sale: '' };
 const INCLUDED = { plus: ['common'], pro: ['common', 'rare'], max: ['common', 'rare', 'epic', 'legendary'] };
 const SLOT = { frame: 'frame', gradient: 'grad', effect: 'fx' };      // что «надевается» на сервере; тема и стикеры живут в настройках приложения
 
@@ -52,9 +63,9 @@ const PLANS = {
   plus: { id: 'plus', name: 'Plus', emoji: '🍃', rub: 99, stars: 1500, days: 30, tap: 25, daily: 0, season: 1, boosts: 0,
     perks: ['Значок Plus рядом с именем', 'Анимированный аватар: видео или GIF', 'До трёх реакций на одно сообщение', 'Набор стикеров «Мемные реакции» и тема «Загар»', 'Все обычные украшения магазина — бесплатно', '+25 % листиков в «Листопаде»', upFixed ? 'Втрое больший часовой лимит загрузки файлов' : 'Файлы до 400 МБ вместо 100 и втрое больший часовой лимит загрузки'] },
   pro: { id: 'pro', name: 'Pro', emoji: '🔥', rub: 249, stars: 4000, days: 30, tap: 50, daily: 20, season: 1.5, boosts: 2,
-    perks: ['Всё из Plus', 'Значок Pro', 'Обычные и редкие украшения — бесплатно', '+50 % листиков в «Листопаде»', '+20 🍃 к ежедневному бонусу', 'Награды сезона в полтора раза больше', '2 буста сервера в подарок при каждой оплате'] },
+    perks: ['Всё из Plus', 'Значок Pro', 'Обычные и редкие украшения — бесплатно', '+50 % листиков в «Листопаде»', '+20 🍃 к ежедневному бонусу', 'Награды сезона в полтора раза больше', '2 буста клуба в подарок при каждой оплате'] },
   max: { id: 'max', name: 'Max', emoji: '👑', rub: 599, stars: 10000, days: 30, tap: 100, daily: 50, season: 2, boosts: 5,
-    perks: ['Всё из Pro', 'Золотой значок Max', 'Все украшения и все наборы стикеров — бесплатно', '+100 % листиков в «Листопаде»', '+50 🍃 к ежедневному бонусу', 'Награды сезона вдвое больше', '5 бустов сервера в подарок при каждой оплате'] },
+    perks: ['Всё из Pro', 'Золотой значок Max', 'Все украшения и все наборы стикеров — бесплатно', '+100 % листиков в «Листопаде»', '+50 🍃 к ежедневному бонусу', 'Награды сезона вдвое больше', '5 бустов клуба в подарок при каждой оплате'] },
 };
 const TRIAL_DAYS = 3;
 // ───── наборы украшений со скидкой
@@ -86,14 +97,14 @@ const touch = u => { R.selfUpdate(u); C.broadcastUser(u); };
 let dealsCache = { day: '', list: [] };
 function dailyDeals() {
   const day = C.today(); if (dealsCache.day === day) return dealsCache.list;
-  const keys = Object.keys(CATALOG).filter(k => CATALOG[k].price > 0), seed = Number(day.replace(/-/g, '')) || 1, list = [], used = new Set();
+  const keys = Object.keys(CATALOG).filter(k => CATALOG[k].price > 0 && !CATALOG[k].ev), seed = Number(day.replace(/-/g, '')) || 1, list = [], used = new Set();
   const rand = n => { const x = Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453; return x - Math.floor(x); };
   for (let i = 0; list.length < 3 && i < 40; i++) { const key = keys[Math.floor(rand(i) * keys.length)]; if (used.has(key)) continue; used.add(key); list.push({ key, off: 20 + Math.floor(rand(i + 100) * 31) }); }      // 20–50 %
   dealsCache = { day, list }; return list;
 }
 function priceFor(u, id) {
-  const it = CATALOG[id], deal = dailyDeals().find(d => d.key === id), first = !u.shopN ? FIRST_OFF : 0, off = Math.max(deal ? deal.off : 0, first);
-  return { price: Math.floor(it.price * (100 - off) / 100), off, deal: !!deal && deal.off >= first };
+  const it = CATALOG[id], deal = dailyDeals().find(d => d.key === id), first = !u.shopN ? FIRST_OFF : 0, sale = ev.off(it), off = Math.max(deal ? deal.off : 0, first, sale);
+  return { price: Math.floor(it.price * (100 - off) / 100), off, deal: !!deal && deal.off >= first && deal.off >= sale, sale: sale > 0 && sale >= off ? ev.sale : undefined };
 }
 // Что стоит набор именно этому человеку: за то, что уже есть, второй раз не берём.
 function bundleFor(u, b) {
@@ -151,7 +162,7 @@ const TASKS = [
   { id: 'msg500', text: 'Написать 500 сообщений', n: 500, stars: 400, on: 'msg' },
   { id: 'react100', text: 'Поставить 100 реакций', n: 100, stars: 150, on: 'react' },
   { id: 'gift3', text: 'Подарить 3 подарка', n: 3, stars: 250, on: 'gift' },
-  { id: 'boost1', text: 'Бустануть сервер', n: 1, stars: 500, on: 'boost' },
+  { id: 'boost1', text: 'Бустануть клуб', n: 1, stars: 500, on: 'boost' },
   { id: 'invite5', text: 'Позвать 5 друзей', n: 5, stars: 350, on: 'invite' },
 ];
 const DAY_CAP = { msg: 100, react: 40 };      // в зачёт за день: чтобы задание не превращалось в спам
@@ -250,7 +261,7 @@ H['shop.catalog'] = c => {
   const u = db.users[c.uid], Pay = require('./pay'), rub = id => (Pay.ITEMS.find(i => i.id === id) || {}).rub;
   return {
     stars: u.stars || 0, tier: tierOf(u), first: !u.shopN ? FIRST_OFF : 0, cashback: { pct: CASHBACK, got: u.cashback || 0 }, pay: Pay.enabled(), freeBoosts: u.freeBoosts || 0,
-    items: Object.entries(CATALOG).map(([id, it]) => ({ id, ...it, base: it.price, ...priceFor(u, id), owned: owns(u, id), included: included(u, id) })),
+    items: Object.entries(CATALOG).filter(([id, it]) => !it.ev || ev.on(it.ev) || owns(u, id)).map(([id, it]) => ({ id, ...it, base: it.price, ...priceFor(u, id), owned: owns(u, id), included: included(u, id), till: it.ev && ev.on(it.ev) ? ev.till(it.ev) : undefined })),
     plans: Object.values(PLANS).map(p => ({ id: p.id, name: p.name, emoji: p.emoji, stars: planPrice(u, p.id), full: p.stars, off: renewOff(u, p.id), rub: rub('plan_' + p.id), days: p.days, perks: p.perks })),
     trial: { days: TRIAL_DAYS, used: !!u.trialUsed, until: (u.trialUntil || 0) > now() ? u.trialUntil : 0, can: !u.trialUsed && rank(tierOf(u)) < rank('pro') },
     bundles: Object.entries(BUNDLES).map(([id, b]) => { const f = bundleFor(u, b); return { id, name: b.name, emoji: b.emoji, items: b.items, price: f.price, full: f.full, fresh: f.fresh.length }; }),
@@ -260,6 +271,7 @@ H['shop.catalog'] = c => {
 H['shop.buy'] = (c, p) => {
   const u = db.users[c.uid], id = str(p.id, 64), it = CATALOG[id]; need(it, 'Такой вещи в магазине нет');
   need(!owns(u, id), 'Это у вас уже куплено'); need(it.tier !== 'season', 'Эта вещь не продаётся: её дают в пропуске сезона'); need(!included(u, id), 'Эта вещь входит в вашу подписку — платить не нужно');
+  need(!it.ev || ev.on(it.ev), 'Эта вещь продаётся только во время события. Сейчас её не купить.');
   const { price } = priceFor(u, id);
   R.spend(u, price, 'Листики можно накопить или докупить в магазине.');
   own(u, id); equipIfEmpty(u, id); u.shopN = (u.shopN || 0) + 1; cashback(u, price); save(); touch(u);
@@ -301,4 +313,4 @@ H['shop.equip'] = (c, p) => {
   return { ok: true, worn: u.cos };
 };
 
-module.exports = { CATALOG, PLANS, BUNDLES, PACKS, TASKS, TRIAL_DAYS, dailyDeals, grantPlan, cashback, has, owns, included, bump, seasonView };
+module.exports = { ev, own, touch, CATALOG, PLANS, BUNDLES, PACKS, TASKS, TRIAL_DAYS, dailyDeals, grantPlan, cashback, has, owns, included, bump, seasonView };

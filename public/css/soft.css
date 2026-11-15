@@ -1,0 +1,36 @@
+/* Стиль «Мягкий» — оформление по умолчанию. Спокойные цвета без чистого чёрного на чистом белом, скруглённые сообщения,
+   кнопки и поля, как в привычных мессенджерах. Включается атрибутом data-style="soft" на <html>.
+   Палитра задаётся только для обычной светлой и тёмной темы: «Загар» и темы из магазина остаются со своими цветами. */
+[data-style='soft'] { --r-s: 10px; --r: 14px; --r-l: 20px; }
+[data-style='soft'][data-theme='light'] {
+  --accent: #3A8EE6; --accent-ink: #fff;
+  --bg: #E7EDF2; --panel: #FFFFFF; --card: #FFFFFF; --rail: #FFFFFF; --rail-ink: #5F6B76;
+  --ink: #20262C; --ink2: #5F6B76; --ink3: #8B96A0; --line: #E6EAEE; --hover: #F1F4F6; --press: #E5EAEE;
+  --in: #FFFFFF; --out: #E4F6DC; --out-ink: #1F2A22; --code: #F2F5F7;
+  --shadow: 0 1px 2px rgba(30, 45, 60, .06), 0 8px 28px rgba(30, 45, 60, .10);
+  --overlay: rgba(24, 32, 40, .42);
+}
+[data-style='soft'][data-theme='dark'] {
+  --accent: #5AA2E6; --accent-ink: #06121E;
+  --bg: #0F1720; --panel: #17212B; --card: #1D2A37; --rail: #17212B; --rail-ink: #9FB0C0;
+  --ink: #E6ECF2; --ink2: #9FAEBB; --ink3: #6F8090; --line: #223040; --hover: #1F2C39; --press: #2A3948;
+  --in: #1B2835; --out: #2A4F74; --out-ink: #EEF4FA; --code: #111B26;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 10px 30px rgba(0, 0, 0, .40);
+  --overlay: rgba(4, 9, 14, .62);
+}
+[data-style='soft'] .bubble { border-radius: 18px 18px 18px 6px; box-shadow: 0 1px 1px rgba(30, 45, 60, .08); padding: 7px 12px 6px; }
+[data-style='soft'] .msg.out .bubble { border-radius: 18px 18px 6px 18px; } [data-style='soft'] .msg.grp .bubble { border-radius: 18px; }
+[data-style='soft'] .flat .bubble, [data-style='soft'] .flat .msg.out .bubble { border-radius: 0; box-shadow: none; padding: 0; }
+[data-style='soft'] .btn { border-radius: 12px; } [data-style='soft'] .btn.sm { border-radius: 10px; }
+[data-style='soft'] input[type='text'], [data-style='soft'] input[type='password'], [data-style='soft'] input[type='email'], [data-style='soft'] input[type='tel'], [data-style='soft'] input:not([type]), [data-style='soft'] select, [data-style='soft'] textarea { border-radius: 12px; }
+[data-style='soft'] .ci { border-radius: 14px; } [data-style='soft'] .ci.on { background: color-mix(in srgb, var(--accent) 13%, transparent); }
+[data-style='soft'] .side { background: var(--panel); } [data-style='soft'] .side-b { padding-left: 6px; padding-right: 6px; }
+[data-style='soft'] .chat-h, [data-style='soft'] .composer { background: var(--panel); }
+[data-style='soft'] .menu, [data-style='soft'] .toast { border-radius: 14px; }
+[data-style='soft'] .picker, [data-style='soft'] .pk-tabs button, [data-style='soft'] .st-add, [data-style='soft'] .note, [data-style='soft'] .card { border-radius: 14px; }
+[data-style='soft'] img.media, [data-style='soft'] .photo img, [data-style='soft'] .bubble video { border-radius: 14px; }
+[data-style='soft'] ::-webkit-scrollbar { width: 6px; height: 6px; } [data-style='soft'] ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 16%, transparent); border-radius: 99px; } [data-style='soft'] ::-webkit-scrollbar-track { background: transparent; }
+/* карточки ленты, хаба и магазина — тоже со скруглением */
+[data-style='soft'] .post, [data-style='soft'] .feed-new, [data-style='soft'] .composer-post, [data-style='soft'] .app-tile, [data-style='soft'] .live-card, [data-style='soft'] .tv-ch, [data-style='soft'] .faq, [data-style='soft'] .help-hero, [data-style='soft'] .sup, [data-style='soft'] .trk-list, [data-style='soft'] .payb, [data-style='soft'] .payb-i, [data-style='soft'] .buy-i, [data-style='soft'] .start-c, [data-style='soft'] .shop-card, [data-style='soft'] .shop-pack, [data-style='soft'] .shop-task, [data-style='soft'] .pass-h, [data-style='soft'] .upd-bar { border-radius: var(--r); }
+[data-style='soft'] .post { overflow: hidden; } [data-style='soft'] .app-ic, [data-style='soft'] .seg, [data-style='soft'] .seg button { border-radius: 12px; } [data-style='soft'] .hub-b textarea { border-radius: 14px; }
+[data-style='soft'] .hub-dot { border-radius: 99px; }
