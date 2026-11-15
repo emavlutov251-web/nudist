@@ -7,7 +7,7 @@ import { RTC, joinVoice, leaveVoice, toggleMute, toggleDeaf } from './rtc.js';
 import { StoryEditor } from './media.js';
 import { openSettings } from './settings.js';
 import { openHub, openApps, openSupport } from './hub.js';
-import { Streak, openInvite, openAsk, openPush, installApp, isStandalone, StartCards } from './growth.js';
+import { Streak, openInvite, openAsk, openPush, installApp, isStandalone, StartCards, PushStrip } from './growth.js';
 import { Nm } from './lib.js';
 import { openShop } from './shop.js';
 import { EventStrip } from './events.js';
@@ -195,6 +195,7 @@ function HomeSidebar() {
       ${!S.ui.archive && html`<${StoriesRow} />`}
       ${S.ui.archive ? html`<div class="arch-h"><button class="ib" onClick=${() => { S.ui.archive = false; bump(); }}><${Icon} n="arrow-left" /></button><b>Архив</b></div>` : html`<div class="folders" role="tablist">${folders.map(f => { const n = f.id === 'all' ? 0 : count(f.id); return html`<button role="tab" class=${cx(fid === f.id && 'on')} aria-selected=${fid === f.id} onClick=${() => { S.ui.folder = f.id; bump(); }} onContextMenu=${e => f.types && showMenu(e, [{ icon: 'pencil', label: 'Изменить папку', run: () => openModal(FolderEditor, { folder: f }) }, { icon: 'trash-2', label: 'Удалить папку', danger: true, run: () => setSetting({ folders: S.settings.folders.filter(x => x.id !== f.id) }) }])}>${f.icon ? f.icon + ' ' : ''}${f.name}${n > 0 && html`<b>${n}</b>`}</button>`; })}<button class="add" title="Создать папку" onClick=${() => openModal(FolderEditor, {})}><${Icon} n="plus" s=${15} /></button></div>`}
       <div class="side-b" role="list">
+        ${!S.ui.archive && fid === 'all' && !S.ui.server && html`<${PushStrip} />`}
         ${!S.ui.archive && fid === 'all' && !S.ui.server && html`<${EventStrip} />`}
         ${!S.ui.archive && archived.length > 0 && fid === 'all' && html`<button class="ci arch" onClick=${() => { S.ui.archive = true; bump(); }}><span class="ava" style="width:48px;height:48px;background:var(--hover);color:var(--ink2)"><${Icon} n="archive" s=${22} /></span><span class="ci-m"><span class="ci-t"><b>Архив</b></span><span class="ci-p"><span>${archived.map(c => chatInfo(c).title).join(', ')}</span>${archived.reduce((a, c) => a + (c.unread || 0), 0) > 0 && html`<b class="cnt mute">${archived.reduce((a, c) => a + (c.unread || 0), 0)}</b>`}</span></span></button>`}
         ${rows.map(r => r.club ? html`<${ClubItem} key=${r.club.id} s=${r.club} st=${r} />` : html`<${ChatItem} key=${r.id} chat=${r} />`)}

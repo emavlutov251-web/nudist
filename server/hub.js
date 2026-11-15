@@ -199,13 +199,16 @@ const APPS = [
   { id: 'royale', title: 'Банный рояль', about: 'Карточная битва на две дорожки: банщики, моржи и кипяток против чужих башен', cat: 'games', emoji: '♨️', url: '/miniapps/royale.html' },
   { id: 'beer', title: 'Пивная битва', about: 'Кто больше выпьет и не уснёт лицом в стол. Пиво нарисованное', cat: 'games', emoji: '🍺', url: '/miniapps/beer.html' },
   { id: 'shooter', title: 'Комариный спецназ', about: 'Шутер: отстреливайтесь листьями от комаров на нудистском пляже', cat: 'games', emoji: '🦟', url: '/miniapps/shooter.html' },
+  { id: 'catch', title: 'Пляжный ловец', about: 'Листик ловит ракушки и мороженое и уворачивается от крабов. Рекорды недели', cat: 'games', emoji: '🍃', art: 'catch', url: '/miniapps/catch.html' },
+  { id: 'run', title: 'Пляжная пробежка', about: 'Бег с двойным прыжком: перепрыгивайте крабов, собирайте листики', cat: 'games', emoji: '🏃', art: 'run', url: '/miniapps/run.html' },
+  { id: 'pairs', title: 'Пляжные пары', about: 'Найдите все пары рисованных карточек за меньшее число ходов', cat: 'games', emoji: '🃏', art: 'pairs', url: '/miniapps/pairs.html' },
   { id: 'rp', title: 'Нудищево РП', about: 'Жизнь в провинции: почта, завод, шаурма и мечта о «бэхе»', cat: 'games', emoji: '🏘️', url: '/miniapps/rp.html' },
   { id: 'lot', title: 'Жребий', about: 'Монетка, кубик и «кто идёт за пиццей»', cat: 'tools', emoji: '🎲', url: '/miniapps/lot.html' },
   { id: 'split', title: 'Скинемся', about: 'Делит счёт на компанию с чаевыми', cat: 'tools', emoji: '🧾', url: '/miniapps/split.html' },
 ];
 // Листики за игры. Игры идут в браузере, и проверить честность партии сервер не может,
 // поэтому главный предохранитель — потолок на день по каждой игре (как у «Листопада»).
-const EARN = { g2048: { cap: 15, what: { 128: 1, 256: 2, 512: 3, 1024: 5, 2048: 10 } }, saper: { cap: 12, what: { win: 4 } }, royale: { cap: 10, what: { win: 5 } }, beer: { cap: 8, what: { win: 2 } }, shooter: { cap: 8, what: { w5: 2, w10: 4 } }, rp: { cap: 8, what: { job: 1 } } };
+const EARN = { g2048: { cap: 15, what: { 128: 1, 256: 2, 512: 3, 1024: 5, 2048: 10 } }, saper: { cap: 12, what: { win: 4 } }, royale: { cap: 10, what: { win: 5 } }, beer: { cap: 8, what: { win: 2 } }, shooter: { cap: 8, what: { w5: 2, w10: 4 } }, rp: { cap: 8, what: { job: 1 } }, catch: { cap: 6, what: { p15: 1, p40: 2, p80: 3 } }, run: { cap: 6, what: { p15: 1, p40: 2, p80: 3 } }, pairs: { cap: 6, what: { win: 2, ace: 2 } } };
 const EARN_DAY = 30;      // и общий потолок на день по всем играм вместе
 const earnRate = new Map();      // пользователь → { t, n }: не больше 20 наград в минуту
 H['apps.earn'] = (c, p) => {
@@ -218,7 +221,8 @@ H['apps.earn'] = (c, p) => {
   return { n, stars: u.stars || 0, left: app.cap - got - n, cap: app.cap };
 };
 H['apps.list'] = c => {
-  const apps = APPS.map(a => { const b = a.bot && db.users[C.byName.get(a.bot)]; return { ...a, bot: b ? b.id : undefined }; }).filter(a => a.url || a.bot);
+  const evs = require('./events'), tiles = evs.gameTiles ? evs.gameTiles() : {};      // игра идущего события встаёт на место обычной и поднимается наверх
+  const apps = APPS.map(a => (tiles[a.id] ? { ...a, ...tiles[a.id] } : a)).sort((a, b) => (b.ev ? 1 : 0) - (a.ev ? 1 : 0)).map(a => { const b = a.bot && db.users[C.byName.get(a.bot)]; return { ...a, bot: b ? b.id : undefined }; }).filter(a => a.url || a.bot);
   const builtin = new Set(apps.map(a => a.bot).filter(Boolean));
   const bots = []; for (const k in db.users) { const b = db.users[k]; if (b.bot && b.app && !b.deleted && !b.banned && !builtin.has(b.id) && (b.listed || b.builtin || b.owner === c.uid)) bots.push({ id: 'bot:' + b.id, title: b.name, about: b.bio || 'Мини-приложение бота @' + b.username, cat: 'bots', bot: b.id, avatar: b.avatar, color: b.color || 0 }); if (bots.length >= 100) break; }
   return { apps: apps.concat(bots) };

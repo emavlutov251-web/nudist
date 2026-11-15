@@ -109,7 +109,7 @@ const builtinHandlers = {
     const t = (m.text || '').trim();
     if (/^\/start/.test(t)) botSay(bot, chat, WELCOME);
     else if (/^\/help/.test(t)) botSay(bot, chat, HELP);
-    else if (/^\/(santa|advent|events|snow)\b/.test(t)) require('./events').botCmd(bot, chat, m, t);
+    else if (/^\/(santa|advent|events|snow|prediction|album|top)\b/.test(t)) require('./events').botCmd(bot, chat, m, t);
     else botSay(bot, chat, pick(['Я служебный бот. Умею присылать уведомления о входе и делать серьёзное лицо. /help', 'Принято. Передал в отдел, которого не существует. /help', 'Скрывать нечего: я вас не понял. Попробуйте /help']));
   },
   botbatya(bot, chat, m) {

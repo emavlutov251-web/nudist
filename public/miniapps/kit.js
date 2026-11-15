@@ -8,12 +8,17 @@ addEventListener('message', e => {
   if (d.nudist === 'init') { Object.assign(host, d); document.documentElement.dataset.theme = d.theme === 'dark' ? 'dark' : 'light'; subs.forEach(f => f(host)); }
   if (d.nudist === 'sent') toast('Отправлено в чат');
   if (d.nudist === 'error') toast(d.text);
+  if (d.nudist === 'top') tops.forEach(f => f(d));
   if (d.nudist === 'earned') { if (d.n) toast(`+${d.n} 🍃` + (d.left ? '' : ' · на сегодня это всё')); else if (!earn.told) { earn.told = true; toast('Листики за эту игру на сегодня собраны. Завтра вырастут новые.'); } }
 });
 export function ready(fn) { if (fn) subs.push(fn); say({ nudist: 'ready' }); }
 export function share(text) { if (parent === window) return toast('Откройте приложение внутри «Нудиста»'); say({ nudist: 'send', text: String(text).slice(0, 2000) }); }
 // Попросить у «Нудиста» листики за игровое достижение (что и сколько стоит — решает сервер, у каждой игры потолок на день).
 export function earn(what) { if (parent !== window) say({ nudist: 'earn', what: String(what) }); }
+// Отправить результат партии в таблицу рекордов; ответ (место и первая десятка) придёт в onTop
+const tops = [];
+export function score(n) { if (parent !== window) say({ nudist: 'score', score: Math.floor(n), t: new URLSearchParams(location.search).get('t') || '' }); }
+export function onTop(fn) { tops.push(fn); }
 export function toast(text) {
   let t = document.getElementById('toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
   t.textContent = text; t.className = 'on'; clearTimeout(toast.t); toast.t = setTimeout(() => { t.className = ''; }, 1800);

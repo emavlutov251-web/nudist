@@ -61,7 +61,7 @@ function notify(uid, payload, online) { const u = db.users[uid]; if (!u || u.del
 // появилось событие, или пустым ответом через 40 секунд. Лента живёт в памяти и только у тех, чей телефон недавно спрашивал.
 const feeds = new Map();      // пользователь → { q: [{ id, title, body, tag, ts }], waiters: Set, at, tz }
 let feedSeq = 0; const nextId = () => (feedSeq = Math.max(feedSeq + 1, Date.now()));      // растёт и после перезапуска сервера
-const FEED_KEEP = 50, FEED_IDLE = 5 * 60000, FEED_WAIT = 40000;
+const FEED_KEEP = 50, FEED_IDLE = 12 * 3600e3, FEED_WAIT = 40000;      // лента ждёт телефон полсуток: в режиме экономии батареи Android пускает службу в сеть редко
 function feedAdd(uid, p) {
   const f = feeds.get(uid); if (!f) return;
   const it = { id: nextId(), title: String(p.title || 'Нудист').slice(0, 80), body: String(p.body || '').slice(0, 200), tag: String(p.tag || ''), ts: now() };
@@ -91,10 +91,11 @@ function updateItem(u) {      // напоминание об обновлени�
 }
 function poll(req, res, url, a, json) {
   if (!a) return json(res, 401, { error: 'Нужна авторизация' });
-  const uid = a.u.id; let f = feeds.get(uid); if (!f) { if (feeds.size > 20000) return json(res, 503, { error: 'Слишком много устройств' }); feeds.set(uid, f = { q: [], waiters: new Set(), at: 0 }); }
+  const uid = a.u.id; let f = feeds.get(uid), fresh = false; if (!f) { if (feeds.size > 20000) return json(res, 503, { error: 'Слишком много устройств' }); feeds.set(uid, f = { q: [], waiters: new Set(), at: 0 }); fresh = true; }
   f.at = now(); const tz = Number(url.searchParams.get('tz')); if (Number.isFinite(tz) && Math.abs(tz) <= 900) f.tz = Math.round(tz);
   const raw = url.searchParams.get('since'), since = Number(raw);
   if (raw === null || !Number.isFinite(since) || since <= 0) return json(res, 200, { last: nextId(), items: [] });      // первое обращение: старое не пересказываем
+  if (fresh) { try { for (const it of missed(a.u, since, f.tz)) f.q.push(it); } catch (e) { console.warn('[notify]', e.message); } }
   const upd = updateItem(a.u); if (upd) f.q.push(upd);
   const ready = f.q.filter(x => x.id > since); if (ready.length) return json(res, 200, { last: ready[ready.length - 1].id, items: ready });
   if (f.waiters.size >= 5) return json(res, 429, { error: 'Слишком много ожидающих запросов' });
@@ -133,6 +134,21 @@ C.setMsgHook((uid, chat, m, mention, s) => {
   if (set.preview === false) p.body = 'Новое сообщение';
   feedAdd(uid, p);
 });
+// Телефон вернулся, а ленты нет: сервер перезапускался или телефон долго не выходил на связь. Тогда рассказываем о непрочитанном,
+// что пришло после последнего показанного уведомления (номер события в ленте — это время в миллисекундах): по одному на чат, не больше шести.
+function missed(u, since, tz) {
+  if (!(since > 1.5e12)) return []; const set = u.settings || {}, out = []; if (quiet(set.dnd, tz)) return out;
+  for (const chat of C.userChats(u)) {
+    const arr = db.msgs[chat.id] || [], s = C.st(chat, u.id); let last = null, n = 0;
+    for (let i = arr.length - 1; i >= 0 && n < 99; i--) { const m = arr[i]; if (m.ts <= since || m.seq <= (s.read || 0)) break; if (m.from === u.id || m.type === 'service' || m.silent || m.thread) continue; if (!last) last = m; n++; }
+    if (!last) continue;
+    if (chat.type === 'group' ? set.notifGroup === false : (chat.type === 'dm' || chat.type === 'secret') && set.notifDm === false) continue;
+    const p = describe(u.id, chat, last, false, s); if (!p) continue;
+    if (set.preview === false) p.body = 'Новое сообщение'; else if (n > 1) p.body = (p.body + ` (и ещё ${n - 1})`).slice(0, 200);
+    out.push({ ts: last.ts, title: String(p.title || 'Нудист').slice(0, 80), body: p.body, tag: String(p.tag || '') });
+  }
+  return out.sort((a, b) => a.ts - b.ts).slice(-6).map(it => ({ id: nextId(), ...it }));
+}
 // Тихие часы человека. Сервер не знает его часового пояса, поэтому телефон присылает смещение от UTC в минутах.
 function quiet(d, tz) {
   if (!d || !d.on || !/^\d\d:\d\d$/.test(d.from || '') || !/^\d\d:\d\d$/.test(d.to || '')) return false;

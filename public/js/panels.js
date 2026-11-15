@@ -1,9 +1,10 @@
 // Панель информации, профили, создание чатов, контакты, листики, папки и прочие диалоги.
-import { html, useState, useEffect, useRef, useMemo, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, Badges, UserLabel, userLabel, LABEL_COLORS, cx, showMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtFull, fmtShort, fmtDur, fmtNum, fmtSize, userName, lastSeen, copyText, download, confirmDlg, promptDlg, addUsers, Empty, Spinner, plural, TTL_OPTS, ttlLabel, isMuted, setSetting, debounce, Toggle, Tabs, uploadAvatar, esc } from './lib.js';
+import { html, useState, useEffect, useRef, useMemo, Nm, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, Badges, UserLabel, userLabel, LABEL_COLORS, cx, showMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtFull, fmtShort, fmtDur, fmtNum, fmtSize, userName, lastSeen, copyText, download, confirmDlg, promptDlg, addUsers, Empty, Spinner, plural, TTL_OPTS, ttlLabel, isMuted, setSetting, debounce, Toggle, Tabs, uploadAvatar, esc } from './lib.js';
 import { openChat, openUser, safetyCode, e2eeAvailable, ensureKey } from './store.js';
 import { NOTIF_SOUNDS, sfx, confetti } from './fun.js';
 import { PayBlock } from './pay.js';
 import { openShop } from './shop.js';
+import { valentineOn, sendValentine } from './events.js';
 import { GiftShelf, GiftGrid, openGiftShop } from './gifts.js';
 import qrcode from '/vendor/qrcode.js';
 import { ServerPanel } from './guildui.js';
@@ -54,6 +55,7 @@ function Profile({ id, userId, username, tab: tab0 }) {
       ${!me && !u.deleted && html`<div class="pf-acts"><button onClick=${() => go(() => openUser(u.id))}><${Icon} n="message-circle" /><span>Написать</span></button>${!u.bot && html`<button onClick=${async () => { await openUser(u.id); const c = Object.values(S.chats).find(x => x.type === 'dm' && x.peer === u.id); if (c) go(() => startCall(c.id, false)); }}><${Icon} n="phone" /><span>Позвонить</span></button><button onClick=${secret}><${Icon} n="lock" /><span>Секретный чат</span></button>`}<button onClick=${e => showMenu(e, [
         { icon: contact ? 'user-minus' : 'user-plus', label: contact ? 'Убрать из контактов' : 'В контакты', run: () => call('me.contact', { id: u.id, on: !contact }) },
         S.flags.stars && !u.bot && { emoji: '🎁', label: 'Подарить подарок', run: () => openGiftShop(u.id) },
+        !u.bot && valentineOn() && { emoji: '💌', label: 'Отправить валентинку', run: () => sendValentine(u) },
         S.flags.stars && !u.bot && { emoji: '🍃', label: 'Поделиться листиками', run: () => shareLeaves(u.id) },
         u.username && { icon: 'qr-code', label: 'QR-код профиля', run: () => openModal(QrModal, { title: 'QR профиля', text: link('u=' + u.username), hint: 'Наведите камеру — откроется профиль @' + u.username }) },
         S.me.admin === 'superadmin' && !u.bot && { icon: 'shield', label: 'Роль администратора…', run: () => openModal(AdminRoleDlg, { user: u }) },

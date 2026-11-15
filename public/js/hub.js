@@ -301,11 +301,13 @@ function Live() {
 // ───────────────────────────── мини-приложения
 let APPS = null;
 const CATS = [['games', 'Игры', 'gamepad-2'], ['tools', 'Утилиты', 'wrench'], ['bots', 'От ботов', 'bot']];
-const TILE = { listopad: '#107C10', g2048: '#0078D7', saper: '#5C2D91', lot: '#E3008C', split: '#008272', royale: '#B146C2', beer: '#CA5010', shooter: '#498205', rp: '#0063B1' };
+const TILE = { listopad: '#107C10', g2048: '#0078D7', saper: '#5C2D91', lot: '#E3008C', split: '#008272', royale: '#B146C2', beer: '#CA5010', shooter: '#498205', rp: '#0063B1', catch: '#19A974', run: '#F2622E', pairs: '#7C4DFF' };
 export function launchApp(app, chatId) {
   const rec = [app.id].concat((local.get('apps.recent') || []).filter(i => i !== app.id)).slice(0, 6); local.set('apps.recent', rec);
   if (app.url) openModal(AppFrame, { app, chat: chatId || null }); else if (app.bot) openMiniApp(app.bot);
 }
+// Листик — герой рисованных игр
+const Leafy = () => html`<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><path d="M24 4c15 5 19 24 0 39C5 28 9 9 24 4z" fill="#8FE08A" stroke="#1F7A45" stroke-width="2"/><path d="M24 4c2-4 5-4 7-3" fill="none" stroke="#1F7A45" stroke-width="2.4" stroke-linecap="round"/><ellipse cx="18.5" cy="24" rx="3.4" ry="4" fill="#fff"/><ellipse cx="29.5" cy="24" rx="3.4" ry="4" fill="#fff"/><circle cx="19.3" cy="24.6" r="1.9" fill="#1B3B26"/><circle cx="30.3" cy="24.6" r="1.9" fill="#1B3B26"/><path d="M19.5 31.5q4.5 4 9 0" fill="none" stroke="#1B3B26" stroke-width="2" stroke-linecap="round"/></svg>`;
 function AppFrame({ id, app, chat }) {
   const fr = useRef();
   useEffect(() => {
@@ -320,6 +322,7 @@ function AppFrame({ id, app, chat }) {
         try { await sendPayload(cid, { text }); reply({ nudist: 'sent' }); } catch (x) { reply({ nudist: 'error', text: x.message }); }
       }
       if (d.nudist === 'earn') { try { reply({ nudist: 'earned', ...(await rpc('apps.earn', { app: app.id, what: String(d.what) })) }); } catch (x) { reply({ nudist: 'error', text: x.message }); } }
+      if (d.nudist === 'score') { try { reply({ nudist: 'top', ...(await rpc('apps.score', { app: app.id, t: String(d.t || ''), score: d.score })) }); } catch (x) { /* таблица не обязательна для игры */ } }
       if (d.nudist === 'close') closeModal(id);
     };
     addEventListener('message', onMsg); return () => removeEventListener('message', onMsg);
@@ -333,7 +336,7 @@ export function AppsCatalog({ chat, onPick }) {
   if (!list) return html`<${Spinner} />`;
   const s = q.trim().toLowerCase(), found = s ? list.filter(a => (a.title + ' ' + a.about).toLowerCase().includes(s)) : list, recent = s ? [] : (local.get('apps.recent') || []).map(i => list.find(a => a.id === i)).filter(Boolean);
   const run = a => { if (onPick) onPick(); launchApp(a, chat); };
-  const tile = a => html`<button class="app-tile" key=${a.id} onClick=${() => run(a)}><span class="app-ic" style=${a.emoji ? `background:${TILE[a.id] || '#0078D7'}` : ''}>${a.emoji || html`<${Avatar} src=${a.avatar} name=${a.title} color=${a.color} s=${52} square />`}</span><span class="app-m"><b>${a.title}</b><small>${a.about}</small></span></button>`;
+  const tile = a => html`<button class=${cx('app-tile', a.ev && 'ev')} key=${a.id} onClick=${() => run(a)}><span class="app-ic" style=${a.emoji ? `background:${TILE[a.id] || '#0078D7'}` : ''}>${a.art ? html`<${Leafy} />` : a.emoji || html`<${Avatar} src=${a.avatar} name=${a.title} color=${a.color} s=${52} square />`}</span><span class="app-m"><b>${a.title}</b><small>${a.about}</small></span></button>`;
   return html`<div class="apps">
     <div class="hub-bar"><h2 class="hub-t">Приложения</h2><label class="search"><${Icon} n="search" s=${16} /><input value=${q} placeholder="Игра или утилита" onInput=${e => setQ(e.target.value)} /></label></div>
     ${recent.length > 0 && html`<h5>Недавние</h5><div class="app-grid">${recent.map(tile)}</div>`}

@@ -584,7 +584,7 @@ H['msg.send'] = (c, p) => {
     return { scheduled: item };
   }
   const m = postMessage(chat, c.uid, payload);
-  if (hook.sent) { try { hook.sent(c.uid, chat); } catch (e) { console.warn('[shop]', e.message); } }
+  if (hook.sent) { try { hook.sent(c.uid, chat, m); } catch (e) { console.warn('[shop]', e.message); } }
   return { msg: msgView(m, c.uid), tmp: p.tmp };
 };
 // Одноразовое фото или видео: получатель открывает один раз, после этого файл стирается с сервера.

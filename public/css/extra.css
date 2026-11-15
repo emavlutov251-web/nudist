@@ -274,3 +274,31 @@ video.sticker-img { background: none; pointer-events: auto; }
 @keyframes snow-fall { 0% { transform: translate3d(0, -5vh, 0) rotate(0); } 50% { transform: translate3d(18px, 50vh, 0) rotate(120deg); } 100% { transform: translate3d(-10px, 106vh, 0) rotate(240deg); } }
 @media (prefers-reduced-motion: reduce) { .snowfx { display: none; } }
 @media (max-width: 480px) { .adv-g { gap: 6px; } .ev-h { padding: 12px; } .ev-b { padding: 0 12px 14px; } }
+
+/* ───── календарь года: задания события, альбом марок, валентинки */
+.yq { display: flex; flex-direction: column; gap: 12px; }
+.yq-game { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, var(--card)), var(--card)); border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line)); }
+.yq-game-t { flex: 1; min-width: 0; display: flex; flex-direction: column; } .yq-game-t small { color: var(--ink2); font-size: .82em; }
+.yq-tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.yq-tasks li { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
+.yq-tasks li.locked { opacity: .5; } .yq-tasks li.done { border-color: color-mix(in srgb, var(--leaf) 45%, var(--line)); }
+.yq-n { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--hover); font-size: .84em; font-weight: 600; } .yq-tasks li.done .yq-n { background: var(--leaf); color: #fff; }
+.yq-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; } .yq-t b { font-weight: 500; font-size: .92em; line-height: 1.3; }
+.yq-t i { display: block; height: 5px; border-radius: 3px; background: var(--hover); overflow: hidden; } .yq-t u { display: block; height: 100%; border-radius: 3px; background: var(--leaf); transition: width .3s; }
+.yq-p { flex: none; display: flex; flex-direction: column; align-items: flex-end; font-size: .84em; color: var(--ink2); white-space: nowrap; } .yq-p small { color: var(--ink3); font-size: .9em; }
+.album { margin-bottom: 10px; padding: 14px 16px; border-radius: 20px; background: var(--card); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.album-h { display: flex; align-items: baseline; justify-content: space-between; } .album-h span { color: var(--ink2); font-size: .86em; }
+.album-g { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; }
+.stamp { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border-radius: 10px; border: 2px dashed var(--line); filter: grayscale(1); opacity: .45; }
+.stamp i { font-style: normal; font-size: 20px; line-height: 1; } .stamp small { font-size: 10px; color: var(--ink2); }
+.stamp.got { filter: none; opacity: 1; border: 2px dotted color-mix(in srgb, var(--accent) 60%, var(--line)); background: color-mix(in srgb, var(--accent) 9%, var(--card)); transform: rotate(-3deg); } .stamp.got:nth-child(even) { transform: rotate(2.5deg); }
+.album-goals { display: flex; flex-wrap: wrap; gap: 6px; } .album-goals span { padding: 4px 9px; border-radius: 999px; background: var(--hover); font-size: .78em; color: var(--ink2); } .album-goals span.got { background: color-mix(in srgb, var(--leaf) 22%, var(--card)); color: var(--ink); }
+.album-hint { color: var(--ink3); font-size: .78em; line-height: 1.35; }
+.val { display: flex; flex-direction: column; gap: 10px; } .val-cards, .val-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.val-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 92px; padding: 12px 10px; border-radius: 16px; border: 2px solid transparent; color: #fff; text-align: center; font-weight: 600; font-size: .9em; line-height: 1.25; cursor: pointer; }
+div.val-card { cursor: default; } .val-card.on { border-color: var(--ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); } .val-card small { font-weight: 400; font-size: .86em; color: rgba(255, 255, 255, .94); } .val-card small b { color: #fff; } .val-card small .btn { background: rgba(255, 255, 255, .92); color: #7A1F2B; }
+.vc0 { background: linear-gradient(135deg, #FF7A93, #E0244F); } .vc1 { background: linear-gradient(135deg, #FFB13B, #F2622E); } .vc2 { background: linear-gradient(135deg, #7C4DFF, #B146C2); } .vc3 { background: linear-gradient(135deg, #3A8EE6, #19A9C9); } .vc4 { background: linear-gradient(135deg, #E94F9B, #7C4DFF); } .vc5 { background: linear-gradient(135deg, #19A974, #3AA8E0); }
+.val-sent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; } .val-sent li { display: flex; align-items: center; gap: 9px; } .val-sent li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .val-sent small { color: var(--ink2); }
+.app-tile.ev .app-ic { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--accent); }
+.push-strip { display: flex; align-items: center; gap: 10px; margin: 6px 8px 4px; padding: 9px 8px 9px 12px; border-radius: 14px; background: color-mix(in srgb, var(--warn) 14%, var(--card)); border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line)); cursor: pointer; }
+.push-strip span { flex: 1; min-width: 0; display: flex; flex-direction: column; } .push-strip b { font-size: .92em; } .push-strip small { color: var(--ink2); font-size: .78em; line-height: 1.3; }

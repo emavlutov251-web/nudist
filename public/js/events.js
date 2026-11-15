@@ -1,6 +1,6 @@
 // События: «Чёрная пятница», зимняя коллекция, адвент-календарь, «Тайный Санта», «Снежный ком», «Голый Новый год».
 // Экран «События» в хабе, тонкая полоска над списком чатов и снег зимой. Серверная часть — server/events.js.
-import { html, useState, useEffect, S, bump, rpc, toast, Icon, Avatar, cx, userName, confirmDlg, Spinner, local, plural } from './lib.js';
+import { html, useState, useEffect, S, bump, rpc, toast, Icon, Avatar, cx, userName, confirmDlg, Spinner, local, plural, openModal, closeModal, Modal } from './lib.js';
 import { sfx, confetti } from './fun.js';
 
 const num = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -24,7 +24,7 @@ export const openEvents = id => { if (id) local.set('ev.open', id); import('./hu
 export function EventStrip() {
   useEffect(() => { loadEvents(); }, []);
   const off = local.get('ev.off') || {}, t = evNow();
-  const PRI = ['ny', 'bf', 'advent', 'santa', 'snow', 'winter'], rank = x => (x.state === 'on' ? 0 : 10) + PRI.indexOf(x.id);      // сначала то, где есть чем заняться сегодня
+  const PRI = ['ny', 'bf', 'advent', 'santa', 'snow', 'winter', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct'], rank = x => (x.state === 'on' ? 0 : 10) + PRI.indexOf(x.id);      // сначала то, где есть чем заняться сегодня
   const e = (EV.list || []).filter(x => !off[x.id + x.from] && (x.state === 'on' || (x.state === 'soon' && x.from - t < 7 * 864e5))).sort((a, b) => rank(a) - rank(b))[0]; if (!e) return null;
   return html`<div class="ev-strip" role="button" tabIndex="0" onClick=${() => openEvents(e.id)} onKeyDown=${k => { if (k.key === 'Enter') openEvents(e.id); }}>
     <span class="ev-strip-e">${e.e}</span>
@@ -97,13 +97,70 @@ function Snow() {
   </div>`;
 }
 
-const BODY = { advent: Advent, santa: Santa, snow: Snow };
+// ───── календарь года: игра события, три задания, таблица рекордов
+const play = g => import('./hub.js').then(h => h.launchApp({ id: g.app, title: g.title, url: g.url, emoji: '🍃', art: g.app }));
+function Quest({ e }) {
+  const [v, setV] = useState(null), [busy, setBusy] = useState(false);
+  const load = () => rpc('year.get', { id: e.id }).then(setV).catch(() => {});
+  useEffect(() => { load(); const t = setInterval(load, 6000); return () => clearInterval(t); }, [e.id]);      // после партии и сообщений прогресс подтягивается сам
+  if (!v) return html`<${Spinner} />`;
+  const skip = async () => { if (!(await confirmDlg(`Пропустить испытание за ${num(v.skip)} 🍃? Листики за него не начислятся.`, { ok: 'Пропустить' }))) return; setBusy(true); try { setV(await rpc('year.skip', { id: e.id })); } catch (x) { err(x); } finally { setBusy(false); } };
+  return html`<div class="yq">
+    <div class="yq-game"><span class="yq-game-t"><b>${v.game.title}</b><small>${v.best ? `ваш рекорд: ${v.best}${v.place ? ` · место ${v.place} из ${v.n}` : ''}` : 'игра события'}${v.topPrize ? ` · трём лучшим — ${v.topPrize}` : ''}</small></span><button class="btn sm" onClick=${() => play(v.game)}>Играть</button></div>
+    <ul class="yq-tasks">${v.tasks.map((t, i) => html`<li key=${i} class=${cx(t.done && 'done', t.locked && 'locked')}>
+      <span class="yq-n">${t.done ? html`<${Icon} n="check" s=${15} />` : t.locked ? html`<${Icon} n="lock" s=${14} />` : i + 1}</span>
+      <span class="yq-t"><b>${t.text}</b><i><u style=${`width:${Math.round(t.have / t.n * 100)}%`}></u></i></span>
+      <span class="yq-p">${t.done ? 'готово' : `${t.have}/${t.n}`}${t.prize && !t.done ? html`<small>${t.prize}</small>` : ''}</span></li>`)}</ul>
+    <div class="ev-row"><span>${v.done ? html`<b>Событие пройдено.</b> Марка в альбоме.` : html`За все задания — марка в альбом и <b>${v.prize}</b>.`}</span>${v.skip > 0 && !v.done && html`<button class="btn sm ghost" disabled=${busy} onClick=${skip}>Пропустить · ${num(v.skip)} 🍃</button>`}</div>
+    ${!v.on && !v.done && html`<p class="ev-note">Задания считаются, только пока событие идёт.</p>`}
+    ${v.race && html`<div><b>Гонка клубов</b>${v.race.length ? html`<ol class="snow-top">${v.race.map((r, i) => html`<li key=${r.id}><i>${i + 1}</i><b>${r.name}</b><span>${num(r.n)}</span></li>`)}</ol>` : html`<p class="ev-note">Считаются сообщения в клубах по субботам и воскресеньям, не больше 40 от человека в день. Первым трём клубам — 5, 3 и 1 буст.</p>`}</div>`}
+    ${v.top.length > 0 && html`<div><b>Рекорды события</b><ol class="snow-top">${v.top.map((r, i) => html`<li key=${r.user.id} class=${cx(r.user.id === S.me.id && 'me')}><i>${i + 1}</i><${Avatar} u=${r.user} src=${r.user.avatar} name=${userName(r.user)} color=${r.user.color} s=${28} /><b>${userName(r.user)}</b><span>${r.n}</span></li>`)}</ol></div>`}
+  </div>`;
+}
+// ───── анонимные валентинки
+export const VAL_CARDS = ['Ты мне нравишься', 'С тобой весело', 'Ты красиво молчишь в чате', 'Пиши мне чаще', 'Ты — мой любимый контакт', 'Будь моим соседом по шезлонгу'];
+const Heart = () => html`<svg viewBox="0 0 24 22" width="22" height="20" aria-hidden="true"><path d="M12 21C-6 9 4-5 12 4c8-9 18 5 0 17z" fill="currentColor"/></svg>`;
+function ValDlg({ id, user }) {
+  const [card, setCard] = useState(0), [busy, setBusy] = useState(false);
+  const send = async () => { setBusy(true); try { const r = await rpc('val.send', { to: user.id, card }); closeModal(id); toast(r.mutual ? 'Взаимно! Имена открыты обоим 💞' : 'Валентинка отправлена анонимно'); if (r.mutual) confetti(); } catch (x) { err(x); setBusy(false); } };
+  return html`<${Modal} id=${id} title="Валентинка" icon="heart">
+    <div class="ask"><p>Для <b>${userName(user)}</b>. Он или она не увидит, от кого. Имя откроется, если вам ответят тем же, — или если получатель заплатит 5 000 🍃 за разгадку.</p>
+      <div class="val-cards">${VAL_CARDS.map((t, i) => html`<button key=${i} class=${cx('val-card', 'vc' + i, card === i && 'on')} onClick=${() => setCard(i)}><${Heart} /><span>${t}</span></button>`)}</div>
+      <div class="ask-btns"><button class="btn" disabled=${busy} onClick=${send}>Отправить анонимно</button></div></div>
+  <//>`;
+}
+export const valentineOn = () => (EV.list || []).some(x => x.id === 'feb' && x.state === 'on');
+export const sendValentine = user => openModal(ValDlg, { user });
+function Valentines() {
+  const [v, setV] = useState(null); const load = () => rpc('val.get').then(setV).catch(() => {}); useEffect(() => { load(); }, []);
+  if (!v) return html`<${Spinner} />`;
+  const reveal = async x => { if (!(await confirmDlg(`Узнать отправителя за ${num(v.reveal)} 🍃? Бесплатный способ — отправить валентинку тому, на кого думаете: если угадали, имена откроются.`, { ok: 'Узнать' }))) return; try { await rpc('val.reveal', { id: x.id }); load(); } catch (e) { err(e); } };
+  return html`<div class="val">
+    <p class="ev-note">${v.on ? 'Чтобы отправить: откройте профиль человека → «Отправить валентинку». Не больше пяти в день, одному человеку — одна.' : 'Отправлять валентинки можно с 10 по 16 февраля.'}</p>
+    ${v.got.length > 0 && html`<b>Вам прислали · ${v.got.length}</b><div class="val-list">${v.got.map(x => html`<div key=${x.id} class=${cx('val-card', 'vc' + x.card)}><${Heart} /><span>${VAL_CARDS[x.card]}</span>
+      <small>${x.open ? html`от <b>${userName(x.from)}</b>${x.mutual ? ' · взаимно' : ''}` : html`<button class="btn sm" onClick=${() => reveal(x)}>Кто это? · ${num(v.reveal)} 🍃</button>`}</small></div>`)}</div>`}
+    ${v.sent.length > 0 && html`<b>Вы отправили · ${v.sent.length}</b><ul class="val-sent">${v.sent.map(x => html`<li key=${x.id}><${Avatar} u=${x.to} src=${x.to.avatar} name=${userName(x.to)} color=${x.to.color} s=${26} /><span>${userName(x.to)}</span><small>${x.mutual ? 'взаимно 💞' : x.open ? 'вас раскрыли' : 'анонимно'}</small></li>`)}</ul>`}
+    ${!v.got.length && !v.sent.length && html`<p class="ev-note">Пока пусто. Кто-то должен сделать первый шаг.</p>`}
+  </div>`;
+}
+// ───── альбом марок: по одной за каждое пройденное событие года
+function Album() {
+  const [a, setA] = useState(null); useEffect(() => { rpc('year.album').then(setA).catch(() => {}); }, []);
+  if (!a) return null; const n = a.stamps.filter(s => s.got).length;
+  return html`<section class="album"><div class="album-h"><b>Альбом ${a.y}</b><span>${n} из ${a.stamps.length} марок</span></div>
+    <div class="album-g">${a.stamps.map(s => html`<span key=${s.id} class=${cx('stamp', s.got && 'got')} title=${s.name}><i>${s.e}</i><small>${new Date(s.from + MSK).toLocaleDateString('ru-RU', { month: 'short', timeZone: 'UTC' }).replace('.', '')}</small></span>`)}</div>
+    <div class="album-goals">${a.goals.map(g => html`<span key=${g.n} class=${cx(g.got && 'got')}>${g.n} ${g.n < 5 ? 'марки' : 'марок'} — ${g.prize}</span>`)}</div>
+    <small class="album-hint">Марку дают за три задания события. Пропустили месяц — марка останется пустой до следующего года.</small></section>`;
+}
+
+const BODY = { advent: Advent, santa: Santa, snow: Snow, feb: Valentines };
 export function Events() {
   const [list, setList] = useState(EV.list), [open, setOpen] = useState(() => { const k = local.get('ev.open'); local.set('ev.open', null); return k || null; });
-  useEffect(() => { loadEvents(true).then(l => { setList(l); if (!open) { const e = l.find(x => x.state === 'on' && BODY[x.id]) || l.find(x => BODY[x.id]); if (e) setOpen(e.id); } }); }, []);
+  useEffect(() => { loadEvents(true).then(l => { setList(l); if (!open) { const e = l.find(x => x.state === 'on' && (BODY[x.id] || x.quest)) || l.find(x => BODY[x.id] || x.quest); if (e) setOpen(e.id); } }); }, []);
   if (!list) return html`<div class="hub-pad"><${Spinner} /></div>`;
   const t = evNow();
   return html`<div class="hub-pad evs">
+    <${Album} />
     ${!list.length && html`<div class="ev-empty"><span>🏖️</span><b>Сейчас событий нет</b><small>Следующее появится здесь заранее. Отдыхаем.</small></div>`}
     ${list.map(e => { const Body = BODY[e.id], isOpen = open === e.id; return html`<section key=${e.id} class=${cx('ev', 'ev-' + e.id, 'st-' + e.state, isOpen && 'open')}>
       <button class="ev-h" aria-expanded=${isOpen} onClick=${() => setOpen(isOpen ? null : e.id)}>
@@ -113,6 +170,7 @@ export function Events() {
       </button>
       ${isOpen && html`<div class="ev-b"><p class="ev-about">${e.about}</p>
         ${Body && html`<${Body} />`}
+        ${e.quest && html`<${Quest} e=${e} />`}
         ${e.go === 'shop' && e.state === 'on' && html`<div class="ev-row"><span></span><span class="ev-btns"><button class="btn sm" onClick=${() => import('./shop.js').then(m => m.openShop('cosmetics'))}>Украшения</button><button class="btn sm ghost" onClick=${() => import('./shop.js').then(m => m.openShop('gifts'))}>Подарки</button></span></div>`}
       </div>`}
     </section>`; })}

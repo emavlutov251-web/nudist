@@ -265,6 +265,16 @@ function AppPush({ id, app }) {
     </div>
   <//>`;
 }
+// Полоска над чатами в приложении для Android: телефон запрещает уведомления или усыпляет «Нудист». Закрывается крестиком на две недели.
+export function PushStrip() {
+  const app = nativeApp(), [st, setSt] = useState(null);
+  useEffect(() => { if (!app) return; const read = () => { try { setSt(JSON.parse(app.state())); } catch (e) { /* старая версия приложения */ } }; read(); const t = setInterval(read, 5000); return () => clearInterval(t); }, []);
+  if (!app || !st || local.get('app.push') === false || (st.allowed && st.battery) || Date.now() - (local.get('push.strip') || 0) < 14 * 864e5) return null;
+  return html`<div class="push-strip" role="button" tabIndex="0" onClick=${() => openModal(PushSetup)}>
+    <${Icon} n="bell-off" s=${20} /><span><b>${st.allowed ? 'Уведомления могут опаздывать' : 'Уведомления выключены'}</b><small>${st.allowed ? 'Телефон усыпляет «Нудист» ради батареи. Нажмите, чтобы снять ограничение.' : 'Телефон не разрешает их показывать. Нажмите, чтобы разрешить.'}</small></span>
+    <button class="ib sm" title="Скрыть" aria-label="Скрыть" onClick=${k => { k.stopPropagation(); local.set('push.strip', Date.now()); bump(); }}><${Icon} n="x" s=${15} /></button>
+  </div>`;
+}
 export function PushSetup({ id }) {
   const app = nativeApp(); if (app) return html`<${AppPush} id=${id} app=${app} />`;
   const oldApk = / NudistAndroid\//.test(navigator.userAgent);

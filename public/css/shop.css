@@ -151,3 +151,43 @@ button.pass-c:not(:disabled) { background: var(--accent); color: var(--accent-in
 .th-nightbeach i { background: linear-gradient(135deg, #0B1220, #3B2E12); color: #E5B94A; } .th-newyear i { background: linear-gradient(135deg, #14382A, #A32133); color: #fff; }
 .sw-nightbeach i:nth-child(1) { background: #0B1220; } .sw-nightbeach i:nth-child(2) { background: #162238; } .sw-nightbeach i:nth-child(3) { background: #E5B94A; }
 .sw-newyear i:nth-child(1) { background: #14382A; } .sw-newyear i:nth-child(2) { background: #A32133; } .sw-newyear i:nth-child(3) { background: #E0B040; }
+
+/* ───── календарь года: рамки, темы */
+.ava.fr-cupid { --fr: conic-gradient(#FF5E7E, #FFC2D4, #E0244F, #FF9EB8, #FF5E7E); box-shadow: 0 0 9px rgba(255, 94, 126, .5); }
+.ava.fr-bloom { --fr: conic-gradient(#FFB3C7, #C8F0B0, #FFE08A, #B8E0FF, #FFB3C7); }
+.ava.fr-joker { --fr: repeating-conic-gradient(#7C4DFF 0 45deg, #FFD23F 45deg 90deg); }
+.ava.fr-pioneer { --fr: conic-gradient(#3AA8E0, #F6DFA6, #19A974, #F6DFA6, #3AA8E0); box-shadow: 0 0 8px rgba(58, 168, 224, .45); }
+.ava.fr-bday { --fr: conic-gradient(#FF5E7E, #FFD166, #3A8EE6, #7C4DFF, #3DB96A, #FF5E7E); box-shadow: 0 0 10px rgba(255, 209, 102, .5); }
+.ava.fr-survivor { --fr: repeating-conic-gradient(#E0244F 0 20deg, #15161C 20deg 40deg); box-shadow: 0 0 9px rgba(224, 36, 79, .5); }
+.ava.fr-sunset { --fr: conic-gradient(#FF8E6B, #FFD9A0, #D96A6A, #7C4DFF, #FF8E6B); }
+.ava.fr-vampire { --fr: conic-gradient(#1A0A12, #8B0A1A, #E0244F, #2B0A14, #1A0A12); box-shadow: 0 0 10px rgba(224, 36, 79, .55); }
+.ava.fr-season { --fr: repeating-conic-gradient(#E9B872 0 15deg, #FFF7E6 15deg 30deg); }
+.ava.fr-veteran { --fr: conic-gradient(#FFF1A8, #F5B700, #FFFFFF, #E09F00, #FFF1A8); box-shadow: 0 0 12px rgba(245, 183, 0, .6); }
+.ava.fr-cupid::after, .ava.fr-bloom::after, .ava.fr-joker::after, .ava.fr-pioneer::after, .ava.fr-bday::after, .ava.fr-survivor::after, .ava.fr-sunset::after, .ava.fr-vampire::after, .ava.fr-season::after, .ava.fr-veteran::after { position: absolute; left: 50%; top: -3px; transform: translate(-50%, -62%); font-size: .8em; line-height: 1; z-index: 2; pointer-events: none; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .35)); }
+.ava.fr-cupid::after { content: '💘'; } .ava.fr-bloom::after { content: '🌸'; } .ava.fr-joker::after { content: '🃏'; } .ava.fr-pioneer::after { content: '🚩'; } .ava.fr-bday::after { content: '🎂'; } .ava.fr-survivor::after { content: '🦑'; } .ava.fr-sunset::after { content: '🌇'; } .ava.fr-vampire::after { content: '🦇'; } .ava.fr-season::after { content: '📮'; } .ava.fr-veteran::after { content: '🏅'; }
+.ava.fr-bday:not(.sq)::before, .ava.fr-veteran:not(.sq)::before, .ava.fr-vampire:not(.sq)::before, .ava.fr-survivor:not(.sq)::before { animation: fr-spin 6s linear infinite; }
+[data-theme][data-skin='minimal'], [data-style][data-theme][data-skin='minimal'] {
+  --bg: #FFFFFF; --panel: #FFFFFF; --card: #FAFAFA; --rail: #F4F4F4; --rail-ink: #222;
+  --ink: #111111; --ink2: #5C5C5C; --ink3: #8E8E8E; --line: #E6E6E6; --hover: #F2F2F2; --press: #E8E8E8;
+  --in: #F4F4F4; --out: #111111; --out-ink: #FFFFFF; --code: #F4F4F4; --accent: #111111; --accent-ink: #FFFFFF; --leaf: #111111;
+  --acr: rgba(255, 255, 255, .8); --acr-strong: rgba(255, 255, 255, .92); --acr-rail: rgba(244, 244, 244, .8); --acr-chat: rgba(255, 255, 255, .85);
+  --wall: linear-gradient(180deg, #FFFFFF, #F4F4F4);
+}
+[data-theme][data-skin='matrix'], [data-style][data-theme][data-skin='matrix'] {
+  --bg: #030A05; --panel: #05110A; --card: #0A1A10; --rail: #020703; --rail-ink: #7CFFB0;
+  --ink: #C8FFD8; --ink2: #5FCB86; --ink3: #3C8A59; --line: #123A22; --hover: #0D2416; --press: #13331F;
+  --in: #0A1A10; --out: #0F5A2E; --out-ink: #E6FFEE; --code: #020703; --accent: #2BFF7E; --accent-ink: #02150A; --leaf: #2BFF7E;
+  --acr: rgba(5, 17, 10, .74); --acr-strong: rgba(6, 20, 12, .88); --acr-rail: rgba(2, 7, 3, .66); --acr-chat: rgba(3, 10, 5, .8);
+  --wall: repeating-linear-gradient(90deg, rgba(43, 255, 126, .05) 0 1px, transparent 1px 14px), linear-gradient(180deg, #020703, #06200F);
+}
+[data-theme][data-skin='rain'], [data-style][data-theme][data-skin='rain'] {
+  --bg: #161C24; --panel: #1A222C; --card: #212B37; --rail: #10151B; --rail-ink: #C7D3E0;
+  --ink: #E8EEF5; --ink2: #9DADBF; --ink3: #6E7F92; --line: #2B3745; --hover: #24303D; --press: #2D3B4B;
+  --in: #212B37; --out: #3C5A78; --out-ink: #F2F7FC; --code: #121820; --accent: #F2B84B; --accent-ink: #1C1403; --leaf: #7FB6E6;
+  --acr: rgba(26, 34, 44, .72); --acr-strong: rgba(29, 38, 49, .86); --acr-rail: rgba(16, 21, 27, .64); --acr-chat: rgba(22, 28, 36, .78);
+  --wall: repeating-linear-gradient(105deg, rgba(160, 200, 240, .05) 0 1px, transparent 1px 9px), linear-gradient(170deg, #10151B, #263444 60%, #3A3320);
+}
+.th-minimal i { background: linear-gradient(135deg, #FFFFFF, #E6E6E6); color: #111; } .th-matrix i { background: linear-gradient(135deg, #020703, #0F5A2E); color: #2BFF7E; } .th-rain i { background: linear-gradient(135deg, #161C24, #3C5A78); color: #F2B84B; }
+.sw-minimal i:nth-child(1) { background: #FFFFFF; } .sw-minimal i:nth-child(2) { background: #E6E6E6; } .sw-minimal i:nth-child(3) { background: #111111; }
+.sw-matrix i:nth-child(1) { background: #030A05; } .sw-matrix i:nth-child(2) { background: #0A1A10; } .sw-matrix i:nth-child(3) { background: #2BFF7E; }
+.sw-rain i:nth-child(1) { background: #161C24; } .sw-rain i:nth-child(2) { background: #212B37; } .sw-rain i:nth-child(3) { background: #F2B84B; }

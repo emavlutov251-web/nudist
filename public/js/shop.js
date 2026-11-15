@@ -11,12 +11,12 @@ const RARITY = { common: 'обычная', rare: 'редкая', epic: 'эпич
 // Редкость вещей: нужна, чтобы без запроса к серверу понять, входит ли вещь в тариф (стикеры в панели, темы в настройках).
 const ITEM_TIER = { stickers_space: 'common', stickers_party: 'common', stickers_memes: 'rare', stickers_anime: 'epic', theme_sand: 'common', theme_forest: 'rare', theme_neon: 'epic', theme_void: 'epic' };
 export const SHOP_THEMES = [['sand', 'Песок'], ['forest', 'Лес'], ['neon', 'Неон'], ['void', 'Пустота']];
-export const EVENT_THEMES = [['nightbeach', 'Ночной пляж'], ['newyear', 'Новый год']];      // темы событий: в настройках видны только тем, кто их купил
+export const EVENT_THEMES = [['nightbeach', 'Ночной пляж'], ['newyear', 'Новый год'], ['minimal', 'Минимализм'], ['matrix', 'Матрица'], ['rain', 'Дождливый город']];      // темы событий: в настройках видны только тем, кто их купил
 export const hasItem = id => { const me = S.me || {}; return (me.owned || []).includes(id) || !!(me.tier && ITEM_TIER[id] && INCLUDED[me.tier].includes(ITEM_TIER[id])); };
 export const openShop = tab => openModal(ShopModal, { tab });
 
 // ───── эффект сообщения: короткая вспышка над пузырём, когда сообщение только что пришло
-const FX = { sparkle: ['✨', '⭐', '💫'], hearts: ['💕', '❤️', '💖'], confetti: ['🎉', '🎊', '✨'], lightning: ['⚡', '💥', '⚡'], bubbles: ['🫧', '💧', '🫧'], goldsand: ['✨', '🟡', '⏳'], firework: ['🎆', '🎇', '✨'] };
+const FX = { sparkle: ['✨', '⭐', '💫'], hearts: ['💕', '❤️', '💖'], confetti: ['🎉', '🎊', '✨'], lightning: ['⚡', '💥', '⚡'], bubbles: ['🫧', '💧', '🫧'], goldsand: ['✨', '🟡', '⏳'], firework: ['🎆', '🎇', '✨'], blank: ['📄', '🤍', '▫️'], petals: ['🌸', '🌷', '🌸'], calm: ['🫧', '🍃', '☁️'], web: ['🕸️', '🕷️', '🕸️'], bats: ['🦇', '🌙', '🦇'] };
 const played = new Set();
 export function fxBurst(el, kind) {
   const set = FX[kind]; if (!el || !set || S.settings.anim === false || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;

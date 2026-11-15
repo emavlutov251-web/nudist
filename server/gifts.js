@@ -21,6 +21,14 @@ const GIFTS = [
   { id: 'snowball', e: '❄️', name: 'Снежок', price: 100, ev: 'winter' }, { id: 'mulled', e: '🍷', name: 'Глинтвейн', price: 300, ev: 'winter' }, { id: 'scarf', e: '🧣', name: 'Шарф', price: 500, ev: 'winter' },
   { id: 'tree', e: '🎄', name: 'Ёлка', price: 1500, ev: 'winter' }, { id: 'deer', e: '🦌', name: 'Олень', price: 5000, ev: 'winter' }, { id: 'champagne', e: '🍾', name: 'Шампанское', price: 400, ev: 'ny' },
   { id: 'santa', e: '🎅', name: 'Дед Мороз в шортах', price: 30000, lim: 50, ev: 'winter' }, { id: 'pearl', e: '🖤', name: 'Чёрная жемчужина', price: 15000, lim: 50, ev: 'bf' },
+  // календарь года
+  { id: 'valheart', e: '💗', name: 'Сердечко', price: 100, ev: 'feb' }, { id: 'heartbreak', e: '💔', name: 'Разбитое сердце', price: 300, ev: 'feb' }, { id: 'cupid', e: '💘', name: 'Стрела Амура', price: 1500, ev: 'feb' },
+  { id: 'tulips', e: '🌷', name: 'Тюльпаны', price: 200, ev: 'mar' }, { id: 'mimosa', e: '💐', name: 'Мимоза', price: 600, ev: 'mar' },
+  { id: 'lounger', e: '⛱️', name: 'Шезлонг', price: 400, ev: 'may' }, { id: 'beachball', e: '🏐', name: 'Пляжный мяч', price: 150, ev: 'may' },
+  { id: 'goldleaf', e: '🏆', name: 'Золотой листок', price: 2027, ev: 'jun' },
+  { id: 'sangria', e: '🍹', name: 'Сангрия', price: 300, ev: 'aug' }, { id: 'guitar', e: '🎸', name: 'Гитара', price: 800, ev: 'aug' }, { id: 'picnic', e: '🧺', name: 'Плед для пикника', price: 500, ev: 'aug' },
+  { id: 'coffee', e: '☕', name: 'Кофе с собой', price: 150, ev: 'sep' }, { id: 'mug', e: '🍵', name: 'Кружка', price: 300, ev: 'sep' }, { id: 'blanket', e: '🧶', name: 'Плед', price: 500, ev: 'sep' },
+  { id: 'pumpkin', e: '🎃', name: 'Тыква', price: 200, ev: 'oct' }, { id: 'ghost', e: '👻', name: 'Призрак', price: 500, ev: 'oct' }, { id: 'coffin', e: '⚰️', name: 'Гроб', price: 1500, ev: 'oct' },
   // лимитированные: тираж на всё приложение, больше не выпускаются
   { id: 'sunset', e: '🌅', name: 'Редкий закат', price: 30000, lim: 100 }, { id: 'aurora', e: '🌌', name: 'Северное сияние', price: 75000, lim: 50 }, { id: 'unicorn', e: '🦄', name: 'Единорог пляжа', price: 200000, lim: 10 },
 ];

@@ -192,7 +192,7 @@ export function setSetting(patch, sync = true) {
   try { localStorage.setItem(LS('settings.' + (S.me ? S.me.id : '')), JSON.stringify(S.settings)); } catch (e) { /* переполнено */ }
   applyTheme(); if (sync) pushSettings(); bump();
 }
-export const SKINS = { sand: 'light', forest: 'dark', neon: 'dark', void: 'dark', nightbeach: 'dark', newyear: 'dark' };
+export const SKINS = { sand: 'light', forest: 'dark', neon: 'dark', void: 'dark', nightbeach: 'dark', newyear: 'dark', minimal: 'light', matrix: 'dark', rain: 'dark' };
 export function applyTheme() {
   const s = S.settings, r = document.documentElement;
   const sys = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';

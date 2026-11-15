@@ -51,6 +51,25 @@ const CATALOG = {
   theme_newyear: { kind: 'theme', name: 'Новый год', emoji: '🎄', price: 1500, tier: 'event', ev: 'winter' },
   fx_firework: { kind: 'effect', name: 'Фейерверк', emoji: '🎆', price: 2000, tier: 'event', ev: 'ny' },
   frame_crown27: { kind: 'frame', name: 'Корона 2027', emoji: '👑', price: 2500, tier: 'event', ev: 'ny' },
+  // календарь года. ev: 'prize' — в продаже не бывает: только награда
+  fx_blank: { kind: 'effect', name: 'Чистый лист', emoji: '📄', price: 1200, tier: 'event', ev: 'jan' },
+  theme_minimal: { kind: 'theme', name: 'Минимализм', emoji: '⬜', price: 1500, tier: 'event', ev: 'jan' },
+  frame_cupid: { kind: 'frame', name: 'Купидон', emoji: '💘', price: 1500, tier: 'event', ev: 'feb' },
+  frame_bloom: { kind: 'frame', name: 'Цветение', emoji: '🌸', price: 1500, tier: 'event', ev: 'mar' },
+  fx_petals: { kind: 'effect', name: 'Лепестки', emoji: '🌸', price: 1200, tier: 'event', ev: 'mar' },
+  frame_joker: { kind: 'frame', name: 'Джокер', emoji: '🃏', price: 1500, tier: 'event', ev: 'apr' },
+  theme_matrix: { kind: 'theme', name: 'Матрица', emoji: '🟩', price: 0, tier: 'event', ev: 'prize' },
+  frame_pioneer: { kind: 'frame', name: 'Первопроходец', emoji: '🚩', price: 0, tier: 'event', ev: 'prize' },
+  frame_bday: { kind: 'frame', name: 'Именинник', emoji: '🎂', price: 1500, tier: 'event', ev: 'jun' },
+  frame_survivor: { kind: 'frame', name: 'Выживший', emoji: '🦑', price: 0, tier: 'event', ev: 'prize' },
+  frame_sunset: { kind: 'frame', name: 'Закат', emoji: '🌇', price: 1500, tier: 'event', ev: 'aug' },
+  theme_rain: { kind: 'theme', name: 'Дождливый город', emoji: '🌧️', price: 1500, tier: 'event', ev: 'sep' },
+  fx_calm: { kind: 'effect', name: 'Антистресс', emoji: '🫧', price: 1200, tier: 'event', ev: 'sep' },
+  frame_vampire: { kind: 'frame', name: 'Вампир', emoji: '🧛', price: 1800, tier: 'event', ev: 'oct' },
+  fx_web: { kind: 'effect', name: 'Паутина', emoji: '🕸️', price: 1200, tier: 'event', ev: 'oct' },
+  fx_bats: { kind: 'effect', name: 'Летучие мыши', emoji: '🦇', price: 1500, tier: 'event', ev: 'oct' },
+  frame_season: { kind: 'frame', name: 'Сезонник', emoji: '📮', price: 0, tier: 'event', ev: 'prize' },
+  frame_veteran: { kind: 'frame', name: 'Старожил', emoji: '🏅', price: 0, tier: 'event', ev: 'prize' },
 };
 // Что знает о событиях магазин: идёт ли событие, скидка события на вещь, до какого времени вещь в продаже. Заполняет server/events.js.
 const ev = { on: () => false, off: () => 0, till: () => 0, sale: '' };
@@ -104,7 +123,7 @@ function dailyDeals() {
 }
 function priceFor(u, id) {
   const it = CATALOG[id], deal = dailyDeals().find(d => d.key === id), first = !u.shopN ? FIRST_OFF : 0, sale = ev.off(it), off = Math.max(deal ? deal.off : 0, first, sale);
-  return { price: Math.floor(it.price * (100 - off) / 100), off, deal: !!deal && deal.off >= first && deal.off >= sale, sale: sale > 0 && sale >= off ? ev.sale : undefined };
+  return { price: Math.floor(it.price * (100 - off) / 100), off: Math.round(off), deal: !!deal && deal.off >= first && deal.off >= sale, sale: sale > 0 && sale >= off ? ev.sale : undefined };
 }
 // Что стоит набор именно этому человеку: за то, что уже есть, второй раз не берём.
 function bundleFor(u, b) {
