@@ -2,6 +2,7 @@
 import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, fmtDur, fmtNum, fmtSize, fmtShort, confirmDlg, promptDlg, pickFile, upload, addUsers, Empty, Spinner, local, plural, showMenu, Toggle, md, copyText } from './lib.js';
 import { openChat, showChannel, sendPayload } from './store.js';
 import { playAudio, AudioBar } from './media.js';
+import { Cover, tagCover, spendEnergy, EnergyPill } from './perks.js';
 import { openMiniApp } from './panels.js';
 import { Feed, Viewers } from './feed.js';
 import { openDock, ytDock, oldShell } from './dock.js';
@@ -41,12 +42,12 @@ export function Hub() {
 }
 
 // ───────────────────────────── музыка
-const trackMsg = t => ({ id: 'trk_' + t.id, chat: null, type: 'audio', from: t.by, media: { url: t.url, name: (t.artist && t.artist !== 'Неизвестный исполнитель' ? t.artist + ' — ' : '') + t.title, dur: t.dur } });
+const trackMsg = t => ({ id: 'trk_' + t.id, chat: null, type: 'audio', from: t.by, media: { url: t.url, name: (t.artist && t.artist !== 'Неизвестный исполнитель' ? t.artist + ' — ' : '') + t.title, dur: t.dur, cover: t.cover, radio: !!(t.ext && t.ext.s === 'rb') } });
 const audioDur = f => new Promise(res => { const a = new Audio(); a.preload = 'metadata'; a.onloadedmetadata = () => res(isFinite(a.duration) ? a.duration : 0); a.onerror = () => res(0); setTimeout(() => res(0), 6000); a.src = URL.createObjectURL(f); });
 const AUDIO_RE = /\.(mp3|m4a|aac|ogg|oga|opus|wav|flac)$/i;
 const ups = [];      // идущие загрузки: { name, p }
 let musicReload = null;      // открыта вкладка «Музыка» — после загрузки со стороны (например, «Поделиться» на телефоне) список обновится сам
-const extMsg = it => ({ id: 'ext_' + it.key, chat: null, type: 'audio', from: S.me.id, media: { url: it.url, name: (it.s === 'rb' ? '📻 ' : it.artist ? it.artist + ' — ' : '') + it.title, dur: it.dur } });
+const extMsg = it => ({ id: 'ext_' + it.key, chat: null, type: 'audio', from: S.me.id, media: { url: it.url, name: (it.s === 'rb' ? '' : it.artist ? it.artist + ' — ' : '') + it.title, dur: it.dur, cover: it.cover, radio: it.s === 'rb' } });
 const GENRES = [['рок', 'rock'], ['электроника', 'electronic'], ['лоу-фай', 'lofi'], ['джаз', 'jazz'], ['хип-хоп', 'hiphop'], ['эмбиент', 'ambient'], ['классика', 'classical'], ['пианино', 'piano'], ['фолк', 'folk'], ['метал', 'metal']];
 const WAVES = [['все', ''], ['поп', 'pop'], ['рок', 'rock'], ['танцевальное', 'dance'], ['хип-хоп', 'hip-hop'], ['ретро', 'retro'], ['шансон', 'chanson'], ['джаз', 'jazz'], ['чилл', 'chillout'], ['новости', 'news']];
 // Загрузка аудиофайлов в «Мою музыку»: и из кнопки «Загрузить», и из «Поделиться» в приложении на телефоне
@@ -56,7 +57,11 @@ export async function uploadTracks(files, pub) {
     if (!AUDIO_RE.test(f.name)) { toast(`«${f.name}» — не аудио. Нужен mp3, m4a, ogg, wav или flac.`, 'err'); continue; }
     if (f.size > MB * 1048576) { toast(`«${f.name}» весит ${fmtSize(f.size)}, а предел — ${MB} МБ.`, 'err'); continue; }
     const u = { name: f.name, p: 0 }; ups.push(u); bump();
-    try { const dur = await audioDur(f), up = await upload(f, { name: f.name, onProgress: p => { u.p = p; bump(); } }); await rpc('music.add', { media: { url: up.url, size: f.size, dur, name: f.name }, pub }); ok++; } catch (e) { err(e); }
+    try {
+      const dur = await audioDur(f), up = await upload(f, { name: f.name, onProgress: p => { u.p = p; bump(); } });
+      let cover; const pic = await tagCover(f); if (pic) { try { cover = (await upload(pic, { name: 'cover.jpg' })).url; } catch (e) { /* обойдёмся цветной плиткой */ } }      // обложка из тегов файла
+      await rpc('music.add', { media: { url: up.url, size: f.size, dur, name: f.name }, pub, cover }); ok++;
+    } catch (e) { err(e); }
     ups.splice(ups.indexOf(u), 1); bump();
   }
   if (ok) toast(`Загружено: ${ok} ${plural(ok, ['трек', 'трека', 'треков'])}`);
@@ -133,7 +138,7 @@ function Music() {
         : html`${WAVES.map(([n, v]) => html`<button class=${cx('chip', wave === v && 'on')} onClick=${() => setWave(v)}>${n}</button>`)}<button class=${cx('chip', world && 'on')} onClick=${() => setWorld(!world)} title="Искать станции не только в России"><${Icon} n="globe" s=${13} /> весь мир</button>`}</div>
       ${!net ? html`<${Spinner} />` : net.error ? html`<${Empty} icon="refresh-cw" title="Не получилось" text=${net.error}><button class="btn" onClick=${loadNet}>Повторить</button><//>` : !net.items.length ? html`<${Empty} icon=${tab === 'find' ? 'music' : 'radio'} title="Ничего не нашлось" text=${tab === 'find' ? 'В каталоге музыка независимых авторов со свободными лицензиями. Попробуйте жанр по-английски: rock, lofi, piano.' : 'Попробуйте другое название или включите «весь мир».'} />` : html`
         <div class="trk-list" role="list">${net.items.map((it, i) => { const on = S.player && S.player.id === 'ext_' + it.key; return html`<div role="listitem" key=${it.key} class=${cx('trk', on && 'on')} onDblClick=${() => playNet(it)}>
-          <button class="trk-p" onClick=${() => playNet(it)} title=${on && S.player.on ? 'Пауза' : 'Слушать'}>${on ? html`<${Icon} n=${S.player.on ? 'pause' : 'play'} s=${17} />` : html`<span class="trk-n">${i + 1}</span><${Icon} n="play" s=${17} />`}</button>
+          <button class="trk-p trk-c" onClick=${() => playNet(it)} title=${on && S.player.on ? 'Пауза' : 'Слушать'}><${Cover} src=${it.cover} seed=${it.title + it.artist} s=${42} radio=${it.s === 'rb'} /><i class=${cx('trk-o', on && 'on')}><${Icon} n=${on && S.player.on ? 'pause' : 'play'} s=${17} /></i></button>
           <div class="trk-m" onClick=${() => playNet(it)}><b>${it.title}</b><small>${it.artist}${it.s === 'ov' ? ` · ${it.from}${it.lic ? ' · ' + it.lic : ''}` : it.kbps ? ` · ${it.kbps} кбит/с` : ''}</small></div>
           ${it.page && html`<a class="ib sm" href=${it.page} target="_blank" rel="noopener noreferrer" title=${it.s === 'ov' ? 'Страница трека у автора' : 'Сайт станции'}><${Icon} n="external-link" s=${16} /></a>`}
           <span class="trk-d">${it.dur ? fmtDur(it.dur) : it.s === 'rb' ? 'эфир' : '—'}</span>
@@ -142,8 +147,8 @@ function Music() {
         <p class="hint center">${tab === 'find' ? 'Музыка играет прямо с сайтов авторов (Jamendo, Wikimedia Commons) по свободным лицензиям — у каждого трека указаны автор, лицензия и ссылка. Поиск через Openverse.' : 'Станции из открытого справочника Radio Browser. Звук идёт напрямую со станции; если молчит — станция легла, попробуйте другую.'}</p>`}`}
     ${outer ? null : !d ? html`<${Spinner} />` : !d.tracks.length ? html`<${Empty} icon="music" title=${q ? 'Ничего не нашлось' : tab === 'my' ? 'Тут пока тихо' : 'В общей волне пусто'} text=${q ? 'Попробуйте другое слово.' : tab === 'my' ? `Загрузите свои mp3 — и слушайте их с любого устройства. Подходят ещё m4a, ogg, wav и flac, до ${MB} МБ каждый. А можно ничего не загружать: найдите музыку в каталоге или включите радио.` : 'Никто ещё ничего не выложил. Станьте первым диджеем пляжа.'}>${!q && html`<button class="btn" onClick=${add}><${Icon} n="upload" s=${16} /> Загрузить музыку</button><button class="btn ghost" onClick=${() => go('find')}><${Icon} n="search" s=${16} /> Каталог</button><button class="btn ghost" onClick=${() => go('radio')}><${Icon} n="radio" s=${16} /> Радио</button>`}<//>` : html`
       <div class="trk-list" role="list">${d.tracks.map((t, i) => { const on = cur === t.id; return html`<div role="listitem" key=${t.id} class=${cx('trk', on && 'on')} onDblClick=${() => play(t)}>
-        <button class="trk-p" onClick=${() => play(t)} title=${on && S.player.on ? 'Пауза' : 'Слушать'}>${on ? html`<${Icon} n=${S.player.on ? 'pause' : 'play'} s=${17} />` : html`<span class="trk-n">${i + 1}</span><${Icon} n="play" s=${17} />`}</button>
-        <div class="trk-m" onClick=${() => play(t)}><b>${t.ext && t.ext.s === 'rb' ? '📻 ' : ''}${t.title}</b><small>${t.artist}${t.ext && t.ext.s === 'ov' ? ` · ${t.ext.from}${t.ext.lic ? ' · ' + t.ext.lic : ''}` : ''}${tab === 'all' && !t.own ? (t.ext ? ' · добавил(а) ' : ' · загрузил(а) ') + userName(who(t.by)) : ''}</small></div>
+        <button class="trk-p trk-c" onClick=${() => play(t)} title=${on && S.player.on ? 'Пауза' : 'Слушать'}><${Cover} src=${t.cover} seed=${t.title + t.artist} s=${42} radio=${!!(t.ext && t.ext.s === 'rb')} /><i class=${cx('trk-o', on && 'on')}><${Icon} n=${on && S.player.on ? 'pause' : 'play'} s=${17} /></i></button>
+        <div class="trk-m" onClick=${() => play(t)}><b>${t.title}</b><small>${t.artist}${t.ext && t.ext.s === 'ov' ? ` · ${t.ext.from}${t.ext.lic ? ' · ' + t.ext.lic : ''}` : ''}${tab === 'all' && !t.own ? (t.ext ? ' · добавил(а) ' : ' · загрузил(а) ') + userName(who(t.by)) : ''}</small></div>
         ${t.pub ? html`<span class="trk-tag" title="Трек в общей волне"><${Icon} n="globe" s=${13} /> ${fmtNum(t.plays)}</span>` : html`<span class="trk-tag" title="Трек виден только вам"><${Icon} n="lock" s=${13} /></span>`}
         <span class="trk-d">${t.dur ? fmtDur(t.dur) : t.ext && t.ext.s === 'rb' ? 'эфир' : t.ext && t.ext.s === 'ym' ? 'Яндекс' : '—'}</span>
         ${!t.own && !t.mine && html`<button class="ib sm" title="Добавить в мою музыку" onClick=${() => rpc('music.save', { id: t.id }).then(() => { patch(t, { mine: true }); toast('Добавлено в вашу музыку'); }).catch(err)}><${Icon} n="plus" s=${17} /></button>`}
@@ -356,7 +361,8 @@ function Lives() {
 let APPS = null;
 const CATS = [['games', 'Игры', 'gamepad-2'], ['tools', 'Утилиты', 'wrench'], ['bots', 'От ботов', 'bot']];
 const TILE = { breath: '#2f9e6a', listopad: '#107C10', g2048: '#0078D7', saper: '#5C2D91', lot: '#E3008C', split: '#008272', royale: '#B146C2', beer: '#CA5010', shooter: '#498205', rp: '#0063B1', catch: '#19A974', run: '#F2622E', pairs: '#7C4DFF' };
-export function launchApp(app, chatId) {
+export async function launchApp(app, chatId) {
+  if (app.url && app.cat === 'games' && !(await spendEnergy(app))) return;      // игра тратит единицу энергии; утилиты и игры событий — нет
   const rec = [app.id].concat((local.get('apps.recent') || []).filter(i => i !== app.id)).slice(0, 6); local.set('apps.recent', rec);
   if (app.url) openModal(AppFrame, { app, chat: chatId || null }); else if (app.bot) openMiniApp(app.bot);
 }
@@ -425,7 +431,7 @@ export function AppsCatalog({ chat, onPick }) {
   const run = a => { if (onPick) onPick(); launchApp(a, chat); };
   const tile = a => html`<button class=${cx('app-tile', a.ev && 'ev')} key=${a.id} onClick=${() => run(a)}><span class="app-ic" style=${a.emoji ? `background:${TILE[a.id] || '#0078D7'}` : ''}>${a.art ? html`<${Leafy} />` : a.emoji || html`<${Avatar} src=${a.avatar} name=${a.title} color=${a.color} s=${52} square />`}</span><span class="app-m"><b>${a.title}</b><small>${a.about}</small></span></button>`;
   return html`<div class="apps">
-    <div class="hub-bar"><h2 class="hub-t">Приложения</h2><label class="search"><${Icon} n="search" s=${16} /><input value=${q} placeholder="Игра или утилита" onInput=${e => setQ(e.target.value)} /></label></div>
+    <div class="hub-bar"><h2 class="hub-t">Приложения</h2><${EnergyPill} /><label class="search"><${Icon} n="search" s=${16} /><input value=${q} placeholder="Игра или утилита" onInput=${e => setQ(e.target.value)} /></label></div>
     ${recent.length > 0 && html`<h5>Недавние</h5><div class="app-grid">${recent.map(tile)}</div>`}
     ${CATS.map(([k, name, ic]) => { const l = found.filter(a => a.cat === k); return l.length > 0 && html`<h5><${Icon} n=${ic} s=${14} /> ${name}</h5><div class="app-grid">${l.map(tile)}</div>`; })}
     ${!found.length && html`<${Empty} icon="layout-grid" text="Такого приложения нет. Пока." />`}
@@ -445,7 +451,14 @@ const FAQ = [
   ['Как увидеть ответ на мой анонимный вопрос?', 'Меню ☰ → «Голая правда» → «Мои вопросы». Там все вопросы, которые вы задали с этого устройства, и ответы на них. Ответ вместе с вопросом ещё и появляется в историях отвечавшего. Кто спросил, не узнаёт никто: ключ от вопроса хранится только у вас в телефоне.'],
   ['Почему я не могу изменить настройку или снять бан?', 'Действует старшинство: то, что сделал старший по роли (владелец старше админа, админ старше модератора), младший изменить не может. Это касается ролей, банов, мутов, закрепов и настроек группы или канала, а в администрации сервиса — особых статусов, бейджей и блокировок.'],
   ['Что такое «Выдохнуть»?', 'Меню ☰ → «Выдохнуть». Там минута спокойного дыхания, дневник настроения (его видите только вы), кнопка «написать близкому», телефоны доверия и «Режим дзен», который убирает все счётчики непрочитанного. Ничего из этого не стоит листиков.'],
-  ['Как оставить капсулу времени?', 'В личном чате нажмите на скрепку → «Капсула времени», напишите текст и выберите день. До срока в чате лежит закрытая капсула, прочитать её не может никто, даже вы. В назначенный день она откроется сама. Автор может отменить капсулу, пока она запечатана.'],
+  ['Как оставить капсулу времени?', 'В личном чате нажмите на скрепку → «Капсула времени», напишите текст и выберите день. До срока в чате лежит закрытая капсула. В назначенный день она откроется сама и бесплатно. Адресат может открыть её раньше за 300 🍃 — если автор не выключил это при создании. Автор может отменить капсулу, пока она запечатана.'],
+  ['Что такое энергия в играх?', 'Каждый запуск игры тратит одну единицу энергии. Запас — 10 единиц, новая появляется каждые 10 минут. Кончилась — можно подождать или восполнить весь запас за 150 🍃. С тарифом Plus запас вдвое больше, с Pro и Max энергия не тратится. Утилиты, игры событий и ответ на дуэль энергию не тратят.'],
+  ['Как продвинуть свою запись?', 'В «Ленте» у своей записи нажмите ракету. За 500 🍃 запись на сутки поднимется наверх у тех, кто её ещё не видел, с пометкой «Продвигается». Тем, кто скрыл вас из ленты или заблокировал, она показана не будет.'],
+  ['Что такое тайная витрина?', 'Раздел магазина с самыми редкими вещами. Он открывается, когда на счету набирается 100 000 🍃, и остаётся открытым навсегда, даже если листики потрачены. Скидки на него не действуют.'],
+  ['Значок «Пресса» — это подтверждение?', 'Нет. «Пресса», «Стример», «Художник» и «Коллекционер» — украшения из магазина: человек купил их сам. В подсказке значка так и написано. Подтверждённый аккаунт отмечен другой галочкой, её выдаёт только администрация.'],
+  ['Как примерить или подарить вещь из магазина?', 'Нажмите на картинку вещи или «Примерить» — увидите, как она будет выглядеть на вас. «Подарить» — выберите человека: листики спишутся у вас, вещь останется у него навсегда.'],
+  ['Как скрыть неприятные слова?', '«Настройки → Приватность → Фильтр слов». Сообщения, записи и уведомления с этими словами будут приходить свёрнутыми; открыть можно одним нажатием. Автор об этом не узнаёт.'],
+  ['Есть ли режим попроще, для старших?', 'Да: «Настройки → Оформление → Простой режим». Крупный текст, на главном экране только чаты, лента и профиль.'],
   ['Что за номер 🍃 #… в профиле?', 'Это порядковый номер по дате регистрации. Он есть только у первой тысячи пользователей, купить его нельзя, и он остаётся навсегда.'],
   ['Как позвать друга?', 'Меню ☰ → «Позвать друзей». Там личная ссылка и QR-код. Друг открывает ссылку в браузере, регистрируется — и вы сразу друг у друга в контактах, обоим по 100 🍃.'],
   ['Сайт не открывается или грузится вечно', 'Сервер стоит на зарубежном хостинге, и у части российских операторов без VPN он работает с перебоями. Попробуйте другую сеть. Если приложение зависло на заставке, нажмите «Повторить».'],

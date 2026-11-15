@@ -1,7 +1,7 @@
 // «Лента»: записи людей и каналов. Текст и до четырёх картинок, лайки, комментарии, подписки на авторов.
 // Вкладка «Для вас» — рекомендации, «Новое» — всё подряд по времени. Лента догружается сама при прокрутке
 // и сама обновляется раз в две с половиной минуты. Автор записи видит, кто её посмотрел.
-import { html, useState, useEffect, useRef, S, bump, rpc, toast, Icon, Avatar, Badges, cx, userName, fmtShort, fmtNum, confirmDlg, pickFile, upload, Empty, Spinner, Modal, openModal, closeModal, local, showMenu, copyText } from './lib.js';
+import { html, useState, useEffect, useRef, S, bump, rpc, toast, Icon, Avatar, Badges, cx, userName, fmtShort, fmtNum, confirmDlg, pickFile, upload, Empty, Spinner, Modal, openModal, closeModal, local, showMenu, copyText, hitTrigger } from './lib.js';
 import { showChannel, myChannels, isChannel } from './store.js';
 import { openDock, ytFind, ytDock, oldShell } from './dock.js';
 
@@ -77,19 +77,27 @@ function Post({ p, users, follows, onChange, onDel, onFollow, onHide }) {
   const shown = long ? lines.slice(0, 10).join('\n').slice(0, 500).trimEnd() + '…' : p.text;
   const like = async () => { const on = !p.liked; onChange({ ...p, liked: on, likes: p.likes + (on ? 1 : -1) }); try { const r = await rpc('feed.like', { id: p.id, on }); onChange({ ...p, ...r }); } catch (e) { onChange(p); toast(e.message, 'err'); } };
   const del = async () => { if (!await confirmDlg({ title: 'Удалить запись?', text: 'Вместе с лайками и комментариями. Вернуть не получится.', ok: 'Удалить', danger: true })) return; try { await rpc('feed.del', { id: p.id }); onDel(p); } catch (e) { toast(e.message, 'err'); } };
-  const mine = p.by === S.me.id, fol = follows.includes(p.by);
+  const mine = p.by === S.me.id, fol = follows.includes(p.by), [shownT, setShownT] = useState(false), hid = !mine && !shownT && hitTrigger(p.text);
+  const promote = async () => {
+    let pr; try { pr = await rpc('feed.promo'); } catch (e) { return toast(e.message, 'err'); }
+    if ((S.me.stars || 0) < pr.price) return toast(`Продвижение стоит ${pr.price} 🍃, у вас ${S.me.stars || 0}. Листики можно докупить в магазине.`, 'err');
+    if (!await confirmDlg({ title: 'Продвинуть запись?', text: `На ${pr.hours} ч запись поднимется наверх «Ленты» у всех, кто её ещё не видел. Рядом с ней будет пометка «Продвигается». Стоит ${pr.price} 🍃; тем, кто скрыл вас из ленты или заблокировал, запись показана не будет.`, ok: `Продвинуть · ${pr.price} 🍃` })) return;
+    try { const r = await rpc('feed.promote', { id: p.id }); onChange({ ...p, ...r.post }); toast('Запись продвигается 🚀'); } catch (e) { toast(e.message, 'err'); }
+  };
   const yt = ch && !oldShell() ? ytFind(p.text) : null;      // ролик YouTube из канала играет прямо в ленте, в окне плеера
   const toChannel = () => showChannel(p.chat, p.username), toAuthor = () => (ch ? toChannel() : import('./panels.js').then(m => m.showProfile(p.by)));
   return html`<article class="post" ref=${box} data-pid=${p.id}>
     <header class="post-h"><button class="post-ava" onClick=${toAuthor} title=${ch ? 'Открыть канал' : 'Открыть профиль'} aria-label=${ch ? 'Открыть канал ' + p.title : 'Открыть профиль'}><${Avatar} u=${ch ? null : u} src=${ch ? p.avatar : u && u.avatar} name=${ch ? p.title : userName(u)} color=${ch ? p.color : u ? u.color : 0} s=${40} /></button>
-      <div class="post-who" onClick=${toAuthor}><b>${ch ? p.title : userName(u)} ${!ch && u && html`<${Badges} list=${(u.badges || []).slice(0, 1)} s=${14} />`}</b><small>${ch ? 'канал · ' : ''}${fmtShort(p.ts)}</small></div>
+      <div class="post-who" onClick=${toAuthor}><b>${ch ? p.title : userName(u)} ${!ch && u && html`<${Badges} list=${(u.badges || []).slice(0, 1)} s=${14} />`}</b><small>${ch ? 'канал · ' : ''}${fmtShort(p.ts)}${p.promo && html` · <span class="post-promo" title="Автор заплатил листиками, чтобы запись увидело больше людей"><${Icon} n="rocket" s=${12} /> Продвигается${mine ? ' до ' + new Date(p.promo).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}</span>`}</small></div>
       ${!ch && !mine && html`<button class=${cx('btn ghost post-fol', fol && 'on')} onClick=${() => onFollow(p.by, !fol)}><${Icon} n=${fol ? 'user-check' : 'user-plus'} s=${15} /><span>${fol ? 'Вы подписаны' : 'Подписаться'}</span></button>`}
+      ${!ch && mine && !p.promo && html`<button class="ib post-boost" title="Продвинуть запись за листики" aria-label="Продвинуть запись" onClick=${promote}><${Icon} n="rocket" s=${16} /></button>`}
       ${!ch && p.own && (mine || !onHide) && html`<button class="ib" title="Удалить запись" aria-label="Удалить запись" onClick=${del}><${Icon} n="trash-2" s=${16} /></button>`}
       ${onHide && !mine && html`<button class="ib" title="Ещё" aria-label="Ещё" onClick=${e => showMenu(e, [{ icon: ch ? 'megaphone' : 'user', label: ch ? 'Открыть канал' : 'Открыть профиль', run: toAuthor }, { icon: 'eye-off', label: 'Не интересно', hint: ch ? 'скрыть канал' : 'скрыть автора', run: () => onHide(p) }, !ch && p.own && { icon: 'trash-2', label: 'Удалить запись', danger: true, run: del }].filter(Boolean), { anchor: e.currentTarget })}><${Icon} n="ellipsis" s=${18} /></button>`}</header>
-    ${p.text && html`<p class="post-t">${yt ? shown.replace(/\n?https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/\S+\s*$/, '') : shown}</p>`}
-    ${long && html`<button class="post-more" onClick=${() => setFull(true)}>Показать полностью</button>`}
-    ${yt && html`<button class=${cx('ytc', yt.short && 'short')} onClick=${() => openDock(ytDock(yt, (p.text || '').split('\n')[0].replace(/^(?:▶️|🔴|⚡)\s*/, '').trim()))} title="Смотреть здесь, не уходя из «Нудиста»"><img src=${`https://i.ytimg.com/vi/${yt.id}/mqdefault.jpg`} alt="" loading="lazy" referrerpolicy="no-referrer" /><span class="ytc-play"><${Icon} n="play" s=${26} /></span><span class="ytc-l">Смотреть здесь</span></button>`}
-    ${p.media && p.media.length > 0 && html`<div class=${'post-m n' + Math.min(p.media.length, 5)}>${p.media.map(m => /\.(mp4|webm|mov)$/i.test(m) ? html`<video key=${m} src=${m + '#t=0.1'} controls playsinline preload="metadata"></video>` : /\.(m4a|mp3|ogg|oga|opus|aac|wav)$/i.test(m) ? html`<audio key=${m} src=${m} controls preload="none"></audio>` : html`<img key=${m} src=${m} alt="" loading="lazy" />`)}</div>`}
+    ${hid && html`<button class="trig" onClick=${() => setShownT(true)}><${Icon} n="eye-off" s=${15} /> Скрыто вашим фильтром слов · Показать</button>`}
+    ${!hid && p.text && html`<p class="post-t">${yt ? shown.replace(/\n?https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/\S+\s*$/, '') : shown}</p>`}
+    ${!hid && long && html`<button class="post-more" onClick=${() => setFull(true)}>Показать полностью</button>`}
+    ${!hid && yt && html`<button class=${cx('ytc', yt.short && 'short')} onClick=${() => openDock(ytDock(yt, (p.text || '').split('\n')[0].replace(/^(?:▶️|🔴|⚡)\s*/, '').trim()))} title="Смотреть здесь, не уходя из «Нудиста»"><img src=${`https://i.ytimg.com/vi/${yt.id}/mqdefault.jpg`} alt="" loading="lazy" referrerpolicy="no-referrer" /><span class="ytc-play"><${Icon} n="play" s=${26} /></span><span class="ytc-l">Смотреть здесь</span></button>`}
+    ${!hid && p.media && p.media.length > 0 && html`<div class=${'post-m n' + Math.min(p.media.length, 5)}>${p.media.map(m => /\.(mp4|webm|mov)$/i.test(m) ? html`<video key=${m} src=${m + '#t=0.1'} controls playsinline preload="metadata"></video>` : /\.(m4a|mp3|ogg|oga|opus|aac|wav)$/i.test(m) ? html`<audio key=${m} src=${m} controls preload="none"></audio>` : html`<img key=${m} src=${m} alt="" loading="lazy" />`)}</div>`}
     <footer class="post-f">${ch
       ? html`<button class="post-a" onClick=${toChannel}><${Icon} n="megaphone" s=${17} /> ${yt ? 'Открыть канал' : 'Читать в канале'}</button>`
       : html`<button class=${cx('post-a', p.liked && 'on')} aria-pressed=${!!p.liked} title="Нравится" onClick=${like}><${Icon} n="heart" s=${18} /> ${p.likes ? fmtNum(p.likes) : ''}</button>

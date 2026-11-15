@@ -108,6 +108,8 @@ setInterval(() => { const t = now(); for (const [uid, f] of feeds) if (!f.waiter
 
 const KIND = { photo: 'Фото', video: 'Видео', voice: 'Голосовое сообщение', round: 'Кружочек', file: 'Файл', sticker: 'Стикер', gif: 'GIF', poll: 'Опрос', geo: 'Геопозиция', contact: 'Контакт', music: 'Музыка' };
 const plain = t => String(t).replace(/\*\*|__|~~|\|\||`/g, '').replace(/\s+/g, ' ').trim();
+// Личный фильтр слов (настройка triggers): текст с такими словами в уведомление не попадает
+const muted = (u, t) => { const l = u.settings && u.settings.triggers; if (!t || !Array.isArray(l) || !l.length) return false; const low = String(t).toLowerCase(); return l.slice(0, 50).some(w => typeof w === 'string' && w.length >= 2 && low.includes(w.toLowerCase())); };
 // Что написать в уведомлении о сообщении; null — уведомлять не о чем
 function describe(uid, chat, m, mention, s) {
   const u = db.users[uid]; if (!u || m.from === uid || (u.blocked || []).includes(m.from)) return null;
@@ -115,7 +117,7 @@ function describe(uid, chat, m, mention, s) {
   if ((chat.type === 'channel' || chat.server) && !mention) return null;      // каналы и серверы шумные: только упоминания
   if (m.type === 'call' && !(m.call && m.call.missed)) return null;      // запись о состоявшемся звонке не повод будить телефон
   const from = db.users[m.from], who = from ? from.name : 'Нудист', group = chat.type !== 'dm' && chat.type !== 'secret';
-  let body = m.enc || chat.type === 'secret' ? 'Новое сообщение' : m.once ? 'Одноразовое фото или видео' : m.type === 'call' ? 'Пропущенный звонок' : m.text ? plain(m.text) : KIND[m.type] || 'Новое сообщение';
+  let body = m.enc || chat.type === 'secret' ? 'Новое сообщение' : m.once ? 'Одноразовое фото или видео' : m.type === 'call' ? 'Пропущенный звонок' : m.text && muted(u, m.text) ? 'Сообщение скрыто вашим фильтром слов' : m.text ? plain(m.text) : KIND[m.type] || 'Новое сообщение';
   if (group && !m.enc) body = who + ': ' + body;
   return { title: group ? chat.title || 'Группа' : who, body: body.slice(0, 140), tag: m.type === 'call' ? 'call' : chat.id, url: '/' };
 }

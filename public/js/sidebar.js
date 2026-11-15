@@ -4,7 +4,7 @@ import { openChat, openUser, logout, accounts, switchAccount, addAccount, totalU
 import { CreateChat, ContactsModal, showProfile, StatusDlg, BotsCatalog, StarsModal, chatActions, JoinPreview, CallsModal, FolderEditor } from './panels.js';
 import { CreateServer, Discover, openServerSettings, ChannelDlg, EventsModal, InviteModal, RoleMsgDlg } from './guildui.js';
 import { RTC, joinVoice, leaveVoice, toggleMute, toggleDeaf } from './rtc.js';
-import { StoryEditor } from './media.js';
+import { StoryEditor, AudioBar } from './media.js';
 import { openSettings } from './settings.js';
 import { openHub, openApps, openSupport } from './hub.js';
 import { Streak, openInvite, openAsk, openPush, installApp, isStandalone, StartCards, PushStrip } from './growth.js';
@@ -45,8 +45,8 @@ export function NavBar() {
   return html`<nav class="nav" aria-label="Разделы">
     <button class=${cx(tab === 'chats' && 'on')} onClick=${goChats} aria-label="Чаты"><span class="nav-i"><${Icon} n="message-circle" s=${22} />${n > 0 && html`<b class="rb">${n > 99 ? '99+' : n}</b>`}</span><small>Чаты</small></button>
     <button class=${cx(tab === 'feed' && 'on')} onClick=${() => openHub('feed')} aria-label=${'Лента: записи, каналы и видео' + (chN ? '. Новое в каналах: ' + chN : '')}><span class="nav-i"><${Icon} n="list" s=${22} />${chN > 0 && html`<b class="rb dot"></b>`}</span><small>Лента</small></button>
-    <button class=${cx(tab === 'hub' && 'on')} onClick=${() => openHub()} aria-label="Хаб: события, музыка, игры, поддержка"><span class="nav-i"><${Icon} n="layout-grid" s=${22} /></span><small>Хаб</small></button>
-    <button onClick=${() => openShop()} aria-label="Магазин"><span class="nav-i"><${Icon} n="store" s=${22} />${due && html`<b class="rb dot"></b>`}</span><small>Магазин</small></button>
+    <button class=${cx('nv-x', tab === 'hub' && 'on')} onClick=${() => openHub()} aria-label="Хаб: события, музыка, игры, поддержка"><span class="nav-i"><${Icon} n="layout-grid" s=${22} /></span><small>Хаб</small></button>
+    <button class="nv-x" onClick=${() => openShop()} aria-label="Магазин"><span class="nav-i"><${Icon} n="store" s=${22} />${due && html`<b class="rb dot"></b>`}</span><small>Магазин</small></button>
     <button onClick=${accMenu} aria-label="Профиль и настройки"><span class="nav-i"><${Avatar} u=${me} src=${me.avatar} name=${userName(me)} color=${me.color} s=${24} /></span><small>Профиль</small></button>
   </nav>`;
 }
@@ -163,7 +163,18 @@ function HomeSidebar() {
   const clubs = S.ui.archive || fid !== 'all' ? [] : Object.values(S.servers).map(sv => { const st = { club: sv, n: 0, m: 0, ts: 0, rooms: 0 }; for (const c of Object.values(S.chats)) if (c.server === sv.id) { st.rooms++; if (!isMuted(c)) st.n += c.unread || 0; st.m += c.mentions || 0; st.ts = Math.max(st.ts, (c.last ? c.last.ts : 0) || 0); } return st; });
   const rows = clubs.length ? [...list, ...clubs].sort((a, b) => (b.pin || 0) - (a.pin || 0) || ((b.club ? b.ts : (b.last ? b.last.ts : b.created)) || 0) - ((a.club ? a.ts : (a.last ? a.last.ts : a.created)) || 0)) : list;
   const count = f => live.filter(c => inFolder(c, f) && c.unread > 0 && !isMuted(c)).length;
-  const menu = e => showMenu(e, [
+  const menu = e => showMenu(e, S.settings.simple ? [      /* простой режим: короткое меню без редких функций */
+    { icon: 'contact', label: 'Контакты', run: () => openModal(ContactsModal) },
+    { icon: 'phone', label: 'Звонки', run: () => openModal(CallsModal) },
+    { icon: 'users', label: 'Новая группа', run: () => openModal(CreateChat, { type: 'group' }) },
+    '-',
+    { icon: 'layout-grid', label: 'Хаб: музыка, игры, события', run: () => openHub() },
+    { icon: 'store', label: 'Магазин', run: () => openShop() },
+    { icon: 'life-buoy', label: 'Помощь и поддержка', run: () => openHub('help') },
+    '-',
+    { icon: 'settings', label: 'Настройки', run: () => openSettings() },
+    { icon: 'accessibility', label: 'Выключить простой режим', run: () => { setSetting({ simple: false }); toast('Простой режим выключен'); } },
+  ] : [
     { icon: 'venetian-mask', label: 'Голая правда', hint: 'анонимные вопросы', run: openAsk },
     { icon: 'heart', label: 'Выдохнуть', hint: 'дыхание, настроение, тишина', run: openCalm },
     { icon: 'bell', label: 'Уведомления', hint: 'когда приложение закрыто', run: openPush },
@@ -207,6 +218,7 @@ function HomeSidebar() {
         ${!S.ui.archive && fid === 'all' && !S.ui.server && html`<${StartCards} side=${true} />`}
         ${!rows.length && html`<${Empty} icon=${S.ui.archive ? 'archive' : 'message-circle'} title=${S.ui.archive ? 'Архив пуст' : 'Здесь пока голо'} text=${S.ui.archive ? 'Чаты из архива возвращаются сами, когда в них пишут.' : fid === 'all' ? 'Найдите людей через поиск или заведите свою группу или канал.' : 'В этой папке нет чатов.'}>${!S.ui.archive && fid === 'all' && html`<button class="btn" onClick=${() => openModal(CreateMenu)}><${Icon} n="plus" s=${16} /> Создать</button>`}<//>`}
       </div>`}
+    <${AudioBar} side=${true} />
     <${MeBar} />
   </aside>`;
 }
@@ -251,6 +263,7 @@ function ServerSidebar({ s }) {
       </div>`)}
       ${!chans.length && html`<${Empty} icon="hash" title="Каналов нет" text="Создайте первый канал через меню группы." />`}
     </div>
+    <${AudioBar} side=${true} />
     <${MeBar} />
   </aside>`;
 }

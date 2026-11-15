@@ -118,10 +118,12 @@ function badges(u) {
   const b = [...(u.badges || [])];
   const tier = tierOf(u); if (tier) b.push(tier === 'plus' ? 'premium' : tier);
   if (u.bot || ROBOTS.has(u.id)) b.push('bot');
-  if (u.snowWin) b.push('snow');      // золотой значок десятки лучших в «Снежном коме»
+  if (u.snowWin) b.push('snow');
+  { const sb = u.cos && shopHooks.badge(u); if (sb) b.push('shop_' + sb); }      // значок из магазина: украшение, а не подтверждение      // золотой значок десятки лучших в «Снежном коме»
   if (u.label && (u.label.t || u.label.e)) b.push({ t: u.label.t, e: u.label.e, c: u.label.c || 0 });      // особый статус от администрации — плашка рядом с именем
   return b;
 }
+let shopHooks = { badge: () => null, col: () => [] }; const setShopHooks = h => { shopHooks = h; }; const collection = u => shopHooks.col(u);
 let noHook = () => undefined; const setNoHook = f => { noHook = f; };      // номер «первого» в профиле считает server/calm.js
 function pubUser(u, vid) {
   if (!u) return null;
@@ -546,4 +548,4 @@ function senior(scope, rankOf, actor, key, what, peek) {
 }
 const CHAT_RANK = { owner: 3, admin: 2, mod: 1, member: 0 };
 const chatRank = ch => uid => CHAT_RANK[((ch.members || {})[uid] || {}).role] || 0;
-module.exports = { setNoHook, senior, chatRank, CHAT_RANK, canGrant, TIERS, tierOf, setCosHook, setSelfHook, unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { setNoHook, setShopHooks, collection, senior, chatRank, CHAT_RANK, canGrant, TIERS, tierOf, setCosHook, setSelfHook, unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

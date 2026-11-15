@@ -10,6 +10,7 @@ import qrcode from '/vendor/qrcode.js';
 import { ServerPanel } from './guildui.js';
 import { startCall } from './rtc.js';
 import { openSettings, AdminRoleDlg } from './settings.js';
+import { Collection, openGiftItems } from './perks.js';
 
 // ═════ QR ═════
 export function QR({ text, size = 180 }) {
@@ -21,10 +22,10 @@ const link = h => location.origin + '/#' + h;
 function QrModal({ id, title, text, hint }) { return html`<${Modal} id=${id} title=${title} icon="qr-code" cls="small"><div class="qr-box"><${QR} text=${text} size=${220} /></div><p class="hint center">${hint}</p><div class="copy-row"><input readonly value=${text} onFocus=${e => e.target.select()} /><button class="btn" onClick=${() => { copyText(text); toast('Ссылка скопирована'); }}>Копировать</button></div><//>`; }
 
 // ═════ Выбор пользователей ═════
-function UserPicker({ id, title, ok = 'Готово', multi, res, exclude = [] }) {
+function UserPicker({ id, title, ok = 'Готово', multi, res, exclude = [], noBots }) {
   const [q, setQ] = useState(''), [sel, setSel] = useState([]), [found, setFound] = useState(null);
-  const base = useMemo(() => { const ids = new Set(S.me.contacts || []); for (const c of Object.values(S.chats)) if (c.type === 'dm' && c.peer) ids.add(c.peer); return [...ids].map(i => S.users[i]).filter(u => u && !u.deleted && !exclude.includes(u.id)); }, []);
-  const search = useRef(debounce(async s => { if (s.length < 2) return setFound(null); try { const r = await rpc('search', { q: s }); for (const u of r.users) S.users[u.id] = { ...S.users[u.id], ...u }; setFound(r.users.filter(u => !exclude.includes(u.id))); } catch (e) { setFound([]); } }, 250)).current;
+  const base = useMemo(() => { const ids = new Set(S.me.contacts || []); for (const c of Object.values(S.chats)) if (c.type === 'dm' && c.peer) ids.add(c.peer); return [...ids].map(i => S.users[i]).filter(u => u && !u.deleted && !exclude.includes(u.id) && !(noBots && u.bot)); }, []);
+  const search = useRef(debounce(async s => { if (s.length < 2) return setFound(null); try { const r = await rpc('search', { q: s }); for (const u of r.users) S.users[u.id] = { ...S.users[u.id], ...u }; setFound(r.users.filter(u => !exclude.includes(u.id) && !(noBots && u.bot))); } catch (e) { setFound([]); } }, 250)).current;
   const s = q.trim().toLowerCase(), list = found || base.filter(u => !s || (userName(u) + ' ' + (u.username || '')).toLowerCase().includes(s));
   const done = v => { res(v); closeModal(id); };
   return html`<${Modal} id=${id} title=${title} icon="users" cls="small" onClose=${() => res(null)} footer=${multi && html`<button class="btn" disabled=${!sel.length} onClick=${() => done(sel)}>${ok}${sel.length ? ' · ' + sel.length : ''}</button>`}>
@@ -39,7 +40,7 @@ function Profile({ id, userId, username, tab: tab0 }) {
   // Профиль открывается сразу из того, что уже известно о человеке (свой — всегда, чужой — если он есть в чатах), а свежие данные подгружаются следом.
   // Раньше окно ждало ответа сервера и на плохой связи висело с одним листиком до полуминуты.
   const known = userId ? (userId === S.me.id ? S.me : S.users[userId]) : Object.values(S.users).find(x => x && x.username && username && x.username.toLowerCase() === String(username).replace(/^@/, '').toLowerCase());
-  const [d, setD] = useState(known && !known.deleted ? { user: known, common: [], stale: true } : null), [tab, setTab] = useState(tab0 === 'gifts' ? 'gifts' : 'info'), [gn, setGn] = useState(0), [err, setErr] = useState('');
+  const [d, setD] = useState(known && !known.deleted ? { user: known, common: [], stale: true } : null), [tab, setTab] = useState(tab0 === 'gifts' ? 'gifts' : tab0 === 'col' ? 'col' : 'info'), [gn, setGn] = useState(0), [err, setErr] = useState('');
   const load = () => { setErr(''); let over = false;
     const t = setTimeout(() => { if (!over) { over = true; setErr('Сервер долго не отвечает. Проверьте связь.'); } }, 12000);
     rpc('user.get', userId ? { id: userId } : { username }).then(r => { over = true; clearTimeout(t); S.users[r.user.id] = { ...S.users[r.user.id], ...r.user }; setGn(r.gifts || 0); setErr(''); setD(r); }).catch(e => { if (over) return; over = true; clearTimeout(t); setErr(e.message || 'Не получилось загрузить профиль'); }); };
@@ -62,6 +63,7 @@ function Profile({ id, userId, username, tab: tab0 }) {
       ${!me && !u.deleted && html`<div class="pf-acts"><button onClick=${() => go(() => openUser(u.id))}><${Icon} n="message-circle" /><span>Написать</span></button>${!u.bot && html`<button onClick=${async () => { await openUser(u.id); const c = Object.values(S.chats).find(x => x.type === 'dm' && x.peer === u.id); if (c) go(() => startCall(c.id, false)); }}><${Icon} n="phone" /><span>Позвонить</span></button><button onClick=${secret}><${Icon} n="lock" /><span>Секретный чат</span></button>`}<button onClick=${e => showMenu(e, [
         { icon: contact ? 'user-minus' : 'user-plus', label: contact ? 'Убрать из контактов' : 'В контакты', run: () => call('me.contact', { id: u.id, on: !contact }) },
         S.flags.stars && !u.bot && { emoji: '🎁', label: 'Подарить подарок', run: () => openGiftShop(u.id) },
+        S.flags.stars && !u.bot && { emoji: '✨', label: 'Подарить украшение', hint: 'рамку, цвет имени, значок', run: () => openGiftItems(u) },
         !u.bot && valentineOn() && { emoji: '💌', label: 'Отправить валентинку', run: () => sendValentine(u) },
         S.flags.stars && !u.bot && { emoji: '🍃', label: 'Поделиться листиками', run: () => shareLeaves(u.id) },
         u.username && { icon: 'qr-code', label: 'QR-код профиля', run: () => openModal(QrModal, { title: 'QR профиля', text: link('u=' + u.username), hint: 'Наведите камеру — откроется профиль @' + u.username }) },
@@ -71,8 +73,8 @@ function Profile({ id, userId, username, tab: tab0 }) {
         { icon: 'flag', label: 'Пожаловаться', danger: true, run: async () => { const t = await promptDlg({ title: 'Жалоба на пользователя', label: 'Что случилось?', area: true, ok: 'Отправить' }); if (t !== null) { const r = await call('report', { type: 'user', target: u.id, reason: 'other', text: t }); if (r) toast('Жалоба отправлена модераторам'); } } },
       ], { anchor: e.currentTarget })}><${Icon} n="ellipsis" /><span>Ещё</span></button></div>`}
       ${me && html`<div class="pf-acts"><button onClick=${() => go(() => openSettings('profile'))}><${Icon} n="pencil" /><span>Изменить</span></button><button onClick=${() => go(() => openModal(StatusDlg))}><${Icon} n="smile" /><span>Статус</span></button>${['admin', 'superadmin'].includes(S.me.admin) && html`<button onClick=${() => openModal(LabelDlg, { user: u.id })} title="Особый статус: плашка рядом с именем, выдаёт администрация"><${Icon} n="tag" /><span>Плашка</span></button>`}${u.username && html`<button onClick=${() => openModal(QrModal, { title: 'Мой QR', text: link('u=' + u.username), hint: 'Покажите этот код — и вас найдут. Даже если вы прикрылись.' })}><${Icon} n="qr-code" /><span>Мой QR</span></button>`}</div>`}
-      ${!u.bot && !u.deleted && html`<div class="tabs pf-tabs" role="tablist"><button role="tab" aria-selected=${tab === 'info'} class=${cx(tab === 'info' && 'on')} onClick=${() => setTab('info')}>Профиль</button><button role="tab" aria-selected=${tab === 'gifts'} class=${cx(tab === 'gifts' && 'on')} onClick=${() => setTab('gifts')}>🎁 Подарки${gn > 0 && html`<b>${gn}</b>`}</button></div>`}
-      ${tab === 'gifts' && !u.bot && !u.deleted ? html`<${GiftGrid} user=${u.id} onTotal=${setGn} />` : html`
+      ${!u.bot && !u.deleted && html`<div class="tabs pf-tabs" role="tablist"><button role="tab" aria-selected=${tab === 'info'} class=${cx(tab === 'info' && 'on')} onClick=${() => setTab('info')}>Профиль</button><button role="tab" aria-selected=${tab === 'gifts'} class=${cx(tab === 'gifts' && 'on')} onClick=${() => setTab('gifts')}>🎁 Подарки${gn > 0 && html`<b>${gn}</b>`}</button><button role="tab" aria-selected=${tab === 'col'} class=${cx(tab === 'col' && 'on')} onClick=${() => setTab('col')}>✨ Вещи${(d.col || []).length > 0 && html`<b>${d.col.length}</b>`}</button></div>`}
+      ${tab === 'col' && !u.bot && !u.deleted ? html`<${Collection} list=${d.col} user=${u} mine=${me} />` : tab === 'gifts' && !u.bot && !u.deleted ? html`<${GiftGrid} user=${u.id} onTotal=${setGn} />` : html`
       ${u.private && html`<p class="hint">🔒 Закрытый профиль: подробности видят только контакты.</p>`}
       ${u.bio && html`<div class="pf-row"><small>О себе</small><p>${u.bio}</p></div>`}
       ${u.username && html`<button class="pf-row click" onClick=${() => { copyText('@' + u.username); toast('Username скопирован'); }}><small>Username</small><p>@${u.username}</p></button>`}

@@ -22,6 +22,7 @@ H['mood.clear'] = c => { delete db.users[c.uid].mood; save(); return { days: {} 
 
 // ───── Капсула времени: сообщение в личке, запечатанное до выбранного дня. До срока текст не отдаётся никому (даже автору),
 // в срок сообщение открывается само и адресату приходит уведомление. Бесплатно, открыть раньше нельзя ни за какие листики.
+const CAP_EARLY = Number(process.env.CAPSULE_EARLY) || 300;      // листиков за досрочное открытие
 const CAP_MAX = 10, CAP_MIN = Number(process.env.CAPSULE_MIN_MS) || 3600e3,      // переменные окружения — только для проверок
   TICK = Number(process.env.CAPSULE_TICK_MS) || 60e3, CAP_FAR = 5 * 366 * 864e5;
 const caps = () => (db.meta.caps = db.meta.caps || []);
@@ -33,7 +34,7 @@ H['capsule.new'] = (c, p) => {
   need(caps().filter(x => x.by === u.id).length < CAP_MAX, `Одновременно можно держать ${CAP_MAX} запечатанных капсул`);
   A.limit('capsule:' + u.id, 10, 3600e3);
   const ch = C.openDm(u.id, o.id); R.checkSend(c, ch, { type: 'text' });
-  const m = C.postMessage(ch, u.id, { text: '🔒 Капсула времени', cap: { at, made: now() } });
+  const m = C.postMessage(ch, u.id, { text: '🔒 Капсула времени', cap: { at, made: now(), ...(p.lock ? { lock: true } : { early: CAP_EARLY }) } });      /* lock — автор запретил открывать раньше срока */
   m.capText = text;
   caps().push({ chat: ch.id, mid: m.id, at, by: u.id }); save();
   return { chat: ch.id, id: m.id, at };
@@ -45,6 +46,19 @@ H['capsule.cancel'] = (c, p) => {
   if (ch) C.deleteMessages(ch, [x.mid], c.uid);
   save(); return { ok: true };
 };
+function unseal(ch, m, by, t, early) {
+  m.text = m.capText || ''; delete m.capText; m.cap = { at: m.cap.at, made: m.cap.made, open: t, ...(early ? { paid: true } : {}) }; C.updateMsg(ch, m);
+  C.postMessage(ch, by, { text: early ? `💌 Капсулу времени открыли раньше срока. Запечатана ${dateRu(m.cap.made)}.` : `💌 Капсула времени открылась. Запечатана ${dateRu(m.cap.made)}.`, reply: m.id });
+}
+// Досрочно: открыть может только адресат, за листики, и только если автор этого не запретил. Листики сгорают — автору они не уходят.
+H['capsule.open'] = (c, p) => {
+  const u = db.users[c.uid], i = caps().findIndex(x => x.chat === str(p.chat, 80) && x.mid === str(p.id, 40)); need(i >= 0, 'Капсула не найдена или уже открыта');
+  const x = caps()[i], ch = db.chats[x.chat]; need(ch && ch.members && ch.members[u.id] && x.by !== u.id, 'Открыть досрочно может только тот, кому капсула адресована');
+  const m = C.findMsg(ch.id, x.mid); need(m && m.cap && !m.cap.open, 'Капсула не найдена или уже открыта'); need(!m.cap.lock && m.cap.early > 0, 'Автор запретил открывать эту капсулу раньше срока');
+  R.spend(u, m.cap.early, 'Или просто дождитесь срока — тогда она откроется бесплатно.');
+  caps().splice(i, 1); unseal(ch, m, x.by, now(), true); save(); R.selfUpdate(u);
+  return { ok: true, stars: u.stars };
+};
 // Раз в минуту открываем созревшие капсулы.
 function openDue() {
   const t = now(), list = caps(); if (!list.some(x => x.at <= t)) return;
@@ -52,8 +66,7 @@ function openDue() {
     if (x.at > t) return true;
     try {
       const ch = db.chats[x.chat], m = ch && C.findMsg(ch.id, x.mid); if (!m || !m.cap) return false;
-      m.text = m.capText || ''; delete m.capText; m.cap = { ...m.cap, open: t }; C.updateMsg(ch, m);
-      C.postMessage(ch, x.by, { text: `💌 Капсула времени открылась. Запечатана ${dateRu(m.cap.made)}.`, reply: m.id });
+      unseal(ch, m, x.by, t);
     } catch (e) { console.error('[capsule]', e.message); }
     return false;
   });

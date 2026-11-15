@@ -25,7 +25,9 @@ let order = null;      // id записей от новых к старым; с�
 const sorted = () => order || (order = Object.values(db.posts).sort((a, b) => b.ts - a.ts).map(p => p.id));
 // длинные посты каналов (новости целиком) в общей ленте показываем началом — целиком они читаются в самом канале
 const clip = t => { if (t.length <= 900) return t; const cut = t.lastIndexOf('\n', 800); return t.slice(0, cut > 300 ? cut : 800).replace(/[\s.…,;:]+$/, '') + '…'; };
-const view = (p, u) => ({ id: p.id, by: p.by, ts: p.ts, text: p.text, media: p.media || [], likes: count(p.likes), liked: !!p.likes[u.id], comments: (p.cm || []).length, views: p.views || 0, own: p.by === u.id || isMod(u), share: !(db.users[p.by] || {}).private || undefined });
+const PROMO = { price: Number(process.env.PROMO_PRICE) || 500, ms: 24 * 3600e3 };      // «Продвинуть»: сутки запись стоит выше в «Ленте» у тех, кто её ещё не видел
+const promoOn = p => (p.promo || 0) > now();
+const view = (p, u) => ({ id: p.id, by: p.by, ts: p.ts, text: p.text, media: p.media || [], likes: count(p.likes), liked: !!p.likes[u.id], comments: (p.cm || []).length, views: p.views || 0, own: p.by === u.id || isMod(u), mine: p.by === u.id || undefined, promo: promoOn(p) ? p.promo : undefined, share: !(db.users[p.by] || {}).private || undefined });
 const post = p => { const x = db.posts[str(p.id, 32)]; need(x, 'Запись не найдена. Возможно, автор передумал.'); return x; };
 // Автор виден, если он существует, не удалён и никто из двоих не заблокировал другого
 function visible(by, u) { const a = db.users[by]; return !!a && !a.deleted && !(a.blocked || []).includes(u.id) && !(u.blocked || []).includes(by); }
@@ -84,6 +86,7 @@ function recommend(u) {
     s *= hasMedia ? 1.15 : (x.text || '').length < 20 ? 0.7 : 1;
     s *= 0.85 + 0.3 * noise(u.id + day + x.id);
     if (!seen && ageH < 12 && (fol.has(x.by) || pals.has(x.by))) s *= 2.5;   // свежая запись «своего» человека, которую ещё не видели, — в самый верх
+    if (promoOn(x) && !seen && x.by !== u.id) s = s * 6 + 1.5;              // оплаченное продвижение: наверх у тех, кто ещё не видел. Скрытых авторов и чёрные списки оно не пробивает
     if (x.by === u.id) s *= 100; else if (seen) s *= 0.03;                   // уже видели — в хвост
     return { ref: x.id, by: x.by, s };
   });
@@ -162,6 +165,13 @@ H['feed.post'] = (c, p) => {
   const ts = imp && Number(p.ts) > 0 ? Math.min(now() + 31 * 864e5, Math.round(Number(p.ts))) : now();
   const x = { id: id(), by: u.id, ts, text, media, likes: {} }; db.posts[x.id] = x; order = null; save();
   return view(x, u);
+};
+H['feed.promo'] = () => ({ price: PROMO.price, hours: PROMO.ms / 3600e3 });
+H['feed.promote'] = (c, p) => {
+  const u = me(c), x = post(p); need(x.by === u.id, 'Продвигать можно только свои записи'); need(x.ts <= now(), 'Запись ещё не вышла'); need(!promoOn(x), 'Эта запись уже продвигается');
+  R.spend(u, PROMO.price, 'Листики можно накопить или докупить в магазине.');
+  x.promo = now() + PROMO.ms; x.promoN = (x.promoN || 0) + 1; recCache.clear(); save(); R.selfUpdate(u);
+  return { ok: true, post: view(x, u), stars: u.stars };
 };
 H['feed.del'] = (c, p) => {
   const x = post(p), u = me(c); need(x.by === u.id || isMod(u), 'Удалять можно только свои записи');

@@ -1,5 +1,5 @@
 // Окно чата: шапка, закрепы, поиск, лента сообщений, треды, форум.
-import { svcText, html, useState, useEffect, useRef, useLayoutEffect, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, Badges, cx, showMenu, closeMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtTime, fmtDay, fmtFull, fmtShort, sameDay, userName, lastSeen, kindIcon, md, copyText, confirmDlg, promptDlg, addUsers, Empty, Spinner, plural, fmtNum, fmtDur, ttlLabel, isMuted, setSetting, debounce } from './lib.js';
+import { svcText, html, useState, useEffect, useRef, useLayoutEffect, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, Badges, cx, showMenu, closeMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtTime, fmtDay, fmtFull, fmtShort, sameDay, userName, lastSeen, kindIcon, md, copyText, confirmDlg, promptDlg, addUsers, Empty, Spinner, plural, fmtNum, fmtDur, ttlLabel, isMuted, setSetting, debounce , hitTrigger } from './lib.js';
 import { msgKey, loadHistory, openChat, closeChat, openUser, markRead, retryMsg, secretIssue, ensureKey } from './store.js';
 import { Sticker, sfx } from './fun.js';
 import { OnceMsg, Streak, answerAsk } from './growth.js';
@@ -215,7 +215,8 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const multi = chat.type === 'group' || !!chat.server || (chat.type === 'channel' && thread);
   const showAva = !chan || flat ? (flat ? !grouped : multi && !out && !grouped) : false, showName = !grouped && (flat || (multi && !out) || m.hook);
   const bare = (m.type === 'sticker' || m.type === 'round') && !m.reply && !m.fwd;
-  const rx = m.rx ? Object.entries(m.rx) : [], text = m.type !== 'sticker' && m.type !== 'call' ? m.text : '';
+  const hid = !mine && !m._shown && !!m.text && hitTrigger(m.text);      // личный фильтр слов: сообщение свёрнуто, пока человек сам не откроет
+  const rx = m.rx ? Object.entries(m.rx) : [], text = hid ? '' : m.type !== 'sticker' && m.type !== 'call' ? m.text : '';
   const long = !!text && text.length > 1600;      // длинный текст (новость целиком) показываем началом, остальное — по кнопке
   const yt = text && chat.type !== 'secret' && !oldShell() ? ytFind(text) : null;      // ролик YouTube играет прямо здесь, в окне плеера
   const onClick = e => { if (!sel) return; e.preventDefault(); e.stopPropagation(); S.ui.sel = sel.includes(m.id) ? sel.filter(x => x !== m.id) : [...sel, m.id]; bump(); };
@@ -230,7 +231,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
       ${m.fwd && html`<button class="fwd" onClick=${() => m.fwd.chat && S.chats[m.fwd.chat] ? openChat(m.fwd.chat) : m.fwd.username ? openModal(JoinPreview, { q: '@' + m.fwd.username }) : m.fwd.from && showProfile(m.fwd.from)}><${Icon} n="forward" s=${13} /> Переслано от <b>${m.fwd.name || userName(S.users[m.fwd.from])}</b></button>`}
       ${m.title && html`<h4 class="post-t">${m.title}</h4>`}
       ${(m.rq || m.quote) && html`<button class="rq" onClick=${e => { e.stopPropagation(); m.reply && onJump(m.reply); }}><b>${m.rq ? m.rq.name : 'Цитата'}</b><span>${m.quote || (m.rq && (m.rq.text || msgPreview({ type: m.rq.type, text: '' }))) || 'сообщение'}</span></button>`}
-      <${Body} m=${m} chat=${chat} list=${list} />
+      ${hid ? html`<button class="trig" onClick=${e => { e.stopPropagation(); m._shown = true; bump(); }}><${Icon} n="eye-off" s=${15} /> Скрыто вашим фильтром слов · Показать</button>` : html`<${Body} m=${m} chat=${chat} list=${list} />`}
       ${text && html`<div class="txt" dangerouslySetInnerHTML=${{ __html: md(long && !m._open ? clipText(text) : text, mdOpt(chat)) }}></div>`}
       ${text && packLink(text) && html`<button class="pack-chip" onClick=${e => { e.stopPropagation(); const l = packLink(text); import('./stickers.js').then(s => s.importLink(l)).catch(x => toast(x.message || 'Не получилось забрать набор', 'err')); }}><${Icon} n="sticker" s=${16} /><span><b>Набор стикеров</b><small>${packLink(text).split('/').pop()}</small></span><i>Добавить себе</i></button>`}
       ${long && html`<button class="txt-more" onClick=${e => { e.stopPropagation(); const el = e.currentTarget.closest('.msg'); m._open = !m._open; bump(); if (!m._open && el) setTimeout(() => el.scrollIntoView({ block: 'nearest' }), 30); }}>${m._open ? 'Свернуть' : `Читать полностью · ${readMin(text)}`}</button>`}

@@ -20,6 +20,7 @@ require('./gifts');
 require('./events');
 require('./year');
 require('./calm');
+require('./perks');
 require('./tgpacks');
 require('./tunes');
 require('./common');

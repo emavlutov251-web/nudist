@@ -1,13 +1,14 @@
 // Магазин: украшения за листики, подписка Plus / Pro / Max, наборы, листики за рубли, сезон. Серверная часть — server/shop.js.
-import { html, useState, useEffect, S, rpc, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, confirmDlg, promptDlg, setSetting, Spinner, on, Nm } from './lib.js';
+import { html, useState, useEffect, S, rpc, toast, Icon, Avatar, Badges, cx, openModal, closeModal, Modal, userName, confirmDlg, promptDlg, setSetting, Spinner, on, Nm } from './lib.js';
 import { sfx, confetti, Sticker, PACKS } from './fun.js';
 import { buyItem } from './pay.js';
 import { GiftMarket } from './gifts.js';
+import { openTryOn, giftItem } from './perks.js';
 
 const num = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 const TIER = { plus: 'Plus', pro: 'Pro', max: 'Max' };
 const INCLUDED = { plus: ['common'], pro: ['common', 'rare'], max: ['common', 'rare', 'epic', 'legendary'] };
-const RARITY = { common: 'обычная', rare: 'редкая', epic: 'эпическая', legendary: 'легендарная', season: 'награда пропуска', event: 'только на событии' };
+const RARITY = { common: 'обычная', rare: 'редкая', epic: 'эпическая', legendary: 'легендарная', season: 'награда пропуска', event: 'только на событии', badge: 'значок', secret: 'тайная витрина' };
 // Редкость вещей: нужна, чтобы без запроса к серверу понять, входит ли вещь в тариф (стикеры в панели, темы в настройках).
 const ITEM_TIER = { stickers_space: 'common', stickers_party: 'common', stickers_memes: 'rare', stickers_anime: 'epic', theme_sand: 'common', theme_forest: 'rare', theme_neon: 'epic', theme_void: 'epic' };
 export const SHOP_THEMES = [['sand', 'Песок'], ['forest', 'Лес'], ['neon', 'Неон'], ['void', 'Пустота']];
@@ -16,7 +17,7 @@ export const hasItem = id => { const me = S.me || {}; return (me.owned || []).in
 export const openShop = tab => openModal(ShopModal, { tab });
 
 // ───── эффект сообщения: короткая вспышка над пузырём, когда сообщение только что пришло
-const FX = { sparkle: ['✨', '⭐', '💫'], hearts: ['💕', '❤️', '💖'], confetti: ['🎉', '🎊', '✨'], lightning: ['⚡', '💥', '⚡'], bubbles: ['🫧', '💧', '🫧'], goldsand: ['✨', '🟡', '⏳'], firework: ['🎆', '🎇', '✨'], blank: ['📄', '🤍', '▫️'], petals: ['🌸', '🌷', '🌸'], calm: ['🫧', '🍃', '☁️'], web: ['🕸️', '🕷️', '🕸️'], bats: ['🦇', '🌙', '🦇'] };
+const FX = { sparkle: ['✨', '⭐', '💫'], hearts: ['💕', '❤️', '💖'], confetti: ['🎉', '🎊', '✨'], lightning: ['⚡', '💥', '⚡'], bubbles: ['🫧', '💧', '🫧'], goldsand: ['✨', '🟡', '⏳'], firework: ['🎆', '🎇', '✨'], blank: ['📄', '🤍', '▫️'], petals: ['🌸', '🌷', '🌸'], calm: ['🫧', '🍃', '☁️'], web: ['🕸️', '🕷️', '🕸️'], bats: ['🦇', '🌙', '🦇'], meteor: ['☄️', '🌠', '✨'] };
 const played = new Set();
 export function fxBurst(el, kind) {
   const set = FX[kind]; if (!el || !set || S.settings.anim === false || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
@@ -30,12 +31,13 @@ export function MsgFx({ m }) {
 }
 
 // ───── окно магазина
-const KINDS = [['frame', 'Рамки аватара', 'видны всем'], ['gradient', 'Цвет имени', 'виден всем'], ['effect', 'Эффекты сообщений', 'видят собеседники'], ['theme', 'Темы оформления', 'видны только вам'], ['stickers', 'Наборы стикеров', '']];
-const SLOT = { frame: 'frame', gradient: 'grad', effect: 'fx' };
+const KINDS = [['frame', 'Рамки аватара', 'видны всем'], ['gradient', 'Цвет имени', 'виден всем'], ['effect', 'Эффекты сообщений', 'видят собеседники'], ['badge', 'Значки у имени', 'видны всем · украшение, а не подтверждение'], ['theme', 'Темы оформления', 'видны только вам'], ['stickers', 'Наборы стикеров', '']];
+const SLOT = { frame: 'frame', gradient: 'grad', effect: 'fx', badge: 'badge' };
 function Preview({ it }) {
   const me = S.me;
   if (it.kind === 'frame') return html`<${Avatar} u=${{ cos: { f: it.id.slice(6) } }} src=${me.avatar} name=${userName(me)} color=${me.color} s=${52} />`;
   if (it.kind === 'gradient') return html`<b class="shop-nm"><${Nm} u=${{ cos: { g: it.colors } }} name=${userName(me)} /></b>`;
+  if (it.kind === 'badge') return html`<span class="shop-bdg"><${Badges} list=${['shop_' + it.id.slice(6)]} s=${30} /></span>`;
   if (it.kind === 'theme') return html`<span class=${'shop-sw sw-' + it.id.slice(6)}><i></i><i></i><i></i></span>`;
   if (it.kind === 'stickers') { const p = PACKS.find(x => x.id === it.pack); return p ? html`<${Sticker} st=${p.items[0]} size=${56} onClick=${() => {}} />` : html`<span class="shop-em">${it.emoji}</span>`; }
   return html`<span class="shop-em">${it.emoji}</span>`;
@@ -64,6 +66,18 @@ function ShopModal({ id, tab: tab0 }) {
     run(() => rpc('shop.equip', onNow ? { kind: it.kind } : { id: it.id }), onNow ? 'Снято' : 'Надето');
   };
   const isOn = it => it.kind === 'theme' ? S.settings.theme === it.id.slice(6) : worn[SLOT[it.kind]] === it.id;
+  const gift = async it => { if (await giftItem(it)) load(); };
+  const canGift = it => it.price > 0 && it.tier !== 'season';
+  const tryOn = it => { const pk = it.kind === 'stickers' && PACKS.find(x => x.id === it.pack); openTryOn({ it, mine: it.owned || it.included, onBuy: buy, onWear: it.kind === 'stickers' ? null : wear, onGift: canGift(it) ? gift : null, stickers: pk ? html`<div class="try-st">${pk.items.slice(0, 8).map(st => html`<${Sticker} st=${st} size=${56} onClick=${() => {}} />`)}</div>` : null }); };
+  const card = it => { const mine = it.owned || it.included, onNow = mine && isOn(it); return html`<div class=${cx('shop-card', 'r-' + it.tier, mine && 'mine', onNow && 'worn')} key=${it.id}>
+            ${(it.deal || it.sale) && !mine && it.tier !== 'season' && html`<i class="shop-deal" title=${it.sale ? it.sale + ': скидка до конца события' : 'Скидка дня: только сегодня'}>−${it.off} %</i>`}
+            ${it.till && !mine && html`<i class="shop-till" title="Вещь события: потом её будет не купить">до ${new Date(it.till - 1).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</i>`}
+            <button class="shop-pv" onClick=${() => tryOn(it)} title="Примерить" aria-label=${'Примерить: ' + it.name}><${Preview} it=${it} /></button>
+            <b>${it.name}</b><small class="shop-r">${RARITY[it.tier]}${it.count ? ` · ${it.count} шт.` : ''}</small>
+            ${mine ? html`<button class=${cx('btn sm', onNow ? 'ghost' : '')} disabled=${busy || it.kind === 'stickers'} onClick=${() => wear(it)}>${it.kind === 'stickers' ? 'В панели стикеров' : onNow ? (it.kind === 'theme' ? 'Выключить' : 'Снять') : (it.kind === 'theme' ? 'Включить' : 'Надеть')}</button>${!it.owned && html`<small class="shop-inc">входит в тариф</small>`}`
+              : it.tier === 'season' ? html`<button class="btn sm ghost" onClick=${() => setTab('season')}>В пропуске сезона</button>` : html`<button class="btn sm" disabled=${busy} onClick=${() => buy(it)}>${it.off ? html`<s>${num(it.base)}</s> ` : ''}${num(it.price)} 🍃</button>`}
+            <div class="shop-links"><a onClick=${() => tryOn(it)}>Примерить</a>${canGift(it) && html`<a onClick=${() => gift(it)}>Подарить</a>`}</div>
+          </div>`; };
   const buyPlanLeaves = async p => {
     if (need(p.stars)) return;
     if (!(await confirmDlg({ title: 'Нудист ' + p.name, text: `Спишется ${num(p.stars)} 🍃 за ${p.days} дней${p.off ? ` (со скидкой ${p.off} % на продление)` : ''}. Рубли при этом не списываются, само ничего не продлевается.`, ok: 'Оформить' }))) return;
@@ -102,14 +116,10 @@ function ShopModal({ id, tab: tab0 }) {
       ${tab === 'cosmetics' && html`
         ${d.first > 0 && html`<p class="shop-note">Первая покупка украшения — со скидкой ${d.first} %.</p>`}
         ${KINDS.map(([k, title, sub]) => html`<h4 class="shop-h">${title}${sub && html`<small>${sub}</small>`}</h4>
-          <div class="shop-grid">${d.items.filter(i => i.kind === k).map(it => { const mine = it.owned || it.included, onNow = mine && isOn(it); return html`<div class=${cx('shop-card', 'r-' + it.tier, mine && 'mine', onNow && 'worn')} key=${it.id}>
-            ${(it.deal || it.sale) && !mine && it.tier !== 'season' && html`<i class="shop-deal" title=${it.sale ? it.sale + ': скидка до конца события' : 'Скидка дня: только сегодня'}>−${it.off} %</i>`}
-            ${it.till && !mine && html`<i class="shop-till" title="Вещь события: потом её будет не купить">до ${new Date(it.till - 1).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</i>`}
-            <div class="shop-pv"><${Preview} it=${it} /></div>
-            <b>${it.name}</b><small class="shop-r">${RARITY[it.tier]}${it.count ? ` · ${it.count} шт.` : ''}</small>
-            ${mine ? html`<button class=${cx('btn sm', onNow ? 'ghost' : '')} disabled=${busy || it.kind === 'stickers'} onClick=${() => wear(it)}>${it.kind === 'stickers' ? 'В панели стикеров' : onNow ? (it.kind === 'theme' ? 'Выключить' : 'Снять') : (it.kind === 'theme' ? 'Включить' : 'Надеть')}</button>${!it.owned && html`<small class="shop-inc">входит в тариф</small>`}`
-              : it.tier === 'season' ? html`<button class="btn sm ghost" onClick=${() => setTab('season')}>В пропуске сезона</button>` : html`<button class="btn sm" disabled=${busy} onClick=${() => buy(it)}>${it.off ? html`<s>${num(it.base)}</s> ` : ''}${num(it.price)} 🍃</button>`}
-          </div>`; })}</div>`)}`}
+          <div class="shop-grid">${d.items.filter(i => i.kind === k && i.tier !== 'secret').map(card)}</div>`)}
+        <h4 class="shop-h">Тайная витрина<small>${d.secret.open ? 'открыта для вас навсегда' : 'для самых запасливых'}</small></h4>
+        ${d.secret.open ? html`<div class="shop-grid secret">${d.items.filter(i => i.tier === 'secret').map(card)}</div><p class="hint">Вещи тайной витрины не входят ни в один тариф и не попадают под скидки. Их можно подарить.</p>`
+          : html`<div class="shop-locked"><${Icon} n="lock" s=${22} /><div><b>Закрыто</b><small>Витрина открывается, когда на счету набирается ${num(d.secret.from)} 🍃, и после этого остаётся открытой навсегда — даже если листики потрачены.${(me.stars || 0) > 0 ? ` Вам осталось ${num(Math.max(0, d.secret.from - (me.stars || 0)))} 🍃.` : ''}</small></div></div>`}`}
       ${tab === 'plans' && html`
         ${me.tier ? html`<p class="shop-note">Ваш тариф — ${TIER[me.tier]}${me.paidUntil ? `, оплачен до ${new Date(me.paidUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}` : ''}${me.trialUntil ? `${me.paidUntil ? '; ' : ', '}пробный Pro до ${new Date(me.trialUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}` : ''}.</p>` : d.trial.can && html`<div class="shop-trial"><div><b>Pro на ${d.trial.days} дня бесплатно</b><small>Один раз на аккаунт. Карта не нужна, потом ничего не спишется.</small></div><button class="btn" disabled=${busy} onClick=${trial}>Попробовать</button></div>`}
         ${me.tier && d.trial.can && html`<div class="shop-trial"><div><b>Pro на ${d.trial.days} дня бесплатно</b><small>Один раз на аккаунт. Оплаченный срок не тратится.</small></div><button class="btn" disabled=${busy} onClick=${trial}>Попробовать</button></div>`}

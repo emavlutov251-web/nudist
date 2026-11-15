@@ -87,6 +87,14 @@ function PassDlg({ id }) {
 
 // ───── приватность и 2FA
 const PRIV = [['phone', 'Номер телефона'], ['lastSeen', 'Время захода и «в сети»'], ['avatar', 'Фото профиля'], ['bio', 'О себе, город, ссылки'], ['calls', 'Кто может звонить'], ['msgs', 'Кто может писать первым'], ['invites', 'Кто может добавлять в группы'], ['stories', 'Кто видит истории по умолчанию']];
+// Личный фильтр слов: сообщения и записи с этими словами приходят свёрнутыми, открыть можно одним нажатием. Отправителю ничего не видно.
+function TriggerWords() {
+  const cur = (S.settings.triggers || []).join(', '), [v, setV] = useState(cur), [saved, setSaved] = useState(true);
+  const save = () => { const list = v.split(/[,;\n]+/).map(x => x.trim().toLowerCase()).filter((x, i, all) => x.length >= 2 && x.length <= 40 && all.indexOf(x) === i).slice(0, 50);      /* повторы отсеиваем без Set: в этом файле так назван переключатель */ setSetting({ triggers: list }); setV(list.join(', ')); setSaved(true); toast(list.length ? `Фильтр сохранён: ${list.length} ${list.length === 1 ? 'слово' : list.length < 5 ? 'слова' : 'слов'}` : 'Фильтр выключен'); };
+  return html`<label class="fld"><span>Слова, которые вы не хотите видеть</span><textarea rows="2" maxlength="1500" value=${v} placeholder="через запятую: пауки, уколы, спойлер" onInput=${e => { setV(e.target.value); setSaved(false); }}></textarea></label>
+    <div class="row"><button class="btn" disabled=${saved} onClick=${save}>Сохранить</button>${cur && html`<button class="btn ghost" onClick=${() => { setSetting({ triggers: [] }); setV(''); setSaved(true); toast('Фильтр выключен'); }}>Очистить</button>`}</div>
+    <p class="hint">Сообщения в чатах, записи в ленте и уведомления с этими словами приходят свёрнутыми: «Скрыто вашим фильтром слов · Показать». Совпадение ищется по части слова — «паук» скроет и «пауки». Автор не узнаёт, что вы что-то скрыли. До 50 слов.</p>`;
+}
 function Privacy() {
   const me = S.me, p = me.privacy || {}, blocked = (me.blocked || []).map(id => S.users[id] || { id });
   return html`<div class="form">
@@ -94,6 +102,9 @@ function Privacy() {
     ${PRIV.map(([k, l]) => html`<${Sel} label=${l} value=${p[k] || 'all'} opts=${[['all', 'Все'], ['contacts', 'Мои контакты'], ['none', 'Никто']]} onChange=${v => call('me.privacy', { [k]: v })} />`)}
     <${Toggle} label="Закрытый профиль" hint="«О себе», ссылки и город видны только вашим контактам" on=${!!me.private} onChange=${v => call('me.update', { private: v })} />
     <${Toggle} label="Скрывать IP и устройство" hint="Сервер не записывает ваш адрес и название устройства в список сеансов. Уже записанное стирается сразу. Минус: в «Устройствах» сеансы станут неразличимы" on=${!!me.hideMeta} onChange=${v => call('me.update', { hideMeta: v })} />
+    <${Toggle} label="Показывать мою коллекцию в профиле" hint="Вкладка «Вещи»: рамки, цвета имени, эффекты и значки, которые у вас есть" on=${!S.settings.hideCol} onChange=${v => setSetting({ hideCol: !v })} />
+    <h5>Фильтр слов</h5>
+    <${TriggerWords} />
     <h5>Двухфакторная защита</h5>
     <div class="list"><button class="li" onClick=${() => openModal(TotpDlg)}><${Icon} n="shield-check" /><span><b>Код из приложения (TOTP)</b><small>${me.totp ? `включена · резервных кодов: ${me.recoveryLeft}` : 'выключена — пароль плюс код из Google Authenticator, Aegis и т. п.'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
       ${me.totp && html`<button class="li" onClick=${async () => { const code = await promptDlg({ title: 'Новые резервные коды', label: 'Код из аутентификатора', placeholder: '000000', hint: 'Старые коды перестанут работать.' }); if (!code) return; const r = await call('me.recovery.new', { code }); if (r) openModal(Codes, { codes: r.recovery }); }}><${Icon} n="life-buoy" /><span><b>Перевыпустить резервные коды</b><small>На случай потери телефона</small></span></button>`}</div>
@@ -149,6 +160,7 @@ function Look() {
   const s = S.settings, prem = S.me.premiumUntil > Date.now();
   const themes = [['system', 'Как в системе', 'monitor'], ['light', 'Светлая', 'sun'], ['dark', 'Тёмная', 'moon'], ['tan', 'Загар ★', 'flame'], ...SHOP_THEMES.map(([k, l]) => [k, l, 'palette', 'theme_' + k]), ...EVENT_THEMES.filter(([k]) => (S.me.owned || []).includes('theme_' + k)).map(([k, l]) => [k, l, 'palette', 'theme_' + k])];
   return html`<div class="form">
+    <${Toggle} label="Простой режим" hint="Крупный текст и только главное: чаты, лента и профиль. Истории, события, подсказки и магазин с главного экрана убраны — они остаются в меню ☰" on=${!!s.simple} onChange=${v => { setSetting({ simple: v }); toast(v ? 'Простой режим включён' : 'Простой режим выключен'); }} />
     <div class="fld"><span>Стиль</span><div class="seg">${[['soft', 'Мягкий'], ['classic', 'Пляжный'], ['win10', 'Windows 10']].map(([k, l]) => html`<button class=${cx((s.style === 'classic' || s.style === 'win10' ? s.style : 'soft') === k && 'on')} onClick=${() => setSetting({ style: k })}>${l}</button>`)}</div></div>
     ${s.style === 'win10' && html`<${Sel} label="Прозрачность и размытие" value=${s.acrylic === true ? 'on' : s.acrylic === false ? 'off' : 'auto'} opts=${[['auto', 'Авто: выключать на слабых телефонах'], ['on', 'Включены'], ['off', 'Выключены']]} onChange=${v => setSetting({ acrylic: v === 'on' ? true : v === 'off' ? false : 'auto' })} />`}
     <div class="fld"><span>Тема</span><div class="themes">${themes.map(([k, l, ic, shop]) => html`<button class=${cx('th', 'th-' + k, s.theme === k && 'on', shop && !hasItem(shop) && 'lockd')} onClick=${() => { if (shop && !hasItem(shop) && s.theme !== k) { toast('Эта тема продаётся в магазине за листики.'); return openShop('cosmetics'); } if (k === 'tan' && !prem && s.theme !== 'tan' && !local.get('konami')) return toast('«Загар» — премиум-тема. Или введите секретный код с приставки Dendy: ↑↑↓↓←→←→BA'); setSetting({ theme: k }); }}><i><${Icon} n=${ic} s=${18} /></i>${l}</button>`)}</div></div>

@@ -1,5 +1,6 @@
 // Медиа: фото/видео/кружочки/голосовые/аудио/файлы, просмотрщик, плеер, истории.
 import { html, useState, useEffect, useRef, S, bump, rpc, call, toast, Icon, Avatar, cx, fmtDur, fmtSize, download, Modal, closeModal, openModal, userName, fmtShort, pickFile, upload, compressImage, addUsers, confirmDlg, Spinner, Empty, lastSeen, plural, showMenu } from './lib.js';
+import { Cover } from './perks.js';
 import { mediaUrl, openUser } from './store.js';
 
 export function useMediaUrl(media) {
@@ -45,7 +46,7 @@ export async function playAudio(m, queue) {
   const p = P();
   if (p && p.id === m.id) { audio.paused ? audio.play() : audio.pause(); return; }
   if (S.dock) S.dock = null;      // вставка с чужого сайта (Яндекс Музыка, YouTube) выключается: два звука сразу не нужны
-  S.player = { id: m.id, chat: m.chat, kind: m.type, title: m.type === 'voice' ? 'Голосовое · ' + userName(S.users[m.from]) : (m.media.name || 'Аудио'), dur: m.media.dur || 0, t: 0, on: false, rate: (p && p.kind === 'voice' && m.type === 'voice' && p.rate) || 1, repeat: p ? p.repeat : false, shuffle: p ? p.shuffle : false, queue: (queue || [m]).filter(x => x.type === m.type), m };
+  S.player = { id: m.id, chat: m.chat, kind: m.type, title: m.type === 'voice' ? 'Голосовое · ' + userName(S.users[m.from]) : (m.media.name || 'Аудио'), dur: m.media.dur || 0, cover: m.media.cover, radio: !!m.media.radio, t: 0, on: false, rate: (p && p.kind === 'voice' && m.type === 'voice' && p.rate) || 1, repeat: p ? p.repeat : false, shuffle: p ? p.shuffle : false, queue: (queue || [m]).filter(x => x.type === m.type), m };
   try { audio.src = await mediaUrl(m.media); audio.playbackRate = S.player.rate; await audio.play(); } catch (e) { toast('Не удалось воспроизвести', 'err'); }
   bump();
 }
@@ -65,12 +66,28 @@ export function AudioMsg({ m, list }) {
   const p = P(), cur = p && p.id === m.id;
   return html`<div class="filecard"><button class="play" onClick=${() => playAudio(m, list)}><${Icon} n=${cur && p.on ? 'pause' : 'music'} s=${20} /></button><div class="fc-m"><b>${m.media.name || 'Аудио'}</b><small>${cur ? fmtDur(p.t) + ' / ' : ''}${fmtDur(m.media.dur)} · ${fmtSize(m.media.size || 0)}</small></div><button class="ib sm" title="Скачать" onClick=${() => download(m.media.name || 'audio', m.media.url)}><${Icon} n="download" s=${17} /></button></div>`;
 }
-export function AudioBar() {
+// Большой плеер: обложка, перемотка, очередь. Открывается по нажатию на обложку в полоске плеера.
+function NowPlaying({ id }) {
+  const p = P(); useEffect(() => { if (!P()) closeModal(id); });
+  if (!p) return null;
+  const i = p.queue.findIndex(x => x.id === p.id), total = p.dur || audio.duration || 0;
+  return html`<${Modal} id=${id} title="Сейчас играет" icon="music" cls="small nowp">
+    <div class="np-cov"><${Cover} src=${p.cover} seed=${p.title} s=${208} radio=${p.radio} /></div>
+    <h3 class="np-t">${p.title}</h3><small class="np-s">${p.radio ? 'прямой эфир' : p.queue.length > 1 ? `${i + 1} из ${p.queue.length}` : ''}</small>
+    ${!p.radio && html`<div class="np-seek" onClick=${e => { const r = e.currentTarget.getBoundingClientRect(); seekAudio((e.clientX - r.left) / r.width); }}><i style=${`width:${Math.min(100, p.t / (total || 1) * 100)}%`}></i></div><div class="np-time"><span>${fmtDur(p.t)}</span><span>${total && isFinite(total) ? fmtDur(total) : ''}</span></div>`}
+    <div class="np-ctl"><button class=${cx('ib', p.shuffle && 'act')} onClick=${() => { p.shuffle = !p.shuffle; bump(); }} title="Перемешать" aria-label="Перемешать"><${Icon} n="shuffle" s=${18} /></button>
+      <button class="ib" onClick=${() => step(-1)} title="Предыдущий" aria-label="Предыдущий"><${Icon} n="skip-back" s=${22} /></button>
+      <button class="np-play" onClick=${() => (audio.paused ? audio.play() : audio.pause())} aria-label=${p.on ? 'Пауза' : 'Слушать'}><${Icon} n=${p.on ? 'pause' : 'play'} s=${26} /></button>
+      <button class="ib" onClick=${() => step(1)} title="Следующий" aria-label="Следующий"><${Icon} n="skip-forward" s=${22} /></button>
+      <button class=${cx('ib', p.repeat && 'act')} onClick=${() => { p.repeat = !p.repeat; bump(); }} title="Повтор" aria-label="Повтор"><${Icon} n="repeat" s=${18} /></button></div><//>`;
+}
+/** Полоска плеера. Она одна на всё приложение и видна везде: над чатом, над списком чатов (на телефоне) и в «Хабе». */
+export function AudioBar({ side }) {
   const p = P(); if (!p) return null;
-  return html`<div class="audiobar"><button class="ib sm" onClick=${() => step(-1)} title="Предыдущий"><${Icon} n="skip-back" s=${16} /></button><button class="ib sm" onClick=${() => audio.paused ? audio.play() : audio.pause()}><${Icon} n=${p.on ? 'pause' : 'play'} s=${18} /></button><button class="ib sm" onClick=${() => step(1)} title="Следующий"><${Icon} n="skip-forward" s=${16} /></button>
-    <div class="ab-m"><b>${p.title}</b><div class="ab-seek" onClick=${e => { const r = e.currentTarget.getBoundingClientRect(); seekAudio((e.clientX - r.left) / r.width); }}><i style=${`width:${Math.min(100, p.t / (p.dur || audio.duration || 1) * 100)}%`}></i></div></div>
+  return html`<div class=${cx('audiobar', side && 'ab-side')}>${p.kind !== 'voice' && html`<button class="ab-cov" onClick=${() => openModal(NowPlaying)} title="Открыть плеер" aria-label="Открыть плеер"><${Cover} src=${p.cover} seed=${p.title} s=${34} radio=${p.radio} /></button>`}<button class="ib sm" onClick=${() => step(-1)} title="Предыдущий"><${Icon} n="skip-back" s=${16} /></button><button class="ib sm" onClick=${() => audio.paused ? audio.play() : audio.pause()}><${Icon} n=${p.on ? 'pause' : 'play'} s=${18} /></button><button class="ib sm" onClick=${() => step(1)} title="Следующий"><${Icon} n="skip-forward" s=${16} /></button>
+    <div class="ab-m"><b onClick=${() => p.kind !== 'voice' && openModal(NowPlaying)}>${p.title}</b><div class="ab-seek" onClick=${e => { const r = e.currentTarget.getBoundingClientRect(); seekAudio((e.clientX - r.left) / r.width); }}><i style=${`width:${Math.min(100, p.t / (p.dur || audio.duration || 1) * 100)}%`}></i></div></div>
     <span class="ab-t">${fmtDur(p.t)}</span>
-    ${p.kind === 'voice' ? html`<button class="rate" onClick=${cycleRate}>${p.rate}x</button>` : html`<button class=${cx('ib sm', p.repeat && 'act')} onClick=${() => { p.repeat = !p.repeat; bump(); }} title="Повтор"><${Icon} n="repeat" s=${16} /></button><button class=${cx('ib sm', p.shuffle && 'act')} onClick=${() => { p.shuffle = !p.shuffle; bump(); }} title="Перемешать"><${Icon} n="shuffle" s=${16} /></button>`}
+    ${p.kind === 'voice' ? html`<button class="rate" onClick=${cycleRate}>${p.rate}x</button>` : html`<button class=${cx('ib sm ab-x', p.repeat && 'act')} onClick=${() => { p.repeat = !p.repeat; bump(); }} title="Повтор"><${Icon} n="repeat" s=${16} /></button><button class=${cx('ib sm ab-x', p.shuffle && 'act')} onClick=${() => { p.shuffle = !p.shuffle; bump(); }} title="Перемешать"><${Icon} n="shuffle" s=${16} /></button>`}
     <button class="ib sm" onClick=${stopAudio} title="Закрыть плеер"><${Icon} n="x" s=${16} /></button></div>`;
 }
 const EXT_ICON = { pdf: 'file-text', doc: 'file-text', docx: 'file-text', txt: 'file-text', xls: 'table', xlsx: 'table', csv: 'table', zip: 'archive', rar: 'archive', '7z': 'archive', mp3: 'music', js: 'code', py: 'code', json: 'code', html: 'code' };

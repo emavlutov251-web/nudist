@@ -152,7 +152,8 @@ H['user.get'] = (c, p) => {
   const me = user(c);
   const common = (me.chats || []).map(x => db.chats[x]).filter(ch => ch && ch.type === 'group' && ch.members[o.id]).map(ch => ({ id: ch.id, title: ch.title })).slice(0, 20);
   let gifts = 0; for (const k in db.gifts || {}) { const g = db.gifts[k]; if (g.to === o.id && (!g.hidden || o.id === c.uid)) gifts++; }      // для вкладки «Подарки» в профиле
-  return { user: pubUser(o, c.uid), common, gifts, dm: db.chats[C.dmId(c.uid, o.id)] ? C.dmId(c.uid, o.id) : null };
+  const col = o.deleted || o.bot || ((o.settings || {}).hideCol && o.id !== c.uid) ? [] : C.collection(o);      // «коллекция» в профиле; владелец может скрыть её в настройках
+  return { user: pubUser(o, c.uid), common, gifts, col, dm: db.chats[C.dmId(c.uid, o.id)] ? C.dmId(c.uid, o.id) : null };
 };
 H['users.get'] = (c, p) => (Array.isArray(p.ids) ? p.ids : []).slice(0, 200).map(x => pubUser(db.users[x], c.uid)).filter(Boolean);
 

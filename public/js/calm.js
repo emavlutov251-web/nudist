@@ -62,7 +62,7 @@ export const openCalm = () => openModal(Calm);
 
 // ───── Капсула времени
 function CapsuleDlg({ id, chat }) {
-  const peer = S.users[chat.peer] || {}, [text, setText] = useState(''), [busy, setBusy] = useState(false);
+  const peer = S.users[chat.peer] || {}, [text, setText] = useState(''), [busy, setBusy] = useState(false), [early, setEarly] = useState(true);
   const iso = d => dayKey(d) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()), plus = (y, m, d) => { const x = new Date(); x.setFullYear(x.getFullYear() + y, x.getMonth() + m, x.getDate() + d); x.setHours(12, 0, 0, 0); return x; };
   const ny = () => { const x = new Date(); return new Date(x.getFullYear() + 1, 0, 1, 0, 5); };
   const [at, setAt] = useState(iso(plus(1, 0, 0)));
@@ -70,22 +70,29 @@ function CapsuleDlg({ id, chat }) {
   const send = async () => {
     const t = new Date(at).getTime(); if (!text.trim()) return toast('Напишите, что будет внутри', 'err'); if (!(t > 0)) return toast('Выберите день', 'err');
     setBusy(true);
-    try { await rpc('capsule.new', { to: chat.peer, text, at: t }); closeModal(id); toast('Капсула запечатана. До срока её не прочитает никто — даже вы.'); } catch (e) { toast(e.message, 'err'); }
+    try { await rpc('capsule.new', { to: chat.peer, text, at: t, lock: !early }); closeModal(id); toast(early ? 'Капсула запечатана. Она откроется в срок — или раньше, если адресат не утерпит.' : 'Капсула запечатана до назначенного дня.'); } catch (e) { toast(e.message, 'err'); }
     setBusy(false);
   };
   return html`<${Modal} id=${id} title="Капсула времени" icon="timer" cls="small" footer=${html`<button class="btn ghost" onClick=${() => closeModal(id)}>Отмена</button><button class="btn" disabled=${busy} onClick=${send}><${Icon} n="lock" s=${16} /> Запечатать</button>`}>
-    <p class="hint">Сообщение для <b>${userName(peer)}</b>, которое откроется само в выбранный день. До этого в чате будет лежать закрытая капсула. Бесплатно; открыть раньше срока нельзя.</p>
+    <p class="hint">Сообщение для <b>${userName(peer)}</b>, которое откроется само в выбранный день. До этого в чате будет лежать закрытая капсула. Запечатать — бесплатно.</p>
     <label class="fld"><span>Что внутри</span><textarea rows="5" maxlength="2000" value=${text} placeholder="Надеюсь, ты сейчас счастлив…" onInput=${e => setText(e.target.value)}></textarea></label>
     <div class="chips">${PRE.map(([n, d]) => html`<button key=${n} class=${cx('chip', iso(d) === at && 'on')} onClick=${() => setAt(iso(d))}>${n}</button>`)}</div>
-    <label class="fld"><span>Когда откроется</span><input type="datetime-local" value=${at} onInput=${e => setAt(e.target.value)} /></label><//>`;
+    <label class="fld"><span>Когда откроется</span><input type="datetime-local" value=${at} onInput=${e => setAt(e.target.value)} /></label>
+    <${Toggle} label="Разрешить открыть раньше срока" hint="Адресат сможет распечатать капсулу досрочно за 300 🍃. Листики сгорают, вам они не приходят. Выключите — и капсула откроется только в назначенный день" on=${early} onChange=${setEarly} /><//>`;
 }
 export const openCapsule = chat => openModal(CapsuleDlg, { chat });
 /** Карточка под сообщением-капсулой: сколько осталось и отмена для автора. */
 export function CapCard({ m, chat }) {
   const c = m.cap, mine = m.from === S.me.id;
-  if (c.open) return html`<div class="cap-card open">💌 Капсула времени · запечатана ${fmtShort(c.made)}</div>`;
+  if (c.open) return html`<div class="cap-card open">💌 Капсула времени · запечатана ${fmtShort(c.made)}${c.paid ? ' · открыта досрочно' : ''}</div>`;
   const d = Math.max(0, Math.ceil((c.at - Date.now()) / 864e5));
   const cancel = async e => { e.stopPropagation(); if (await confirmDlg({ title: 'Распечатать и выбросить?', text: 'Капсула исчезнет у обоих, её текст никто не увидит.', ok: 'Выбросить', danger: true })) { try { await rpc('capsule.cancel', { chat: chat.id, id: m.id }); } catch (x) { toast(x.message, 'err'); } } };
   const when = new Date(c.at).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(' г.', '');
-  return html`<div class="cap-card"><span>Откроется ${when}<small>${d <= 1 ? 'уже совсем скоро' : `осталось ${d} ${plural(d, ['день', 'дня', 'дней'])}`} · до срока текст не видит никто</small></span>${mine && html`<button class="btn sm ghost" onClick=${cancel}>Отменить</button>`}</div>`;
+  const openNow = async e => {
+    e.stopPropagation();
+    if ((S.me.stars || 0) < c.early) return toast(`Досрочное открытие стоит ${c.early} 🍃, у вас ${S.me.stars || 0}. Или просто дождитесь срока — тогда бесплатно.`, 'err');
+    if (!(await confirmDlg({ title: 'Открыть капсулу сейчас?', text: `Спишется ${c.early} 🍃 — и вы прочитаете её, не дожидаясь срока. Автор увидит, что капсула открыта досрочно. Если подождать, она откроется сама и бесплатно.`, ok: `Открыть · ${c.early} 🍃` }))) return;
+    try { await rpc('capsule.open', { chat: chat.id, id: m.id }); } catch (x) { toast(x.message, 'err'); }
+  };
+  return html`<div class="cap-card"><span>Откроется ${when}<small>${d <= 1 ? 'уже совсем скоро' : `осталось ${d} ${plural(d, ['день', 'дня', 'дней'])}`}${c.lock ? ' · раньше срока не открыть' : mine ? ` · адресат может открыть раньше за ${c.early} 🍃` : ''}</small></span>${mine ? html`<button class="btn sm ghost" onClick=${cancel}>Отменить</button>` : !c.lock && c.early > 0 && html`<button class="btn sm" onClick=${openNow}>Открыть · ${c.early} 🍃</button>`}</div>`;
 }

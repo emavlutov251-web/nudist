@@ -5,6 +5,7 @@ export { html, render, Component, useState, useEffect, useRef, useMemo, useCallb
 
 // ───── состояние
 export const DEFAULT_SETTINGS = {
+  simple: false, hideCol: false, triggers: [],      /* простой режим, скрытая коллекция, личный фильтр слов */
   theme: 'system', style: 'soft', acrylic: 'auto', accent: '', fontSize: 15, wallpaper: 'leaves', anim: true, contrast: false, flat: 'auto', enterSend: true, timeFmt: 24,
   sound: true, notif: true, preview: true, notifSound: 'ding', notifDm: true, notifGroup: true, notifChannel: false, notifServer: false, dnd: { on: false, from: '23:00', to: '08:00' },
   emojiAuto: true, stickerSize: 160, compress: 'high', autoDl: { photo: true, video: true, gif: true }, nakedTyping: false,
@@ -70,8 +71,16 @@ export function svcText(m) {
   if (m.from !== S.me.id) return userName(S.users[m.from]) + ' ' + m.text;
   return 'Вы ' + (m.text || '').replace(/^не нашёл\(ла\)/, 'не нашли').replace(/^не прошёл\(ла\)/, 'не прошли').replace(/^(\S+)л\(а\)/, '$1ли').replace(/^(\S+)[её]н\(а\)/, '$1ены').replace(/покидает/, 'покидаете').replace('Листок изъят.', 'Листок изъят.');
 }
+// Личный фильтр слов: список хранится в настройках, совпадение — по вхождению без учёта регистра («паук» скроет и «пауки»).
+let trigKey = '', trigRe = null;
+export function hitTrigger(t) {
+  const l = S.settings && S.settings.triggers; if (!t || !Array.isArray(l) || !l.length) return false;
+  const k = l.join('\n'); if (k !== trigKey) { trigKey = k; try { trigRe = new RegExp(l.map(w => String(w).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).filter(Boolean).join('|'), 'iu'); } catch (e) { trigRe = null; } }
+  return !!trigRe && trigRe.test(String(t));
+}
 export function msgPreview(m, chat) {
   if (!m) return '';
+  if (m.text && S.me && m.from !== S.me.id && hitTrigger(m.text)) return '🙈 скрыто вашим фильтром слов';
   if (m.enc && !m.text) return '🔒 зашифрованное сообщение';
   const t = { once: '🔥 Одноразовое ' + (m.kind === 'video' ? 'видео' : 'фото'), photo: '🖼 Фото', video: '🎬 Видео', file: '📎 ' + ((m.media || {}).name || 'Файл'), audio: '🎵 ' + ((m.media || {}).name || 'Аудио'), voice: '🎤 Голосовое', round: '⭕ Кружочек', gif: 'GIF', sticker: (m.sticker || {}).e + ' Стикер', loc: '📍 Геопозиция', contact: '👤 Контакт', poll: '📊 ' + ((m.poll || {}).q || 'Опрос'), call: (m.call || {}).missed ? '📵 Пропущенный звонок' : '📞 Звонок' }[m.type];
   if (m.type === 'service') return svcText(m);
@@ -200,13 +209,13 @@ export function applyTheme() {
   r.dataset.theme = skin || (s.theme === 'system' ? sys : s.theme); if (skin) r.dataset.skin = s.theme; else delete r.dataset.skin;
   // «Мягкий» — стиль по умолчанию. Прежнее значение 'fluent' стояло у всех само собой, поэтому Windows 10 теперь включается отдельным значением 'win10'.
   r.dataset.style = s.style === 'classic' ? 'classic' : s.style === 'win10' ? 'fluent' : 'soft';
-  r.dataset.zen = s.zen ? '1' : '0';
+  r.dataset.zen = s.zen ? '1' : '0'; r.dataset.simple = s.simple ? '1' : '0';
   // «Авто»: размытие — главная черта оформления, поэтому выключаем его только на совсем слабых устройствах (до 1 ГБ памяти или два ядра):
   // там оно тормозит прокрутку. Раньше порог был 4 ГБ, и на большинстве недорогих телефонов размытия не было вовсе.
   const weak = (navigator.deviceMemory && navigator.deviceMemory < 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 3);
   r.dataset.acrylic = s.acrylic === false || (s.acrylic !== true && weak) ? '0' : '1';
   r.dataset.wall = s.wallpaper; r.dataset.anim = s.anim ? '1' : '0'; r.dataset.contrast = s.contrast ? '1' : '0';
-  r.style.setProperty('--fs', (s.fontSize || 15) + 'px');
+  r.style.setProperty('--fs', Math.max(s.fontSize || 15, s.simple ? 18 : 0) + 'px');      /* простой режим: текст не мельче 18 */
   if (s.accent) r.style.setProperty('--accent', s.accent); else r.style.removeProperty('--accent');
   const z = s.scale && s.scale !== 1 ? s.scale : 1; r.style.zoom = z === 1 ? '' : z; r.style.setProperty('--zoom', z);
 }
@@ -270,7 +279,9 @@ export function ChatAvatar({ chat, s = 44, online = true }) {
   if (chat && chat.server) return html`<span class="ava" style=${`width:${s}px;height:${s}px;background:var(--hover);color:var(--ink2)`}><${Icon} n=${kindIcon(chat.kind)} s=${Math.round(s * 0.5)} /></span>`;
   return html`<${Avatar} u=${i.user} src=${i.avatar} name=${i.title} color=${i.color} s=${s} saved=${i.saved} deleted=${i.user && i.user.deleted} online=${online && i.user && i.user.online && !i.user.bot} />`;
 }
-const BADGES = { verified: ['badge-check', 'Подтверждённый аккаунт', 'var(--sea)'], premium: ['leaf', 'Нудист Plus', 'var(--warn)'], pro: ['flame', 'Нудист Pro', '#F2622E'], max: ['crown', 'Нудист Max', '#E0A800'], bot: ['bot', 'Бот', 'var(--ink3)'], staff: ['shield', 'Команда «Нудиста»', 'var(--accent)'], developer: ['wrench', 'Разработчик', 'var(--ink2)'], snow: ['sparkles', 'Десятка лучших в «Снежном коме»', '#E0A800'] };
+const BADGES = { verified: ['badge-check', 'Подтверждённый аккаунт', 'var(--sea)'], premium: ['leaf', 'Нудист Plus', 'var(--warn)'], pro: ['flame', 'Нудист Pro', '#F2622E'], max: ['crown', 'Нудист Max', '#E0A800'], bot: ['bot', 'Бот', 'var(--ink3)'], staff: ['shield', 'Команда «Нудиста»', 'var(--accent)'], developer: ['wrench', 'Разработчик', 'var(--ink2)'], snow: ['sparkles', 'Десятка лучших в «Снежном коме»', '#E0A800'],
+  /* значки из магазина: украшение, которое человек купил сам. Подсказка говорит об этом прямо, чтобы «Пресса» не выглядела подтверждением */
+  shop_press: ['newspaper', 'Пресса · значок из магазина, не подтверждение', '#3A8EE6'], shop_streamer: ['video', 'Стример · значок из магазина, не подтверждение', '#E0457B'], shop_artist: ['palette', 'Художник · значок из магазина, не подтверждение', '#9B4DDB'], shop_gem: ['gem', 'Коллекционер · значок с тайной витрины', '#19B8C9'] };
 // Особый статус — плашка от администрации; сервер кладёт его в список значков объектом { t, e, c }
 export const LABEL_COLORS = ['Зелёный', 'Синий', 'Фиолетовый', 'Розовый', 'Красный', 'Оранжевый', 'Золотой', 'Графит'];
 export const userLabel = u => ((u && u.badges) || []).find(b => b && typeof b === 'object') || null;

@@ -70,11 +70,22 @@ const CATALOG = {
   fx_bats: { kind: 'effect', name: 'Летучие мыши', emoji: '🦇', price: 1500, tier: 'event', ev: 'oct' },
   frame_season: { kind: 'frame', name: 'Сезонник', emoji: '📮', price: 0, tier: 'event', ev: 'prize' },
   frame_veteran: { kind: 'frame', name: 'Старожил', emoji: '🏅', price: 0, tier: 'event', ev: 'prize' },
+  // значки у имени: украшение, а не подтверждение — так и написано в подсказке значка. Ни в какой тариф не входят
+  badge_press: { kind: 'badge', name: 'Пресса', emoji: '📰', price: 5000, tier: 'badge' },
+  badge_streamer: { kind: 'badge', name: 'Стример', emoji: '🎥', price: 5000, tier: 'badge' },
+  badge_artist: { kind: 'badge', name: 'Художник', emoji: '🎨', price: 5000, tier: 'badge' },
+  // тайная витрина: открывается, когда на счету хоть раз набралось SECRET_FROM листиков, и остаётся открытой. Без скидок, ни в какой тариф не входит
+  frame_diamond: { kind: 'frame', name: 'Бриллиант', emoji: '💎', price: 40000, tier: 'secret' },
+  grad_gold: { kind: 'gradient', name: 'Чистое золото', emoji: '🥇', price: 25000, tier: 'secret', colors: ['#B8860B', '#FFD700', '#FFF4B0', '#E6A700'] },
+  fx_meteor: { kind: 'effect', name: 'Звездопад', emoji: '☄️', price: 30000, tier: 'secret' },
+  badge_gem: { kind: 'badge', name: 'Коллекционер', emoji: '💠', price: 50000, tier: 'secret' },
 };
+const SECRET_FROM = 100000;
+const vip = u => { if (!u.vip && (u.stars || 0) >= SECRET_FROM) { u.vip = now(); save(); } return !!u.vip; };
 // Что знает о событиях магазин: идёт ли событие, скидка события на вещь, до какого времени вещь в продаже. Заполняет server/events.js.
 const ev = { on: () => false, off: () => 0, till: () => 0, sale: '' };
 const INCLUDED = { plus: ['common'], pro: ['common', 'rare'], max: ['common', 'rare', 'epic', 'legendary'] };
-const SLOT = { frame: 'frame', gradient: 'grad', effect: 'fx' };      // что «надевается» на сервере; тема и стикеры живут в настройках приложения
+const SLOT = { frame: 'frame', gradient: 'grad', effect: 'fx', badge: 'badge' };      // что «надевается» на сервере; тема и стикеры живут в настройках приложения
 
 // ───── тарифы подписки. Цены за рубли можно поменять переменной PAY_PRICES (см. pay.js).
 const upFixed = !!Number(process.env.MAX_UPLOAD_MB);
@@ -116,13 +127,14 @@ const touch = u => { R.selfUpdate(u); C.broadcastUser(u); };
 let dealsCache = { day: '', list: [] };
 function dailyDeals() {
   const day = C.today(); if (dealsCache.day === day) return dealsCache.list;
-  const keys = Object.keys(CATALOG).filter(k => CATALOG[k].price > 0 && !CATALOG[k].ev), seed = Number(day.replace(/-/g, '')) || 1, list = [], used = new Set();
+  const keys = Object.keys(CATALOG).filter(k => CATALOG[k].price > 0 && !CATALOG[k].ev && CATALOG[k].tier !== 'secret'), seed = Number(day.replace(/-/g, '')) || 1, list = [], used = new Set();
   const rand = n => { const x = Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453; return x - Math.floor(x); };
   for (let i = 0; list.length < 3 && i < 40; i++) { const key = keys[Math.floor(rand(i) * keys.length)]; if (used.has(key)) continue; used.add(key); list.push({ key, off: 20 + Math.floor(rand(i + 100) * 31) }); }      // 20–50 %
   dealsCache = { day, list }; return list;
 }
 function priceFor(u, id) {
-  const it = CATALOG[id], deal = dailyDeals().find(d => d.key === id), first = !u.shopN ? FIRST_OFF : 0, sale = ev.off(it), off = Math.max(deal ? deal.off : 0, first, sale);
+  const it = CATALOG[id]; if (it.tier === 'secret') return { price: it.price, off: 0, deal: false };      /* тайная витрина — всегда по полной цене */
+  const deal = dailyDeals().find(d => d.key === id), first = !u.shopN ? FIRST_OFF : 0, sale = ev.off(it), off = Math.max(deal ? deal.off : 0, first, sale);
   return { price: Math.floor(it.price * (100 - off) / 100), off: Math.round(off), deal: !!deal && deal.off >= first && deal.off >= sale, sale: sale > 0 && sale >= off ? ev.sale : undefined };
 }
 // Что стоит набор именно этому человеку: за то, что уже есть, второй раз не берём.
@@ -273,6 +285,9 @@ C.setCosHook(u => {
   if (g && CATALOG[g] && has(u, g)) o.g = CATALOG[g].colors;
   return o.f || o.g ? o : null;
 });
+// Значок из магазина рядом с именем и «коллекция» в профиле: что человек купил или получил (тариф тут не считается — только своё).
+C.setShopHooks({ badge: u => { const b = u.cos && u.cos.badge; return b && CATALOG[b] && CATALOG[b].kind === 'badge' && owns(u, b) ? b.slice(6) : null; },
+  col: u => (u.owned || []).filter(i => CATALOG[i]).map(i => ({ id: i, kind: CATALOG[i].kind, name: CATALOG[i].name, emoji: CATALOG[i].emoji, tier: CATALOG[i].tier, colors: CATALOG[i].colors })) });
 C.setSelfHook(u => ({ owned: u.owned || [], worn: u.cos || {}, freeBoosts: u.freeBoosts || 0, trialUsed: !!u.trialUsed || undefined, paidTier: (u.premiumUntil || 0) > now() ? (PLANS[u.premiumTier] ? u.premiumTier : 'plus') : undefined, paidUntil: (u.premiumUntil || 0) > now() ? u.premiumUntil : undefined, trialUntil: (u.trialUntil || 0) > now() ? u.trialUntil : undefined }));
 
 // ───── RPC
@@ -280,7 +295,8 @@ H['shop.catalog'] = c => {
   const u = db.users[c.uid], Pay = require('./pay'), rub = id => (Pay.ITEMS.find(i => i.id === id) || {}).rub;
   return {
     stars: u.stars || 0, tier: tierOf(u), first: !u.shopN ? FIRST_OFF : 0, cashback: { pct: CASHBACK, got: u.cashback || 0 }, pay: Pay.enabled(), freeBoosts: u.freeBoosts || 0,
-    items: Object.entries(CATALOG).filter(([id, it]) => !it.ev || ev.on(it.ev) || owns(u, id)).map(([id, it]) => ({ id, ...it, base: it.price, ...priceFor(u, id), owned: owns(u, id), included: included(u, id), till: it.ev && ev.on(it.ev) ? ev.till(it.ev) : undefined })),
+    secret: { open: vip(u), from: SECRET_FROM },
+    items: Object.entries(CATALOG).filter(([id, it]) => (!it.ev || ev.on(it.ev) || owns(u, id)) && (it.tier !== 'secret' || vip(u) || owns(u, id))).map(([id, it]) => ({ id, ...it, base: it.price, ...priceFor(u, id), owned: owns(u, id), included: included(u, id), till: it.ev && ev.on(it.ev) ? ev.till(it.ev) : undefined })),
     plans: Object.values(PLANS).map(p => ({ id: p.id, name: p.name, emoji: p.emoji, stars: planPrice(u, p.id), full: p.stars, off: renewOff(u, p.id), rub: rub('plan_' + p.id), days: p.days, perks: p.perks })),
     trial: { days: TRIAL_DAYS, used: !!u.trialUsed, until: (u.trialUntil || 0) > now() ? u.trialUntil : 0, can: !u.trialUsed && rank(tierOf(u)) < rank('pro') },
     bundles: Object.entries(BUNDLES).map(([id, b]) => { const f = bundleFor(u, b); return { id, name: b.name, emoji: b.emoji, items: b.items, price: f.price, full: f.full, fresh: f.fresh.length }; }),
@@ -291,6 +307,7 @@ H['shop.buy'] = (c, p) => {
   const u = db.users[c.uid], id = str(p.id, 64), it = CATALOG[id]; need(it, 'Такой вещи в магазине нет');
   need(!owns(u, id), 'Это у вас уже куплено'); need(it.tier !== 'season', 'Эта вещь не продаётся: её дают в пропуске сезона'); need(!included(u, id), 'Эта вещь входит в вашу подписку — платить не нужно');
   need(!it.ev || ev.on(it.ev), 'Эта вещь продаётся только во время события. Сейчас её не купить.');
+  need(it.tier !== 'secret' || vip(u), 'Такой вещи в магазине нет');
   const { price } = priceFor(u, id);
   R.spend(u, price, 'Листики можно накопить или докупить в магазине.');
   own(u, id); equipIfEmpty(u, id); u.shopN = (u.shopN || 0) + 1; cashback(u, price); save(); touch(u);
@@ -306,6 +323,21 @@ H['shop.buyBundle'] = (c, p) => {
 };
 H['shop.buyPlan'] = (c, p) => buyPlan(db.users[c.uid], str(p.id, 16));
 H['premium.buy'] = c => buyPlan(db.users[c.uid], 'plus');      // старое название: «Премиум» — это теперь тариф Plus
+// Вещь в подарок: платит даритель, вещь остаётся у друга навсегда и сразу надевается, если место свободно.
+H['shop.gift'] = (c, p) => {
+  const u = db.users[c.uid], o = db.users[typeof p.to === 'string' ? p.to : ''], id = str(p.id, 64), it = CATALOG[id]; need(it, 'Такой вещи в магазине нет'); need(o && !o.deleted && !o.bot && o.id !== u.id, 'Подарить можно только другому человеку');
+  need(it.price > 0 && it.tier !== 'season' && (!it.ev || ev.on(it.ev)), 'Эту вещь нельзя подарить: она не продаётся'); need(it.tier !== 'secret' || vip(u), 'Такой вещи в магазине нет');
+  need(!owns(o, id), 'У этого человека такая вещь уже есть');
+  R.giveCheck(u, o); A.limit('giftitem:' + u.id, 10, 3600e3);
+  const { price } = priceFor(u, id);
+  R.spend(u, price, 'Листики можно накопить или докупить в магазине.');
+  own(o, id); equipIfEmpty(o, id); u.shopN = (u.shopN || 0) + 1; cashback(u, price); save(); R.selfUpdate(u); touch(o);
+  const ch = C.openDm(u.id, o.id);
+  C.postMessage(ch, u.id, { type: 'service', text: `подарил(а) ${KIND_WORD[it.kind] || 'вещь'} «${it.name}» ${it.emoji}` }, { quiet: true });
+  try { require('./push').notify(o.id, { title: R.uname(u), body: `Дарит вам ${KIND_WORD[it.kind] || 'вещь'} «${it.name}» ${it.emoji}`, tag: ch.id, url: '/' }, C.isOnline(o.id)); } catch (e) { console.error('[push]', e.message); }
+  return { ok: true, price, stars: u.stars, chat: ch.id };
+};
+const KIND_WORD = { frame: 'рамку', gradient: 'цвет имени', effect: 'эффект', theme: 'тему', stickers: 'набор стикеров', badge: 'значок' };
 // Подписка в подарок другому человеку, за листики
 H['shop.giftPlan'] = (c, p) => {
   const u = db.users[c.uid], o = db.users[typeof p.to === 'string' ? p.to : ''], pl = PLANS[str(p.id, 16)]; need(pl, 'Такого тарифа нет'); need(o && !o.deleted && !o.bot, 'Пользователь не найден');
@@ -332,4 +364,4 @@ H['shop.equip'] = (c, p) => {
   return { ok: true, worn: u.cos };
 };
 
-module.exports = { ev, own, touch, CATALOG, PLANS, BUNDLES, PACKS, TASKS, TRIAL_DAYS, dailyDeals, grantPlan, cashback, has, owns, included, bump, seasonView };
+module.exports = { ev, own, touch, vip, SECRET_FROM, CATALOG, PLANS, BUNDLES, PACKS, TASKS, TRIAL_DAYS, dailyDeals, grantPlan, cashback, has, owns, included, bump, seasonView };

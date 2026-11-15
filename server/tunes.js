@@ -48,7 +48,7 @@ const licName = (l, v) => (l === 'cc0' ? 'CC0' : l === 'pdm' ? 'Обществе
 function ovItem(r) {
   if (!r || r.mature || !https(r.url) || (r.filetype && !PLAYABLE.has(String(r.filetype).toLowerCase()))) return null;
   return remember({ key: 'ov:' + r.id, s: 'ov', title: str(r.title, 120) || 'Без названия', artist: str(r.creator, 120) || 'Неизвестный исполнитель', url: r.url, dur: Math.round((Number(r.duration) || 0) / 1000),
-    lic: licName(r.license, r.license_version), licUrl: https(r.license_url) ? r.license_url : undefined, page: https(r.foreign_landing_url) ? r.foreign_landing_url : undefined, from: SRC[r.source] || str(r.source, 40) });
+    cover: https(r.thumbnail) ? r.thumbnail : undefined, lic: licName(r.license, r.license_version), licUrl: https(r.license_url) ? r.license_url : undefined, page: https(r.foreign_landing_url) ? r.foreign_landing_url : undefined, from: SRC[r.source] || str(r.source, 40) });
 }
 const mark = (u, items) => { const mine = new Set(); for (const i of u.music || []) { const t = db.tracks[i]; if (t && t.ext && t.by === u.id) mine.add(t.ext.ref); } return items.map(it => ({ ...it, mine: mine.has(it.key) })); };
 
@@ -68,7 +68,7 @@ function rbItem(r) {
   const url = r && (r.url_resolved || r.url); if (!r || !https(url) || Number(r.hls) || !CODECS.has(String(r.codec || '').toUpperCase()) || r.lastcheckok === 0) return null;
   const tags = String(r.tags || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 3).join(', ');
   return remember({ key: 'rb:' + r.stationuuid, s: 'rb', title: str(String(r.name || '').replace(/\s+/g, ' '), 100) || 'Радио', artist: [r.countrycode === 'RU' ? 'Россия' : str(r.country, 40), tags].filter(Boolean).join(' · ') || 'Радио', url, dur: 0,
-    page: https(r.homepage) ? r.homepage : undefined, from: 'Radio Browser', kbps: int(r.bitrate, 0, 2000) || undefined });
+    cover: https(r.favicon) && !/\.ico(\?|$)/i.test(r.favicon) ? r.favicon : undefined, page: https(r.homepage) ? r.homepage : undefined, from: 'Radio Browser', kbps: int(r.bitrate, 0, 2000) || undefined });
 }
 async function radio(path) { let last; for (const base of RADIO) { try { return await getJson(base + path, 'Справочник радио'); } catch (e) { last = e; } } throw last; }
 H['tunes.radio'] = async (c, p) => {
@@ -94,7 +94,7 @@ function keep(u, it, extra) {
   const lib = Hub.cleanLib(u), old = lib.map(i => db.tracks[i]).find(t => t.ext && t.by === u.id && t.ext.ref === it.key); if (old) return Hub.trackView(old, u);
   need(lib.length < Hub.MUSIC_MAX, `В библиотеке уже ${Hub.MUSIC_MAX} треков. Удалите что-нибудь из старого.`);
   const t = { id: id(), by: u.id, title: it.title, artist: it.artist, url: it.url || '', size: 0, dur: it.dur || 0, ts: now(), pub: false, plays: 0,
-    ext: { s: it.s, ref: it.key, lic: it.lic, licUrl: it.licUrl, page: it.page, from: it.from, ...extra } };
+    ext: { s: it.s, ref: it.key, lic: it.lic, licUrl: it.licUrl, page: it.page, from: it.from, cover: it.cover, ...extra } };
   db.tracks[t.id] = t; u.music.unshift(t.id); save(); return Hub.trackView(t, u);
 }
 H['tunes.keep'] = async (c, p) => {
