@@ -15,6 +15,7 @@ services:
     environment:
       TURN_HOST: ${DOMAIN}
       TURN_SECRET: ${TURN_SECRET}
+      SETUP_CODE: ${SETUP_CODE:-}
     volumes:
       - nudist-data:/data
     expose:

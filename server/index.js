@@ -191,7 +191,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/notify' && req.method === 'GET') { const a = sessionOf(req); if (a) { try { A.limit('notify:' + a.u.id, 90, 60000); } catch (e) { return json(res, 429, { error: 'Слишком часто' }); } } return Push.poll(req, res, url, a, json); }      // лента уведомлений для приложения на Android
     if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined, mirror: Cloud.mirrorStatus(), files: (u => u ? { mb: Math.round(u.bytes / 1048576), maxMb: Math.round(u.max / 1048576), count: u.files } : undefined)(Cloud.usage()) });
     if (p === '/api/version') return json(res, 200, { build: buildVer(), apk: Push.apkInfo(), cc: countryOf(req) });      // что сейчас выложено: интерфейс и сборка для Android
-    if (p === '/api/config') return json(res, 200, { flags: db.flags, name: 'Нудист', version: '1.0.0' });
+    if (p === '/api/config') return json(res, 200, { flags: A.pubFlags(), setup: A.setupNeeded() || undefined, name: 'Нудист', version: '1.0.0' });
     if (p === '/api/clientlog' && req.method === 'POST') {      // телефон сообщает, почему приложение не запустилось
       try { A.limit('clog:' + ipOf(req), 20, 600e3); const b = (await readBody(req, 6000)).toString('utf8').replace(/[\r\n]+/g, ' ').slice(0, 1500); console.log('[client]', (req.headers['user-agent'] || '').slice(0, 200), '|', b); } catch (e) { /* лимит или мусор */ }
       return json(res, 200, { ok: true });
@@ -256,7 +256,7 @@ function initData(c) {
   const views = chats.map(ch => { const v = C.chatView(ch, u.id); add(v.peer); if (v.last) add(v.last.from); return v; });
   (u.contacts || []).forEach(add); add(db.meta.sys);
   const rooms = G.roomsFor(u.id); rooms.forEach(r => r.peers.forEach(p => add(p.user)));
-  return { me: C.selfUser(u), settings: u.settings || null, chats: views, servers: (u.servers || []).map(sid => db.servers[sid]).filter(Boolean).map(s => G.serverView(s, u.id)), users, flags: db.flags, rooms, conn: c.id, session: db.sessions[c.token].id, sys: db.meta.sys, time: now(), prices: { premium: R.PREMIUM_PRICE, boost: R.BOOST_PRICE, leaf: R.LEAF } };
+  return { me: C.selfUser(u), settings: u.settings || null, chats: views, servers: (u.servers || []).map(sid => db.servers[sid]).filter(Boolean).map(s => G.serverView(s, u.id)), users, flags: A.pubFlags(), rooms, conn: c.id, session: db.sessions[c.token].id, sys: db.meta.sys, time: now(), prices: { premium: R.PREMIUM_PRICE, boost: R.BOOST_PRICE, leaf: R.LEAF } };
 }
 function onConnect(ws, tok, sess, u, ip) {
   const c = { id: C.id(), uid: u.id, token: tok, ip, ws, alive: true, n: 0, raw: s => { if (ws.readyState === 1) ws.send(s); }, send: (ev, d) => c.raw(JSON.stringify({ ev, d })), close: () => ws.close() };

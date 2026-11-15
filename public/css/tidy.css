@@ -179,3 +179,6 @@ button.col-i.gi { font: inherit; color: inherit; cursor: pointer; } button.col-i
 .near-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 8px 6px; padding: 9px 12px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 1px solid var(--line); } .near-bar > span { flex: 1 1 180px; min-width: 0; } .near-bar b { display: block; } .near-bar small { display: block; color: var(--ink2); }
 .near-card { display: flex; align-items: center; gap: 10px; padding: 4px 2px; } .near-card > span { font-size: 26px; line-height: 1; } .near-card b { display: block; } .near-card small { display: block; color: var(--ink2); }
 .near-strip { display: flex; align-items: center; gap: 8px; margin: 6px 8px 2px; padding: 8px 12px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 10%, var(--card)); } .near-strip > span:nth-child(2) { flex: 1; min-width: 0; }
+
+/* ───── 69: честная строка «Защита» в информации о чате ───── */
+.enc-row p { display: flex; align-items: center; gap: 6px; } .enc-row p .ic { flex: none; color: var(--ink2); }

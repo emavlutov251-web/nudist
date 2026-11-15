@@ -1,6 +1,8 @@
 'use strict';
 // Аутентификация: пароль, «SMS»-код (демо), QR-вход, TOTP, коды восстановления, сессии.
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const C = require('./core');
 const { db, save, now, id, token, fail, need, str, USERNAME_RE } = C;
 
@@ -67,13 +69,39 @@ function invitedBy(u, ref) {
     C.emit(inv.id, 'me', C.selfUser(inv)); C.emit(u.id, 'me', C.selfUser(u));
   }, 2500);
 }
+// ───── вход по номеру. Настоящего SMS-шлюза нет: код показывается на экране, владение номером он не подтверждает.
+// Поэтому на рабочем сервере вход по номеру выключен всегда; включить демо можно только явно, переменной SMS_DEMO=on (для разработки и показа).
+const SMS_DEMO = process.env.SMS_DEMO === 'on';
+const phoneOn = () => SMS_DEMO && !!db.flags.phoneAuth;
+const pubFlags = () => ({ ...db.flags, phoneAuth: phoneOn() });
+
+// ───── первый запуск. Первый человек на сервере становится главным админом. На рабочем сервере (NODE_ENV=production) это место
+// нельзя оставлять открытым: пока владельца нет, регистрация требует код установки. Код — в переменной SETUP_CODE либо создаётся сам,
+// печатается в журнал и лежит в <DATA_DIR>/setup-code.txt. После регистрации владельца код больше не нужен и файл стирается.
+const PROD = process.env.NODE_ENV === 'production';
+const SETUP_FILE = path.join(process.env.DATA_DIR || path.join(__dirname, '..', 'data'), 'setup-code.txt');
+let setupCode = '';
+const setupNeeded = () => PROD && process.env.SETUP_CODE !== 'off' && !hasHuman();
+function setupInit() {
+  if (!setupNeeded()) { fs.unlink(SETUP_FILE, () => {}); return; }
+  setupCode = String(process.env.SETUP_CODE || '').trim();
+  if (!setupCode) { try { setupCode = fs.readFileSync(SETUP_FILE, 'utf8').trim(); } catch (e) { /* файла ещё нет */ } }
+  if (setupCode.length < 8) setupCode = crypto.randomBytes(12).toString('base64url');
+  try { fs.mkdirSync(path.dirname(SETUP_FILE), { recursive: true }); fs.writeFileSync(SETUP_FILE, setupCode + '\n', { mode: 0o600 }); } catch (e) { /* диск только для чтения: код остаётся в журнале */ }
+  console.log('[setup] Сервер новый, владельца ещё нет. Код установки для первой регистрации: ' + setupCode);
+}
+function needSetup(code) {
+  if (!setupNeeded()) return;
+  const a = Buffer.from(String(code || '').trim()), b = Buffer.from(setupCode);
+  need(setupCode && a.length === b.length && crypto.timingSafeEqual(a, b), 'Сервер ещё не настроен: первым регистрируется владелец. Введите код установки — он в журнале сервера и в файле setup-code.txt.');
+}
 let humans = false;
 function hasHuman() { if (humans) return true; for (const k in db.users) if (!db.users[k].bot) { humans = true; break; } return humans; }
 function createUser(f) {
   const u = { id: id(), name: f.name || 'Нудист', last: f.last || '', username: f.username, phone: f.phone, color: Math.floor(Math.random() * AVA_COLORS), created: now(), seen: now(), stars: START_LEAVES, chats: [], servers: [], contacts: [], blocked: [], privacy: {}, ...f.extra };
   if (f.hash) u.pass = f.hash; else if (f.password) u.pass = hashPass(f.password);
   if (!f.bot && !hasHuman()) { u.admin = 'superadmin'; u.badges = ['staff']; }
-  if (!f.bot) humans = true;
+  if (!f.bot) { humans = true; if (setupCode) { setupCode = ''; fs.unlink(SETUP_FILE, () => {}); } }
   db.users[u.id] = u;
   if (u.username) C.byName.set(u.username.toLowerCase(), u.id);
   if (!f.bot) { C.day().regs++; hooks.onRegister.forEach(h => h(u)); if (f.ref) invitedBy(u, f.ref); }
@@ -150,6 +178,8 @@ const api = {
   async register(b, meta) {
     need(db.flags.registration, 'Регистрация временно закрыта. Пляж переполнен.');
     limit('reg:' + meta.ip, 120, 3600e3);
+    if (setupNeeded()) limit('setup:' + meta.ip, 10, 600e3);
+    needSetup(b.setup);
     const username = str(b.username, 32), password = typeof b.password === 'string' ? b.password : '';
     need(USERNAME_RE.test(username), 'Username: латиница, цифры и _, от 3 до 32 символов, начинается с буквы');
     need(!C.usernameTaken(username), 'Этот username уже занят. Кто-то разделся раньше вас.');
@@ -169,16 +199,17 @@ const api = {
     return second(u, b) || createSession(u, meta);
   },
   'phone/start'(b, meta) {
-    need(db.flags.phoneAuth, 'Вход по номеру отключён администратором');
+    need(phoneOn(), 'Вход по номеру отключён: SMS не подключены. Войдите по username и паролю.');
     limit('sms:' + meta.ip, 60, 600e3);
     const phone = normPhone(b.phone); need(phone, 'Введите номер в международном формате, например +7 999 123-45-67');
     const code = String(crypto.randomInt(10000, 100000));
     phoneCodes.set(phone, { code, exp: now() + 300e3, tries: 0 });
     console.log(`[sms-demo] код для ${phone}: ${code}`);
-    // SMS-шлюз не подключён: код возвращается клиенту и показывается на экране (демо-режим).
+    // Демо-режим (SMS_DEMO=on): шлюза нет, код возвращается клиенту и показывается на экране. На рабочем сервере сюда не попасть.
     return { sent: true, demoCode: code, exists: !!findByPhone(phone) };
   },
   'phone/verify'(b, meta) {
+    need(phoneOn(), 'Вход по номеру отключён: SMS не подключены. Войдите по username и паролю.');
     const phone = normPhone(b.phone); need(phone, 'Некорректный номер');
     const pc = phoneCodes.get(phone);
     need(pc && pc.exp > now(), 'Код устарел, запросите новый');
@@ -188,6 +219,7 @@ const api = {
     if (!u) {
       need(db.flags.registration, 'Регистрация временно закрыта');
       const name = str(b.name, 64); if (!name) return { need: 'name' };
+      needSetup(b.setup);
       u = createUser({ phone, name });
     } else {
       if (u.pass && !u.totpOn) { if (!b.password) return { need: 'password' }; if (!checkPass(b.password, u.pass)) fail('Неверный облачный пароль'); }
@@ -224,4 +256,6 @@ function approveQr(user, qid) {
 }
 setInterval(() => { const t = now(); for (const [k, q] of qr) if (q.exp < t - 60e3) qr.delete(k); for (const [k, p] of phoneCodes) if (p.exp < t) phoneCodes.delete(k); }, 60e3).unref();
 
-module.exports = { REF_BONUS, api, hashPass, checkPass, totp, totpOk, b32enc, newRecovery, useRecovery, createUser, createSession, killSession, sid, deleteUser, approveQr, limit, hooks, normPhone, findByPhone, phoneCodes };
+setupInit();
+
+module.exports = { pubFlags, phoneOn, setupNeeded, REF_BONUS, api, hashPass, checkPass, totp, totpOk, b32enc, newRecovery, useRecovery, createUser, createSession, killSession, sid, deleteUser, approveQr, limit, hooks, normPhone, findByPhone, phoneCodes };

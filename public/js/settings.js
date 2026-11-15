@@ -54,6 +54,7 @@ function Profile() {
 // ───── аккаунт
 function Account() {
   const me = S.me, acc = accounts();
+  const dropPhone = async () => { if (await confirmDlg({ title: 'Отвязать номер?', text: `Номер ${me.phone} исчезнет из профиля. Войти по номеру всё равно нельзя: SMS не подключены, вход — по username и паролю.`, ok: 'Отвязать' }) && await call('me.phone.drop', {})) toast('Номер отвязан'); };
   const phone = async () => {
     const p = await promptDlg({ title: me.phone ? 'Сменить номер' : 'Привязать номер', label: 'Новый номер телефона', placeholder: '+7 900 000-00-00', type: 'tel' }); if (!p) return;
     const r = await call('me.phone.start', { phone: p }); if (!r) return;
@@ -68,14 +69,24 @@ function Account() {
   };
   return html`<div class="form">
     <div class="list">
-      <button class="li" onClick=${phone}><${Icon} n="smartphone" /><span><b>Телефон</b><small>${me.phone || 'не привязан'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
+      ${S.flags.phoneAuth ? html`<button class="li" onClick=${phone}><${Icon} n="smartphone" /><span><b>Телефон</b><small>${me.phone || 'не привязан'}</small></span><${Icon} n="chevron-right" s=${16} /></button>`
+        : me.phone && html`<button class="li" onClick=${dropPhone}><${Icon} n="smartphone" /><span><b>Телефон</b><small>${me.phone} · входа по номеру нет, можно отвязать</small></span><${Icon} n="chevron-right" s=${16} /></button>`}
       <button class="li" onClick=${email}><${Icon} n="mail" /><span><b>Почта для восстановления</b><small>${me.email || 'не указана'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
-      <button class="li" onClick=${pass}><${Icon} n="key-round" /><span><b>Пароль</b><small>${me.hasPassword ? 'установлен' : 'не задан — вход только по SMS'}</small></span><${Icon} n="chevron-right" s=${16} /></button></div>
+      <button class="li" onClick=${pass}><${Icon} n="key-round" /><span><b>Пароль</b><small>${me.hasPassword ? 'установлен' : 'не задан — без пароля не войти с другого устройства'}</small></span><${Icon} n="chevron-right" s=${16} /></button></div>
     <${Sel} label="Удалить аккаунт, если я не захожу" hint="Таймер самоуничтожения. Сбрасывается при каждом входе." value=${me.autodelete || 6} opts=${[[1, '1 месяц'], [3, '3 месяца'], [6, '6 месяцев'], [12, '1 год'], [24, '2 года']]} onChange=${v => call('me.autodelete', { months: +v })} />
     <h5>Аккаунты на этом устройстве</h5>
     <div class="list">${acc.map(a => html`<button class="li" disabled=${a.token === S.token} onClick=${() => switchAccount(a.token)}><${Icon} n="circle-user" /><span><b>${a.name || 'Аккаунт'}</b><small>${a.token === S.token ? 'сейчас активен' : a.username ? '@' + a.username : 'переключиться'}</small></span></button>`)}
       ${acc.length < 5 && html`<button class="li" onClick=${addAccount}><${Icon} n="plus" /><span><b>Добавить аккаунт</b><small>До 5 аккаунтов с быстрым переключением</small></span></button>`}</div>
     <h5>Опасная зона</h5><button class="btn danger" onClick=${del}><${Icon} n="trash-2" s=${16} /> Удалить аккаунт</button></div>`;
+}
+// Полоска над списком чатов для аккаунта без пароля. Вход по номеру отключён, так что без пароля человек останется без аккаунта,
+// как только выйдет или сменит телефон. Не окно и не блокировка: одна строка, её можно скрыть на неделю.
+export function PassStrip() {
+  const me = S.me; if (!me || me.hasPassword || Date.now() - (local.get('pass.strip') || 0) < 7 * 864e5) return null;
+  return html`<div class="push-strip pass-strip" role="button" tabIndex="0" onClick=${() => openModal(PassDlg)}>
+    <${Icon} n="key-round" s=${20} /><span><b>Задайте пароль</b><small>${me.username ? 'Вход по номеру отключён. Без пароля не войти с другого устройства.' : 'Вход по номеру отключён. Задайте username в профиле и пароль — иначе не войти с другого устройства.'}</small></span>
+    <button class="ib sm" title="Скрыть на неделю" aria-label="Скрыть на неделю" onClick=${k => { k.stopPropagation(); local.set('pass.strip', Date.now()); bump(); }}><${Icon} n="x" s=${15} /></button>
+  </div>`;
 }
 function PassDlg({ id }) {
   const [f, setF] = useState({ old: '', a: '', b: '' }), has = S.me.hasPassword, ok = f.a.length >= 6 && f.a === f.b && (!has || f.old);

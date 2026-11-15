@@ -136,7 +136,12 @@ H['me.phone.start'] = (c, p) => {
   need(!r.exists, 'Этот номер уже привязан к другому аккаунту');
   return r;
 };
+H['me.phone.drop'] = c => {      /* номер сам по себе ничего не подтверждает: отвязать можно всегда, если есть чем войти */
+  const u = user(c); need(u.phone, 'Номер не привязан'); need(u.username && u.pass, 'Сначала задайте username и пароль — иначе в аккаунт будет не войти');
+  delete u.phone; save(); selfUpdate(u); C.broadcastUser(u); return { ok: true };
+};
 H['me.phone.verify'] = (c, p) => {
+  need(A.phoneOn(), 'Привязка номера отключена: SMS не подключены');
   const phone = A.normPhone(p.phone), pc = A.phoneCodes.get(phone);
   need(pc && pc.exp > now() && pc.code === String(p.code || '').trim(), 'Неверный или устаревший код');
   need(!A.findByPhone(phone), 'Номер уже занят');

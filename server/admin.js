@@ -54,7 +54,7 @@ function stats() {
 function monitor() {
   const m = process.memoryUsage(); let conn = 0; for (const s of C.conns.values()) conn += s.size;
   let dbSize = 0; try { dbSize = fs.statSync(path.join(C.DATA, 'db.json')).size; } catch (e) { /* ещё не записана */ }
-  return { uptime: Math.round(process.uptime()), node: process.version, rss: m.rss, heap: m.heapUsed, load: os.loadavg(), cpus: os.cpus().length, connections: conn, voiceRooms: G.rooms.size, voicePeers: [...G.rooms.values()].reduce((a, r) => a + r.peers.size, 0), rpcTotal: C.metrics.rpc, rpcErrors: C.metrics.errors, rpcPerMin: C.metrics.perMin.slice(-30), dbSize, scheduled: db.scheduled.length,
+  return { uptime: Math.round(process.uptime()), node: process.version, rss: m.rss, heap: m.heapUsed, load: os.loadavg(), cpus: os.cpus().length, connections: conn, voiceRooms: G.rooms.size, voicePeers: [...G.rooms.values()].reduce((a, r) => a + r.peers.size, 0), rpcTotal: C.metrics.rpc, rpcErrors: C.metrics.errors, rpcPerMin: C.metrics.perMin.slice(-30), dbSize, saveMs: C.metrics.saveMs || 0, scheduled: db.scheduled.length,
     components: [
       { name: 'HTTP API', ok: true, note: 'работает (этот процесс)' }, { name: 'WebSocket-шлюз', ok: true, note: conn + ' соединений' },
       { name: 'STUN/TURN', ok: !!(process.env.ICE_SERVERS || (process.env.TURN_HOST && process.env.TURN_SECRET)), note: process.env.TURN_HOST && process.env.TURN_SECRET ? 'свой TURN: ' + process.env.TURN_HOST : process.env.ICE_SERVERS ? 'задан через ICE_SERVERS' : 'только публичный STUN, TURN не настроен' },
@@ -197,7 +197,7 @@ H['admin.chat.set'] = (c, p) => {
   else { const ch = db.chats[p.id]; need(ch && !ch.server, 'Чат не найден'); if (p.del) { log(c, 'chat.del', ch.title); return C.destroyChat(ch); } senior(c, 'ver.' + ch.id, 'Галочка'); ch.verified = !!p.verified; save(); C.emitChat(ch); log(c, 'chat.verify', `${ch.title}: ${ch.verified}`); }
 };
 H['admin.flags'] = (c, p) => {
-  if (p.set) { guard(c, 'admin'); const ch = Object.keys(db.flags).filter(k => typeof p.set[k] === 'boolean' && p.set[k] !== db.flags[k]); for (const k of ch) senior(c, 'flag.' + k, 'Выключатель «' + k + '»', true); for (const k of ch) { senior(c, 'flag.' + k, 'Выключатель'); db.flags[k] = p.set[k]; log(c, 'flag', `${k} = ${p.set[k]}`); } save(); C.emitAll('flags', db.flags); }
+  if (p.set) { guard(c, 'admin'); const ch = Object.keys(db.flags).filter(k => typeof p.set[k] === 'boolean' && p.set[k] !== db.flags[k]); for (const k of ch) senior(c, 'flag.' + k, 'Выключатель «' + k + '»', true); for (const k of ch) { senior(c, 'flag.' + k, 'Выключатель'); db.flags[k] = p.set[k]; log(c, 'flag', `${k} = ${p.set[k]}`); } save(); C.emitAll('flags', A.pubFlags()); }
   else guard(c, 'viewer');
   return db.flags;
 };

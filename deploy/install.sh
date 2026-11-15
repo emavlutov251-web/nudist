@@ -70,6 +70,7 @@ umask 077
 cat > "$ENVF" <<ENV
 # Настройки службы «Нудист». Этот блок install.sh перезаписывает при каждом запуске.
 NUDIST_DOMAIN=$DOMAIN
+NODE_ENV=production
 HOST=127.0.0.1
 PORT=3000
 DATA_DIR=$DATA
@@ -216,8 +217,9 @@ OK=0; for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fsS --max-time 3 http://127.0.0.1:
 HTTPS=0; for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do curl -fsS --max-time 5 "https://$DOMAIN/api/health" >/dev/null 2>&1 && { HTTPS=1; break; }; sleep 5; done
 
 printf '\n'
-if [ "$HTTPS" = 1 ]; then say "Готово: https://$DOMAIN"; echo "Этот адрес — в браузер и в приложение на телефоне. Первый, кто зарегистрируется, станет главным админом (https://$DOMAIN/admin)."
+if [ "$HTTPS" = 1 ]; then say "Готово: https://$DOMAIN"; echo "Этот адрес — в браузер и в приложение на телефоне. Админка: https://$DOMAIN/admin"
 else warn "Сервер работает, но https://$DOMAIN пока не открывается."; echo "Проверьте: A-запись домена указывает на $IP; порты 80 и 443 открыты у хостера; журнал: journalctl -u caddy -n 50"; fi
+if [ -s "$DATA/setup-code.txt" ]; then say "Код установки: $(cat "$DATA/setup-code.txt")"; echo "Сервер новый. Зарегистрируйтесь первым и введите этот код — станете главным админом. Пока вы этого не сделали, никто другой зарегистрироваться не сможет."; fi
 cat <<TXT
 
 Порты, которые должны быть открыты у хостера: 80, 443 (сайт), 3478 tcp+udp и 49160-49400 udp (звонки).

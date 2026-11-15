@@ -341,6 +341,17 @@ function SafetyCode({ chat }) {
   if (!c) return null;
   return html`<div class="safety"><h5><${Icon} n="shield-check" s=${15} /> Код безопасности</h5><div class="sf-e">${c.emoji}</div><code class="mono">${c.hex}</code><div class="qr-box sm"><${QR} text=${'nudist-safety:' + c.hex.replace(/ /g, '')} size=${120} /></div><p class="hint">Сравните эмодзи и цифры с собеседником — лично или по звонку. Совпали — значит, между вами никого нет. Даже нас.</p></div>`;
 }
+// Обычный чат честно называет себя обычным: хранится на сервере, сквозного шифрования нет. Строка в панели информации, без окон поверх.
+function PlainInfo({ id, chat }) {
+  const ch = S.chats[chat]; if (!ch) return null; const u = ch.type === 'dm' && S.users[ch.peer], canSecret = u && !u.bot && !u.deleted && e2eeAvailable();
+  const secret = async () => { try { await ensureKey(); const c = await call('secret.open', { user: u.id }); if (c) { S.chats[c.id] = c; closeModal(id); S.ui.panel = false; openChat(c.id); } } catch (e) { toast(e.message, 'err'); } };
+  return html`<${Modal} id=${id} title="Это обычный чат" icon="info" footer=${html`${canSecret && html`<button class="btn ghost" onClick=${secret}><${Icon} n="lock" s=${15} /> Секретный чат</button>`}<button class="btn" onClick=${() => closeModal(id)}>Понятно</button>`}>
+    <div class="e2ee-info">
+      <p><b>Сообщения хранятся на сервере.</b> Так вы видите их с любого устройства, а поиск и история работают везде.</p>
+      <p><b>Сквозного шифрования здесь нет.</b> По дороге сообщения защищены (HTTPS), но на сервере лежат открытым текстом. Читать их администрация не должна и кнопки для этого в админке нет, но технически у владельца сервера доступ к базе есть.</p>
+      <p><b>Что можно сделать.</b> ${ch.type === 'dm' ? 'Для личного откройте секретный чат: он шифруется на устройствах. Любую личную переписку можно «Стереть без следа» у обоих.' : 'Для личного пишите человеку в секретный чат: он шифруется на устройствах.'}</p>
+    </div><//>`;
+}
 // Простое объяснение сквозного шифрования — по нажатию на значок «E2EE» в шапке секретного чата.
 export function E2eeInfo({ id, chat }) {
   const ch = S.chats[chat]; if (!ch) return null;
@@ -349,6 +360,7 @@ export function E2eeInfo({ id, chat }) {
       <p><b>Сообщения шифруются на вашем устройстве</b> и расшифровываются только на устройстве собеседника. На сервере лежит набор символов — прочитать его не можем даже мы.</p>
       <p><b>Ключ хранится только у вас.</b> Поэтому на другом телефоне или после переустановки приложения старые сообщения этого чата не откроются — это плата за секретность.</p>
       <p><b>Что сервер всё же видит:</b> кто с кем переписывается и когда. Текст, фото и файлы — нет.</p>
+      <p><b>Чего этот чат не умеет.</b> Ключ один на всю переписку и лежит в этом браузере. Кто получит доступ к вашему устройству или к ключу — прочитает и старые сообщения. Шифрование написано нами и независимой проверки не проходило: для вопросов жизни и свободы выбирайте проверенные приложения.</p>
       <${SafetyCode} chat=${ch} />
     </div><//>`;
 }
@@ -370,6 +382,8 @@ export function InfoPanel({ chat }) {
       ${grp && (chat.slow || chat.price || chat.ttl) && html`<div class="pf-row"><small>Режим</small><p>${[chat.slow && `медленный режим: ${chat.slow} сек`, chat.price && `подписка ${chat.price} 🍃/мес`, chat.ttl && 'автоудаление: ' + ttlLabel(chat.ttl)].filter(Boolean).join(' · ')}</p></div>`}
       ${grp && can.info && chat.reqs > 0 && html`<button class="btn ghost wide" onClick=${() => openModal(ChatSettings, { chat: chat.id, tab: 'reqs' })}><${Icon} n="user-check" s=${16} /> Заявки на вступление: ${chat.reqs}</button>`}
       ${chat.type === 'secret' && html`<${SafetyCode} chat=${chat} />`}
+      ${(chat.type === 'dm' || chat.type === 'group') && !(u && u.bot) && html`<button class="pf-row click enc-row" onClick=${() => openModal(PlainInfo, { chat: chat.id })}><small>Защита</small><p><${Icon} n="info" s=${14} /> Обычный чат: хранится на сервере, без сквозного шифрования</p></button>`}
+      ${chat.type === 'secret' && html`<button class="pf-row click enc-row" onClick=${() => openModal(E2eeInfo, { chat: chat.id })}><small>Защита</small><p><${Icon} n="lock" s=${14} /> Секретный чат: шифруется на устройствах</p></button>`}
       <div class="pn-acts">${chat.type !== 'saved' && html`<button onClick=${() => call('chat.state', { id: chat.id, mute: isMuted(chat) ? 0 : 1e15 })}><${Icon} n=${isMuted(chat) ? 'bell-off' : 'bell'} /><span>${isMuted(chat) ? 'Без звука' : 'Звук вкл.'}</span></button>`}${grp && can.invite && html`<button onClick=${() => openModal(ChatSettings, { chat: chat.id, tab: 'inv' })}><${Icon} n="link" /><span>Пригласить</span></button>`}<button onClick=${e => showMenu(e, chatActions(chat, false), { anchor: e.currentTarget })}><${Icon} n="ellipsis" /><span>Ещё</span></button></div>
       <${SharedMedia} chat=${chat} />
       ${grp && html`<${Members} chat=${chat} />`}

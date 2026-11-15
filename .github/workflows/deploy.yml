@@ -8,6 +8,7 @@ on:
       - 'server/**'
       - 'public/**'
       - 'scripts/smoke.js'
+      - 'scripts/security-test.js'
       - 'package.json'
       - 'Dockerfile'
       - '.dockerignore'
@@ -37,6 +38,8 @@ jobs:
           for f in public/js/*.js; do cp "$f" /tmp/check.mjs && node --check /tmp/check.mjs || { echo "::error file=$f::синтаксическая ошибка"; exit 1; }; done
       - name: Главный путь (регистрация, вход, WebSocket, файлы)
         run: node scripts/smoke.js
+      - name: Безопасность (чужие чаты, админка, файлы, вход, первый запуск)
+        run: node scripts/security-test.js
       - name: Docker-образ собирается и запускается
         run: |
           docker build -t nudist:ci .

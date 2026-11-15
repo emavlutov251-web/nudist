@@ -54,7 +54,9 @@ function PolicyGate() {
 const SLOGANS = ['Мессенджер, которому нечего скрывать.', 'Скрывать нечего. Но шифруем на совесть.', 'Голая правда и немного стикеров.', 'Одежда — по желанию. Двухфакторка — обязательно.'];
 function Auth() {
   const ref = pendingRef(); const [mode, setMode] = useState(ref ? 'register' : 'login');
-  const [f, setF] = useState({ username: '', password: '', name: '', phone: '', code: '', totp: '', rec: '' });
+  const [f, setF] = useState({ username: '', password: '', name: '', phone: '', code: '', totp: '', rec: '', setup: '' });
+  const [cfg, setCfg] = useState(null);      /* что разрешает сервер: вход по номеру (только демо), первый запуск с кодом установки */
+  useEffect(() => { fetch('/api/config').then(r => r.json()).then(setCfg).catch(() => {}); }, []);
   const [step, setStep] = useState(null); // totp | code | name | password
   const [demo, setDemo] = useState(null);
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
@@ -66,7 +68,7 @@ function Auth() {
   const submit = e => {
     e.preventDefault();
     go(async () => {
-      if (mode === 'register') { if (!agree) throw new Error('Чтобы зарегистрироваться, примите политику конфиденциальности'); if (done(await http('register', { username: f.username, password: f.password, name: f.name, agree: true, ref: pendingRef() || undefined }))) clearRef(); }
+      if (mode === 'register') { if (!agree) throw new Error('Чтобы зарегистрироваться, примите политику конфиденциальности'); if (done(await http('register', { username: f.username, password: f.password, name: f.name, agree: true, setup: f.setup || undefined, ref: pendingRef() || undefined }))) clearRef(); }
       else if (mode === 'login') { const r = await http('login', { username: f.username, password: f.password, code: f.totp || undefined }); if (!done(r) && r.need === 'totp') setStep('totp'); }
       else if (mode === 'recover') done(await http('recover', { username: f.username, code: f.rec, password: f.password }));
       else if (mode === 'phone') {
@@ -86,7 +88,7 @@ function Auth() {
     </section>
     <section class="auth-form">
       <form class="card" onSubmit=${submit}>
-        <div class="tabs auth-tabs"><button type="button" class=${cx((mode === 'login' || mode === 'register' || mode === 'recover') && 'on')} onClick=${() => sw('login')}>Username</button><button type="button" class=${cx(mode === 'phone' && 'on')} onClick=${() => sw('phone')}>Телефон</button><button type="button" class=${cx(mode === 'qr' && 'on')} onClick=${() => sw('qr')}>QR-код</button></div>
+        <div class="tabs auth-tabs"><button type="button" class=${cx((mode === 'login' || mode === 'register' || mode === 'recover') && 'on')} onClick=${() => sw('login')}>Username</button>${cfg && cfg.flags && cfg.flags.phoneAuth && html`<button type="button" class=${cx(mode === 'phone' && 'on')} onClick=${() => sw('phone')}>Телефон</button>`}<button type="button" class=${cx(mode === 'qr' && 'on')} onClick=${() => sw('qr')}>QR-код</button></div>
         ${ref && html`<div class="ref-note"><${Icon} n="gift" s=${18} /><span>Вас зовёт <b>@${ref}</b>. Зарегистрируйтесь — и вы сразу окажетесь у него в контактах, а обоим дадут по 100 🍃.</span></div>`}
         ${mode === 'qr' ? html`<${QrLogin} onToken=${t => done({ token: t })} />` : html`
           <h2>${mode === 'register' ? 'Регистрация' : mode === 'recover' ? 'Восстановление доступа' : mode === 'phone' ? 'Вход по номеру' : 'С возвращением'}</h2>
@@ -95,6 +97,7 @@ function Auth() {
             <label class="fld"><span>Username</span><input value=${f.username} onInput=${set('username')} placeholder="latinica_bez_probelov" autocomplete="username" required autofocus /></label>
             ${mode === 'recover' && html`<label class="fld"><span>Код восстановления</span><input value=${f.rec} onInput=${set('rec')} placeholder="10 символов из списка кодов" required /></label>`}
             <label class="fld"><span>${mode === 'recover' ? 'Новый пароль' : 'Пароль'}</span><input type="password" value=${f.password} onInput=${set('password')} placeholder="минимум 6 символов" autocomplete=${mode === 'login' ? 'current-password' : 'new-password'} required minlength="6" /></label>
+            ${mode === 'register' && cfg && cfg.setup && html`<label class="fld"><span>Код установки</span><input value=${f.setup} onInput=${set('setup')} placeholder="из журнала сервера или файла setup-code.txt" autocomplete="off" required /></label>`}
             ${step === 'totp' && html`<label class="fld"><span>Код двухфакторной защиты</span><input value=${f.totp} onInput=${set('totp')} inputmode="numeric" placeholder="6 цифр или код восстановления" autofocus required /></label>`}`}
           ${mode === 'phone' && html`
             <label class="fld"><span>Номер телефона</span><input type="tel" value=${f.phone} onInput=${set('phone')} placeholder="+7 999 123-45-67" disabled=${!!step} required autofocus /></label>
@@ -107,7 +110,7 @@ function Auth() {
           ${err && html`<p class="err" role="alert">${err}</p>`}
           <button class="btn big" disabled=${busy}>${busy ? 'Секунду…' : mode === 'register' ? 'Раздеться и войти' : mode === 'recover' ? 'Сменить пароль и войти' : mode === 'phone' && !step ? 'Получить код' : 'Войти'}</button>
           ${mode === 'login' && html`<p class="auth-alt">Впервые здесь? <a onClick=${() => sw('register')}>Создать аккаунт</a> · <a onClick=${() => sw('recover')}>Забыли пароль?</a></p>`}
-          ${mode === 'register' && html`<p class="auth-alt">Уже есть аккаунт? <a onClick=${() => sw('login')}>Войти</a></p><p class="hint">Номер телефона не нужен. Первый зарегистрированный аккаунт становится администратором сервиса.</p>`}
+          ${mode === 'register' && html`<p class="auth-alt">Уже есть аккаунт? <a onClick=${() => sw('login')}>Войти</a></p><p class="hint">${cfg && cfg.setup ? 'Сервер новый: первым регистрируется владелец, он же станет администратором. Остальные смогут зарегистрироваться после него.' : 'Номер телефона и почта не нужны.'}</p>`}
           ${mode === 'recover' && html`<p class="auth-alt"><a onClick=${() => sw('login')}>Вспомнил пароль</a></p><p class="hint">Коды восстановления выдаются при включении двухфакторной защиты. Без них пароль не сбросить — мы честно его не знаем.</p>`}`}
         <p class="auth-legal"><a href="/pay" target="_blank" rel="noopener">Цены и оплата</a> · <a href="/offer" target="_blank" rel="noopener">Оферта</a> · <a href="/contacts" target="_blank" rel="noopener">Контакты и реквизиты</a></p>
         ${S.adding && acc.length > 0 && html`<p class="auth-alt"><a onClick=${() => { S.adding = false; login(acc[0].token); }}>← Вернуться в аккаунт ${acc[0].name}</a></p>`}
