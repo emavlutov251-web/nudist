@@ -34,6 +34,10 @@ function UserPicker({ id, title, ok = 'Готово', multi, res, exclude = [], 
 }
 export const pickUsers = o => new Promise(res => openModal(UserPicker, { ...o, res }));
 
+// «До утра»: сколько осталось до ближайших восьми утра по часам человека
+const untilMorning = () => { const d = new Date(); d.setHours(8, 0, 0, 0); if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1); return d.getTime() - Date.now(); };
+// Заготовки правил группы: вставляются в поле, дальше их можно править
+const RULE_SETS = [['Общение', '1. Уважаем друг друга: без оскорблений и травли.\n2. Без спама и рекламы.\n3. Личные данные других людей не публикуем.\n4. Споры — по делу, без перехода на личности.'], ['Учёба', '1. Вопросы по теме — сюда, болтовня — в личку.\n2. Домашку не списываем, а разбираем.\n3. Файлы и конспекты подписываем: предмет и тема.\n4. Ночью (23:00–7:00) не шумим.'], ['Игры', '1. Ищешь команду — пиши игру, время и уровень.\n2. Читы и продажа аккаунтов запрещены.\n3. Спойлеры прячем под ||спойлер||.\n4. Проиграл — не токсичь.'], ['По-нудистски', '1. Не одеваться без спроса.\n2. Не спамить.\n3. Мемы — свежие.\n4. Кто обиделся — тот в полотенце.']];
 // ═════ Профиль ═════
 export function showProfile(userId, username, tab) { openModal(Profile, { userId, username, tab }); }
 function Profile({ id, userId, username, tab: tab0 }) {
@@ -63,7 +67,8 @@ function Profile({ id, userId, username, tab: tab0 }) {
       ${!me && !u.deleted && html`<div class="pf-acts"><button onClick=${() => go(() => openUser(u.id))}><${Icon} n="message-circle" /><span>Написать</span></button>${!u.bot && html`<button onClick=${async () => { await openUser(u.id); const c = Object.values(S.chats).find(x => x.type === 'dm' && x.peer === u.id); if (c) go(() => startCall(c.id, false)); }}><${Icon} n="phone" /><span>Позвонить</span></button><button onClick=${secret}><${Icon} n="lock" /><span>Секретный чат</span></button>`}<button onClick=${e => showMenu(e, [
         { icon: contact ? 'user-minus' : 'user-plus', label: contact ? 'Убрать из контактов' : 'В контакты', run: () => call('me.contact', { id: u.id, on: !contact }) },
         S.flags.stars && !u.bot && { emoji: '🎁', label: 'Подарить подарок', run: () => openGiftShop(u.id) },
-        S.flags.stars && !u.bot && { emoji: '✨', label: 'Подарить украшение', hint: 'рамку, цвет имени, значок', run: () => openGiftItems(u) },
+        !u.bot && !me && u.username && { icon: 'circle-help', label: 'Анонимный вопрос', run: () => window.open('/q/' + encodeURIComponent(u.username), '_blank', 'noopener') },
+        S.flags.stars && !u.bot && { emoji: '✨', label: 'Подарить украшение', run: () => openGiftItems(u) },
         !u.bot && valentineOn() && { emoji: '💌', label: 'Отправить валентинку', run: () => sendValentine(u) },
         S.flags.stars && !u.bot && { emoji: '🍃', label: 'Поделиться листиками', run: () => shareLeaves(u.id) },
         u.username && { icon: 'qr-code', label: 'QR-код профиля', run: () => openModal(QrModal, { title: 'QR профиля', text: link('u=' + u.username), hint: 'Наведите камеру — откроется профиль @' + u.username }) },
@@ -280,7 +285,7 @@ export function chatActions(chat, inList) {
   };
   return [
     inList && { icon: 'pin', label: chat.pin ? 'Открепить' : 'Закрепить наверху', run: () => call('chat.state', { id: chat.id, pin: !chat.pin }) },
-    chat.type !== 'saved' && (muted ? { icon: 'bell', label: 'Включить уведомления', run: () => mute(0) } : { icon: 'bell-off', label: 'Без звука', sub: [['На 1 час', 3600e3], ['На 8 часов', 8 * 3600e3], ['На сутки', 864e5], ['На неделю', 7 * 864e5]].map(([l, t]) => ({ label: l, run: () => mute(Date.now() + t) })).concat([{ label: 'Навсегда', run: () => mute(1e15) }]) }),
+    chat.type !== 'saved' && (muted ? { icon: 'bell', label: 'Включить уведомления', run: () => mute(0) } : { icon: 'bell-off', label: 'Без звука', sub: [['На 1 час', 3600e3], ['До утра (8:00)', untilMorning()], ['На 8 часов', 8 * 3600e3], ['На сутки', 864e5], ['На неделю', 7 * 864e5]].map(([l, t]) => ({ label: l, run: () => mute(Date.now() + t) })).concat([{ label: 'Навсегда', run: () => mute(1e15) }]) }),
     chat.type !== 'saved' && { icon: 'bell-ring', label: 'Звук уведомлений', sub: [{ label: 'Как у всех', on: !chat.notif, run: () => call('chat.state', { id: chat.id, notif: null }) }, ...NOTIF_SOUNDS.map(([k, l]) => ({ label: l, on: chat.notif && chat.notif.sound === k, run: () => { sfx(k); call('chat.state', { id: chat.id, notif: { sound: k, preview: !chat.notif || chat.notif.preview !== false } }); } })), '-', { label: 'Скрывать текст в уведомлениях', on: chat.notif && chat.notif.preview === false, run: () => call('chat.state', { id: chat.id, notif: { sound: (chat.notif || {}).sound || S.settings.notifSound, preview: !!(chat.notif && chat.notif.preview === false) } }) }] },
     { icon: chat.archived ? 'archive-restore' : 'archive', label: chat.archived ? 'Вернуть из архива' : 'В архив', run: () => call('chat.state', { id: chat.id, archived: !chat.archived }) },
     chat.unread > 0 && { icon: 'check-check', label: 'Пометить прочитанным', run: () => call('chat.read', { id: chat.id, seq: chat.seq || 0 }) },
@@ -382,6 +387,7 @@ function CsMain({ chat }) {
   return html`<div class="form"><div class="row top"><button class="ava-pick" onClick=${async () => { const u = await uploadAvatar(); if (u) call('chat.update', { id: chat.id, avatar: u }); }} title="Сменить аватар">${chat.avatar ? html`<img src=${chat.avatar} alt="" />` : html`<${Icon} n="camera" s=${24} />`}</button><div class="grow"><label class="fld"><span>Название</span><input maxlength="100" value=${f.title} onInput=${e => set({ title: e.target.value })} /></label></div></div>
     <label class="fld"><span>Описание</span><textarea rows="2" maxlength="500" value=${f.about} onInput=${e => set({ about: e.target.value })}></textarea></label>
     <label class="fld"><span>Правила</span><textarea rows="3" maxlength="2000" value=${f.rules} placeholder="1. Не одеваться без спроса. 2. Не спамить." onInput=${e => set({ rules: e.target.value })}></textarea></label>
+    <div class="rule-sets"><small>Заготовки:</small>${RULE_SETS.map(([n, t]) => html`<button type="button" class="chip" onClick=${async () => { if (f.rules.trim() && f.rules.trim() !== t && !(await confirmDlg({ title: 'Заменить правила?', text: 'Текущий текст правил заменится заготовкой «' + n + '».', ok: 'Заменить' }))) return; set({ rules: t }); }}>${n}</button>`)}</div>
     <${Toggle} label="Публичный" hint="Виден в поиске, вход по ссылке @username" on=${f.pub} onChange=${v => set({ pub: v })} />
     ${f.pub && html`<label class="fld"><span>Ссылка @</span><input maxlength="32" value=${f.username} onInput=${e => set({ username: e.target.value.replace(/[^a-zA-Z0-9_]/g, '') })} /></label>`}
     <${Toggle} label="Вступление по заявкам" hint="Админы одобряют каждого вручную" on=${f.approval} onChange=${v => set({ approval: v })} />

@@ -161,3 +161,16 @@ button.col-i.gi { font: inherit; color: inherit; cursor: pointer; } button.col-i
 .ab-m b { cursor: pointer; }
 .cap-card { flex-wrap: wrap; gap: 6px 10px; } .cap-card > span { flex: 1 1 150px; }
 .pf-tabs button { white-space: nowrap; padding-left: 6px; padding-right: 6px; }
+
+/* ───── 67: правки по отзыву ───── */
+.shop-new { position: absolute; top: 6px; left: 6px; padding: 1px 7px; border-radius: 9px; background: var(--leaf, #2FB56B); color: #fff; font-style: normal; font-size: .7em; font-weight: 700; z-index: 2; }
+.shop-more { align-self: flex-start; font-size: .86em; color: var(--accent); cursor: pointer; }
+.bn-pv { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; } .bn-pv button { display: grid; place-items: center; width: 62px; height: 62px; padding: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--hover); color: inherit; font: inherit; cursor: pointer; overflow: hidden; } .bn-pv button:hover { border-color: var(--accent); }
+.bn-pv .shop-nm { font-size: .7em; max-width: 56px; overflow: hidden; white-space: nowrap; } .bn-pv .shop-em { font-size: 28px; } .bn-pv .ava { transform: scale(.82); } .bn-pv .sticker, .bn-pv img { max-width: 50px; max-height: 50px; }
+.shop-pack.best { border-color: var(--leaf, #2FB56B); box-shadow: 0 0 0 1px var(--leaf, #2FB56B) inset; } .shop-pack em { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); padding: 1px 8px; border-radius: 9px; background: var(--leaf, #2FB56B); color: #fff; font-style: normal; font-size: .68em; font-weight: 700; white-space: nowrap; }
+.shop-packs { padding-top: 8px; }
+.eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; margin-right: 6px; vertical-align: -1px; } .eq i { width: 3px; height: 100%; border-radius: 1px; background: var(--accent); transform-origin: bottom; animation: eq-b .9s ease-in-out infinite; } .eq i:nth-child(2) { animation-delay: -.3s; } .eq i:nth-child(3) { animation-delay: -.6s; }
+@keyframes eq-b { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .eq i { animation: none; transform: scaleY(.7); } }
+.rule-sets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -4px 0 8px; } .rule-sets small { color: var(--ink2); }
+.rule-sets .chip { padding: 4px 11px; border-radius: 13px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: .86em; cursor: pointer; } .rule-sets .chip:hover { border-color: var(--accent); }

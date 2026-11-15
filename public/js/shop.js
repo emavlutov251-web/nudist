@@ -43,6 +43,7 @@ function Preview({ it }) {
   return html`<span class="shop-em">${it.emoji}</span>`;
 }
 function ShopModal({ id, tab: tab0 }) {
+  const [allPerks, setAllPerks] = useState({});
   const [tab, setTab] = useState(tab0 || 'cosmetics'), [d, setD] = useState(null), [season, setSeason] = useState(null), [busy, setBusy] = useState(false);
   const me = S.me, worn = me.worn || {};
   const load = () => rpc('shop.catalog').then(setD).catch(e => toast(e.message, 'err'));
@@ -72,6 +73,7 @@ function ShopModal({ id, tab: tab0 }) {
   const card = it => { const mine = it.owned || it.included, onNow = mine && isOn(it); return html`<div class=${cx('shop-card', 'r-' + it.tier, mine && 'mine', onNow && 'worn')} key=${it.id}>
             ${(it.deal || it.sale) && !mine && it.tier !== 'season' && html`<i class="shop-deal" title=${it.sale ? it.sale + ': скидка до конца события' : 'Скидка дня: только сегодня'}>−${it.off} %</i>`}
             ${it.till && !mine && html`<i class="shop-till" title="Вещь события: потом её будет не купить">до ${new Date(it.till - 1).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</i>`}
+            ${it.fresh && !mine && !it.deal && !it.sale && html`<i class="shop-new">новинка</i>`}
             <button class="shop-pv" onClick=${() => tryOn(it)} title="Примерить" aria-label=${'Примерить: ' + it.name}><${Preview} it=${it} /></button>
             <b>${it.name}</b><small class="shop-r">${RARITY[it.tier]}${it.count ? ` · ${it.count} шт.` : ''}</small>
             ${mine ? html`<button class=${cx('btn sm', onNow ? 'ghost' : '')} disabled=${busy || it.kind === 'stickers'} onClick=${() => wear(it)}>${it.kind === 'stickers' ? 'В панели стикеров' : onNow ? (it.kind === 'theme' ? 'Выключить' : 'Снять') : (it.kind === 'theme' ? 'Включить' : 'Надеть')}</button>${!it.owned && html`<small class="shop-inc">входит в тариф</small>`}`
@@ -125,18 +127,20 @@ function ShopModal({ id, tab: tab0 }) {
         ${me.tier && d.trial.can && html`<div class="shop-trial"><div><b>Pro на ${d.trial.days} дня бесплатно</b><small>Один раз на аккаунт. Оплаченный срок не тратится.</small></div><button class="btn" disabled=${busy} onClick=${trial}>Попробовать</button></div>`}
         <div class="shop-plans">${d.plans.map(p => html`<div class=${cx('shop-plan', 'p-' + p.id, me.tier === p.id && 'cur')} key=${p.id}>
           <h3><span>${p.emoji}</span> ${p.name}${me.tier === p.id && html`<i>ваш</i>`}</h3>
-          <ul>${p.perks.map(x => html`<li><${Icon} n="check" s=${14} /> ${x}</li>`)}</ul>
+          <ul>${(allPerks[p.id] ? p.perks : p.perks.slice(0, 4)).map(x => html`<li><${Icon} n="check" s=${14} /> ${x}</li>`)}</ul>
+          ${p.perks.length > 4 && html`<a class="shop-more" aria-expanded=${!!allPerks[p.id]} onClick=${() => setAllPerks({ ...allPerks, [p.id]: !allPerks[p.id] })}>${allPerks[p.id] ? 'Свернуть' : `Показать все ${p.perks.length}`}</a>`}
           <div class="shop-plan-b"><button class="btn" disabled=${busy} onClick=${() => buyPlanLeaves(p)}>${p.off ? html`<s>${num(p.full)}</s> ` : ''}${num(p.stars)} 🍃</button><button class="btn ghost" onClick=${() => buyItem('plan_' + p.id)}>${p.rub} ₽</button></div>${p.off > 0 && html`<i class="shop-save">продление за листики −${p.off} % до конца срока</i>`}
           <a class="shop-gift" onClick=${() => giftPlan(p)}><${Icon} n="gift" s=${14} /> Подарить другу</a>
           <small>${p.days} дней, разовый платёж</small></div>`)}</div>
         <p class="hint">Тот же тариф продлевает срок. Если взять тариф выше, остаток прежнего пересчитается в дни нового по цене — оплаченное не сгорает. Автопродления нет.</p>`}
       ${tab === 'bundles' && html`<div class="shop-bundles">${d.bundles.map(b => html`<div class=${cx('shop-bundle', !b.fresh && 'mine')} key=${b.id}>
           <h3><span>${b.emoji}</span> ${b.name}</h3>
+          <div class="bn-pv">${b.items.map(i => d.items.find(x => x.id === i)).filter(Boolean).map(x => html`<button key=${x.id} title=${'Примерить: ' + x.name} onClick=${() => tryOn(x)}><${Preview} it=${x} /></button>`)}</div>
           <p>${b.items.map(byName).join(' · ')}</p>
           ${b.fresh ? html`<div class="shop-plan-b"><button class="btn" disabled=${busy} onClick=${() => buyBundle(b)}>${b.price < b.full ? html`<s>${num(b.full)}</s> ` : ''}${num(b.price)} 🍃</button>${b.price < b.full && html`<i class="shop-save">выгода ${Math.round(100 - b.price * 100 / b.full)} %</i>`}</div>` : html`<small class="shop-inc">всё уже есть</small>`}
         </div>`)}</div><p class="hint">Вещи из набора остаются навсегда. За то, что у вас уже есть, второй раз не берём.</p>`}
       ${tab === 'leaves' && html`
-        <div class="shop-packs">${d.packs.map(p => html`<button class="shop-pack" key=${p.id} onClick=${() => buyItem(p.id)}><b>${num(p.stars)} 🍃</b><span>${p.rub} ₽</span>${p.bonus > 0 && html`<i>+${p.bonus} %</i>`}</button>`)}</div>
+        <div class="shop-packs">${d.packs.map(p => { const best = p.bonus > 0 && p.bonus === Math.max(...d.packs.map(x => x.bonus)); return html`<button class=${cx('shop-pack', best && 'best')} key=${p.id} onClick=${() => buyItem(p.id)}>${best && html`<em>выгоднее всего</em>`}<b>${num(p.stars)} 🍃</b><span>${p.rub} ₽</span>${p.bonus > 0 && html`<i title="Листиков за рубль больше, чем в самом маленьком наборе">+${p.bonus} %</i>`}</button>`; })}</div>
         <p class="hint">Оплата через ЮKassa: карты, СБП. Листики тратятся только внутри «Нудиста» и обратно на рубли не меняются. <a href="/pay" target="_blank" rel="noopener">Цены и условия</a> · <a href="/offer" target="_blank" rel="noopener">Оферта</a></p>
         <h4 class="shop-h">Бесплатно</h4>
         <ul class="shop-free"><li>Ежедневный бонус и «Листопад» — в окне «Листики».</li><li>Задания сезона — на соседней вкладке.</li><li>Позовите друга: 100 🍃 обоим и ${d.cashback.pct} % листиками с его покупок в магазине${d.cashback.got ? ` (уже вернулось ${num(d.cashback.got)} 🍃)` : ''}.</li></ul>`}

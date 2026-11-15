@@ -71,9 +71,9 @@ const CATALOG = {
   frame_season: { kind: 'frame', name: 'Сезонник', emoji: '📮', price: 0, tier: 'event', ev: 'prize' },
   frame_veteran: { kind: 'frame', name: 'Старожил', emoji: '🏅', price: 0, tier: 'event', ev: 'prize' },
   // значки у имени: украшение, а не подтверждение — так и написано в подсказке значка. Ни в какой тариф не входят
-  badge_press: { kind: 'badge', name: 'Пресса', emoji: '📰', price: 5000, tier: 'badge' },
-  badge_streamer: { kind: 'badge', name: 'Стример', emoji: '🎥', price: 5000, tier: 'badge' },
-  badge_artist: { kind: 'badge', name: 'Художник', emoji: '🎨', price: 5000, tier: 'badge' },
+  badge_press: { kind: 'badge', name: 'Пресса', emoji: '📰', price: 5000, tier: 'badge', since: '2026-11-15' },
+  badge_streamer: { kind: 'badge', name: 'Стример', emoji: '🎥', price: 5000, tier: 'badge', since: '2026-11-15' },
+  badge_artist: { kind: 'badge', name: 'Художник', emoji: '🎨', price: 5000, tier: 'badge', since: '2026-11-15' },
   // тайная витрина: открывается, когда на счету хоть раз набралось SECRET_FROM листиков, и остаётся открытой. Без скидок, ни в какой тариф не входит
   frame_diamond: { kind: 'frame', name: 'Бриллиант', emoji: '💎', price: 40000, tier: 'secret' },
   grad_gold: { kind: 'gradient', name: 'Чистое золото', emoji: '🥇', price: 25000, tier: 'secret', colors: ['#B8860B', '#FFD700', '#FFF4B0', '#E6A700'] },
@@ -296,7 +296,7 @@ H['shop.catalog'] = c => {
   return {
     stars: u.stars || 0, tier: tierOf(u), first: !u.shopN ? FIRST_OFF : 0, cashback: { pct: CASHBACK, got: u.cashback || 0 }, pay: Pay.enabled(), freeBoosts: u.freeBoosts || 0,
     secret: { open: vip(u), from: SECRET_FROM },
-    items: Object.entries(CATALOG).filter(([id, it]) => (!it.ev || ev.on(it.ev) || owns(u, id)) && (it.tier !== 'secret' || vip(u) || owns(u, id))).map(([id, it]) => ({ id, ...it, base: it.price, ...priceFor(u, id), owned: owns(u, id), included: included(u, id), till: it.ev && ev.on(it.ev) ? ev.till(it.ev) : undefined })),
+    items: Object.entries(CATALOG).filter(([id, it]) => (!it.ev || ev.on(it.ev) || owns(u, id)) && (it.tier !== 'secret' || vip(u) || owns(u, id))).map(([id, it]) => ({ id, ...it, base: it.price, ...priceFor(u, id), owned: owns(u, id), included: included(u, id), fresh: !!it.since && now() - Date.parse(it.since) < 21 * 864e5 || undefined /* «новинка» — три недели с даты появления */, till: it.ev && ev.on(it.ev) ? ev.till(it.ev) : undefined })),
     plans: Object.values(PLANS).map(p => ({ id: p.id, name: p.name, emoji: p.emoji, stars: planPrice(u, p.id), full: p.stars, off: renewOff(u, p.id), rub: rub('plan_' + p.id), days: p.days, perks: p.perks })),
     trial: { days: TRIAL_DAYS, used: !!u.trialUsed, until: (u.trialUntil || 0) > now() ? u.trialUntil : 0, can: !u.trialUsed && rank(tierOf(u)) < rank('pro') },
     bundles: Object.entries(BUNDLES).map(([id, b]) => { const f = bundleFor(u, b); return { id, name: b.name, emoji: b.emoji, items: b.items, price: f.price, full: f.full, fresh: f.fresh.length }; }),
