@@ -147,12 +147,12 @@ setInterval(remind, 3600e3).unref(); setTimeout(remind, (Number(process.env.REMI
 
 // ───── сезон: календарный месяц, задания считаются сами, награду забирают кнопкой
 const TASKS = [
-  { id: 'msg50', text: 'Написать 50 сообщений', n: 50, stars: 200, on: 'msg' },
-  { id: 'msg500', text: 'Написать 500 сообщений', n: 500, stars: 800, on: 'msg' },
-  { id: 'react100', text: 'Поставить 100 реакций', n: 100, stars: 300, on: 'react' },
-  { id: 'gift3', text: 'Подарить 3 подарка', n: 3, stars: 500, on: 'gift' },
-  { id: 'boost1', text: 'Бустануть сервер', n: 1, stars: 1000, on: 'boost' },
-  { id: 'invite5', text: 'Позвать 5 друзей', n: 5, stars: 700, on: 'invite' },
+  { id: 'msg50', text: 'Написать 50 сообщений', n: 50, stars: 100, on: 'msg' },
+  { id: 'msg500', text: 'Написать 500 сообщений', n: 500, stars: 400, on: 'msg' },
+  { id: 'react100', text: 'Поставить 100 реакций', n: 100, stars: 150, on: 'react' },
+  { id: 'gift3', text: 'Подарить 3 подарка', n: 3, stars: 250, on: 'gift' },
+  { id: 'boost1', text: 'Бустануть сервер', n: 1, stars: 500, on: 'boost' },
+  { id: 'invite5', text: 'Позвать 5 друзей', n: 5, stars: 350, on: 'invite' },
 ];
 const DAY_CAP = { msg: 100, react: 40 };      // в зачёт за день: чтобы задание не превращалось в спам
 // Пропуск сезона: опыт за ту же активность, 50 уровней, две дорожки наград — обычная для всех и «Премиум» (покупается за листики, в тарифе Max бесплатна).
@@ -160,7 +160,7 @@ const XP = { msg: 1, react: 1, gift: 5, tip: 10, boost: 25, invite: 20, daily: 5
 const PASS = { levels: 50, per: 100, price: 990 };
 const SEASON_ITEMS = { 10: 'frame_wave', 20: 'grad_coral', 30: 'fx_bubbles', 50: 'frame_trident' }, DUPE = 300;      // если вещь уже есть — вместо неё листики
 function reward(lvl, prem) {
-  if (!prem) return { stars: lvl % 10 === 0 ? 100 : lvl % 5 === 0 ? 50 : 15 };
+  if (!prem) return { stars: lvl % 10 === 0 ? 50 : lvl % 5 === 0 ? 25 : 10 };
   if (SEASON_ITEMS[lvl]) return { item: SEASON_ITEMS[lvl] };
   if (lvl === 40) return { plan: 'pro', days: 3 };
   return { stars: lvl % 5 === 0 ? 150 : 40 };

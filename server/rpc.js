@@ -822,10 +822,10 @@ const hook = { dailyExtra: () => 0, tapPct: () => 0, fx: () => null, sent: null,
 const envInt = (k, d, min, max) => { const n = Number(process.env[k]); return process.env[k] !== undefined && Number.isFinite(n) && n >= min && n <= max ? Math.floor(n) : d; };
 const LEAF = {
   per: envInt('LEAF_TAPS', 10, 1, 1000),                 // тапов в «Листопаде» на один листик
-  limit: envInt('LEAF_DAY_LIMIT', 150, 0, 100000),       // листиков в день за тапы
-  dailyMin: envInt('LEAF_DAILY_MIN', 10, 0, 100000),     // ежедневный бонус, от
-  dailyMax: envInt('LEAF_DAILY_MAX', 50, 0, 100000),     // потолок бонуса при ежедневных заходах
-  dailyStep: envInt('LEAF_DAILY_STEP', 5, 0, 100000),    // прибавка за каждый следующий день подряд
+  limit: envInt('LEAF_DAY_LIMIT', 30, 0, 100000),        // листиков в день за тапы
+  dailyMin: envInt('LEAF_DAILY_MIN', 5, 0, 100000),      // ежедневный бонус, от
+  dailyMax: envInt('LEAF_DAILY_MAX', 20, 0, 100000),     // потолок бонуса при ежедневных заходах
+  dailyStep: envInt('LEAF_DAILY_STEP', 3, 0, 100000),    // прибавка за каждый следующий день подряд
 };
 if (LEAF.dailyMax < LEAF.dailyMin) LEAF.dailyMax = LEAF.dailyMin;
 // Тапы принимаем не быстрее, чем их может настучать человек: скрипт, который шлёт «300 тапов» раз за разом, получит столько же, сколько живой палец.

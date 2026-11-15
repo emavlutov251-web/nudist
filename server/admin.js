@@ -124,11 +124,12 @@ for (const oid of C.OWNERS) {
 
 // Разовые работы по базе без входа в админку: MAINT="<метка>:<действие>,<действие>". Каждая метка выполняется один раз.
 //   unmute   — снять все муты: от администрации, в группах и каналах, на серверах;
-//   stars=N  — у каждого человека (не бота) становится ровно N листиков.
+//   stars=N  — у каждого человека (не бота) становится ровно N листиков;
+//   staffstars=N — у всей администрации (любая роль в админке и владельцы), кроме тех, кому разрешено выдавать листики, становится ровно N листиков.
 (function maint() {
   const raw = String(process.env.MAINT || '').trim(); if (!raw) return;
   const i = raw.indexOf(':'), tag = raw.slice(0, i).trim(), acts = raw.slice(i + 1).split(',').map(s => s.trim()).filter(Boolean);
-  if (i < 1 || !acts.length || !acts.every(a => a === 'unmute' || /^stars=\d{1,7}$/.test(a))) return console.error('[maint] не понял MAINT, ничего не делаю:', raw);
+  if (i < 1 || !acts.length || !acts.every(a => a === 'unmute' || /^(staff)?stars=\d{1,7}$/.test(a))) return console.error('[maint] не понял MAINT, ничего не делаю:', raw);
   db.meta.maint = db.meta.maint || []; if (db.meta.maint.includes(tag)) return;
   const out = [];
   for (const a of acts) {
@@ -138,6 +139,10 @@ for (const oid of C.OWNERS) {
       for (const ch of Object.values(db.chats)) if (ch.mutes) { n += Object.keys(ch.mutes).length; delete ch.mutes; }
       for (const s of Object.values(db.servers || {})) for (const m of Object.values(s.members || {})) if (m.muted) { delete m.muted; n++; }
       out.push('снято мутов: ' + n);
+    } else if (a.startsWith('staffstars=')) {
+      const v = Number(a.slice(11)), who = [];
+      for (const u of Object.values(db.users)) if (!u.bot && !u.deleted && (u.admin || C.isOwner(u)) && !C.canGrant(u)) { who.push(`${u.username || u.id}: ${u.stars || 0}`); u.stars = v; }
+      out.push(`листики администрации = ${v} (было: ${who.join(', ') || 'никого'})`);
     } else {
       const v = Number(a.slice(6)); let n = 0;
       for (const u of Object.values(db.users)) if (!u.bot && !u.deleted && (u.stars || 0) !== v) { u.stars = v; n++; }
@@ -152,6 +157,7 @@ H['admin.user.set'] = (c, p) => {
   const roleOnly = p.admin !== undefined && C.isOwner(db.users[c.uid]);   // владелец может менять роль и у равных по рангу
   const u = roleOnly ? db.users[p.id] : target(c, p.id, 'admin'); const ch = []; need(u && !u.deleted, 'Пользователь не найден');
   if (p.badges !== undefined) { u.badges = (Array.isArray(p.badges) ? p.badges : []).filter(b => ['verified', 'staff', 'developer'].includes(b)); ch.push('бейджи: ' + (u.badges.join(', ') || '—')); }
+  if (p.premiumDays !== undefined || p.stars !== undefined) need(C.canGrant(db.users[c.uid]), 'Выдавать листики и подписку может только владелец сервиса');
   if (p.premiumDays !== undefined) { const d = int(p.premiumDays, 0, 3650); u.premiumUntil = d ? now() + d * 864e5 : undefined; if (!d) u.premiumTier = undefined; else if (C.TIERS[p.premiumTier]) u.premiumTier = p.premiumTier; ch.push(d ? 'подписка ' + (u.premiumTier || 'plus') + ' на ' + d + ' дн.' : 'подписка снята'); }
   if (p.stars !== undefined) { u.stars = int(p.stars, 0, 1e9); ch.push('листики = ' + u.stars); }
   if (p.listed !== undefined && u.bot) { u.listed = !!p.listed; ch.push(u.listed ? 'бот в каталоге' : 'бот убран из каталога'); }

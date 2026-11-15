@@ -205,14 +205,15 @@ const APPS = [
 ];
 // Листики за игры. Игры идут в браузере, и проверить честность партии сервер не может,
 // поэтому главный предохранитель — потолок на день по каждой игре (как у «Листопада»).
-const EARN = { g2048: { cap: 60, what: { 128: 2, 256: 4, 512: 8, 1024: 15, 2048: 30 } }, saper: { cap: 50, what: { win: 10 } }, royale: { cap: 40, what: { win: 10 } }, beer: { cap: 30, what: { win: 5 } }, shooter: { cap: 30, what: { w5: 5, w10: 10 } }, rp: { cap: 30, what: { job: 2 } } };
+const EARN = { g2048: { cap: 15, what: { 128: 1, 256: 2, 512: 3, 1024: 5, 2048: 10 } }, saper: { cap: 12, what: { win: 4 } }, royale: { cap: 10, what: { win: 5 } }, beer: { cap: 8, what: { win: 2 } }, shooter: { cap: 8, what: { w5: 2, w10: 4 } }, rp: { cap: 8, what: { job: 1 } } };
+const EARN_DAY = 30;      // и общий потолок на день по всем играм вместе
 const earnRate = new Map();      // пользователь → { t, n }: не больше 20 наград в минуту
 H['apps.earn'] = (c, p) => {
   const u = me(c), aid = str(p.app, 16), app = Object.prototype.hasOwnProperty.call(EARN, aid) ? EARN[aid] : null; need(db.flags.stars, 'Листики временно отключены'); need(app, 'В этом приложении листики не выдают');
   const key = str(String(p.what), 8), base = Object.prototype.hasOwnProperty.call(app.what, key) ? app.what[key] : 0; need(base, 'Такой награды нет');
   const t = now(); let r = earnRate.get(u.id); if (!r || t - r.t > 60000) { if (earnRate.size > 50000) earnRate.clear(); earnRate.set(u.id, r = { t, n: 0 }); } need(++r.n <= 20, 'Слишком быстро. Листики не успевают расти.');
   const d = C.today(); if (!u.earn || u.earn.d !== d) u.earn = { d, a: {} };
-  const got = u.earn.a[aid] || 0, n = Math.max(0, Math.min(base, app.cap - got));
+  const got = u.earn.a[aid] || 0, all = Object.values(u.earn.a).reduce((a, x) => a + x, 0), n = Math.max(0, Math.min(base, app.cap - got, EARN_DAY - all));
   if (n) { u.earn.a[aid] = got + n; u.stars = (u.stars || 0) + n; save(); R.selfUpdate(u); }
   return { n, stars: u.stars || 0, left: app.cap - got - n, cap: app.cap };
 };
