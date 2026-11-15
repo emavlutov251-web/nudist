@@ -12,6 +12,9 @@ const H = R.H;
 const RANK = { viewer: 1, moderator: 2, admin: 3, superadmin: 4 };
 const rank = u => RANK[(u || {}).admin] || 0;
 function guard(c, min) { const u = db.users[c.uid]; need(rank(u) >= RANK[min], 'Недостаточно прав администратора (нужна роль ' + min + ')'); return u; }
+// Старшинство в администрации: решение старшего (бан, мут, бейдж, галочка, выключатель) младший отменить не может.
+const weight = uid => { const u = db.users[uid]; return rank(u) + (C.isOwner(u) ? 1 : 0); };
+const senior = (c, key, what, peek) => C.senior(db.meta, weight, c.uid, 'adm.' + key, what, peek);
 function log(c, act, d) { db.audit.push({ ts: now(), by: c.uid, act, d }); if (db.audit.length > 2000) db.audit.splice(0, db.audit.length - 2000); save(); }
 
 let dirCache = { at: 0, size: 0, files: 0 };
@@ -29,6 +32,7 @@ const cut = (v, n) => { const s = str(v, 400).replace(/[\u0000-\u001f\u007f\u200
 H['admin.user.label'] = (c, p) => {
   const by = guard(c, 'admin'), u = db.users[p.id]; need(u && !u.deleted, 'Пользователь не найден');
   need(u.id === by.id || C.isOwner(by) || rank(by) > rank(u), 'Особый статус можно выдать себе и тем, кто младше вас по роли');
+  if (u.label && u.label.by && u.label.by !== by.id && !C.isOwner(by)) { const o = db.users[u.label.by]; need(!(o && (C.isOwner(o) || rank(o) > rank(by))), 'Этот особый статус выдал администратор старше вас. Изменить или снять его может только он или тот, кто равен ему по роли'); }
   const t = cut(p.text, 24), e = cut(p.emoji, 2), had = !!u.label;
   if (!t && !e) { need(had, 'У человека и так нет особого статуса'); delete u.label; }
   else u.label = { t, e, c: int(p.color, 0, 7), by: by.id, ts: now() };
@@ -74,11 +78,12 @@ H['admin.users'] = (c, p) => {
 function target(c, uid, min = 'moderator') { const me = guard(c, min); const u = db.users[uid]; need(u && !u.deleted, 'Пользователь не найден'); need(u.id === me.id || rank(u) < rank(me) || (C.isOwner(me) && !C.isOwner(u)), C.isOwner(u) ? 'Владельцем сервиса управлять нельзя' : 'Нельзя управлять администратором своего или более высокого ранга'); return u; }
 H['admin.user.ban'] = (c, p) => {
   const u = target(c, p.id); need(u.id !== c.uid, 'Себя банить не надо');
+  senior(c, 'ban.' + u.id, 'Бан');
   u.banned = !!p.on || undefined; u.banReason = p.on ? str(p.reason, 200) : undefined;
   if (p.on) for (const t of Object.keys(db.sessions)) if (db.sessions[t].user === u.id) A.killSession(t);
   log(c, p.on ? 'user.ban' : 'user.unban', `${R.uname(u)} (@${u.username || u.id})${p.reason ? ': ' + str(p.reason, 200) : ''}`);
 };
-H['admin.user.mute'] = (c, p) => { const u = target(c, p.id); const h = int(p.hours, 0, 8760); need(u.id !== c.uid, 'Себя мутить не надо'); u.muted = h ? now() + h * 3600e3 : undefined; log(c, h ? 'user.mute' : 'user.unmute', `${R.uname(u)}${h ? ' на ' + h + ' ч' : ''}`); R.selfUpdate(u); return { muted: u.muted || 0 }; };
+H['admin.user.mute'] = (c, p) => { const u = target(c, p.id); const h = int(p.hours, 0, 8760); need(u.id !== c.uid, 'Себя мутить не надо'); senior(c, 'mute.' + u.id, 'Мут'); u.muted = h ? now() + h * 3600e3 : undefined; log(c, h ? 'user.mute' : 'user.unmute', `${R.uname(u)}${h ? ' на ' + h + ' ч' : ''}`); R.selfUpdate(u); return { muted: u.muted || 0 }; };
 H['admin.user.logout'] = (c, p) => { const u = target(c, p.id); need(u.id !== c.uid, 'Себя отсюда не разлогинивают: выход есть в настройках'); for (const t of Object.keys(db.sessions)) if (db.sessions[t].user === u.id) A.killSession(t); log(c, 'user.logout', R.uname(u)); };
 // Роли администраторов. Назначает главный админ; тех, кто равен ему по рангу, может менять только владелец сервиса.
 function roleBlock(me, u) {
@@ -156,7 +161,7 @@ for (const oid of C.OWNERS) {
 H['admin.user.set'] = (c, p) => {
   const roleOnly = p.admin !== undefined && C.isOwner(db.users[c.uid]);   // владелец может менять роль и у равных по рангу
   const u = roleOnly ? db.users[p.id] : target(c, p.id, 'admin'); const ch = []; need(u && !u.deleted, 'Пользователь не найден');
-  if (p.badges !== undefined) { u.badges = (Array.isArray(p.badges) ? p.badges : []).filter(b => ['verified', 'staff', 'developer'].includes(b)); ch.push('бейджи: ' + (u.badges.join(', ') || '—')); }
+  if (p.badges !== undefined) { senior(c, 'badges.' + u.id, 'Бейджи'); u.badges = (Array.isArray(p.badges) ? p.badges : []).filter(b => ['verified', 'staff', 'developer'].includes(b)); ch.push('бейджи: ' + (u.badges.join(', ') || '—')); }
   if (p.premiumDays !== undefined || p.stars !== undefined) need(C.canGrant(db.users[c.uid]), 'Выдавать листики и подписку может только владелец сервиса');
   if (p.premiumDays !== undefined) { const d = int(p.premiumDays, 0, 3650); u.premiumUntil = d ? now() + d * 864e5 : undefined; if (!d) u.premiumTier = undefined; else if (C.TIERS[p.premiumTier]) u.premiumTier = p.premiumTier; ch.push(d ? 'подписка ' + (u.premiumTier || 'plus') + ' на ' + d + ' дн.' : 'подписка снята'); }
   if (p.stars !== undefined) { u.stars = int(p.stars, 0, 1e9); ch.push('листики = ' + u.stars); }
@@ -188,11 +193,11 @@ H['admin.chats'] = (c, p) => {
 };
 H['admin.chat.set'] = (c, p) => {
   guard(c, 'admin');
-  if (p.kind === 'server') { const s = db.servers[p.id]; need(s, 'Сервер не найден'); if (p.del) { log(c, 'server.del', s.name); return G.destroyServer(s); } s.verified = !!p.verified; save(); G.emitServer(s); log(c, 'server.verify', `${s.name}: ${s.verified}`); }
-  else { const ch = db.chats[p.id]; need(ch && !ch.server, 'Чат не найден'); if (p.del) { log(c, 'chat.del', ch.title); return C.destroyChat(ch); } ch.verified = !!p.verified; save(); C.emitChat(ch); log(c, 'chat.verify', `${ch.title}: ${ch.verified}`); }
+  if (p.kind === 'server') { const s = db.servers[p.id]; need(s, 'Сервер не найден'); if (p.del) { log(c, 'server.del', s.name); return G.destroyServer(s); } senior(c, 'ver.' + s.id, 'Галочка'); s.verified = !!p.verified; save(); G.emitServer(s); log(c, 'server.verify', `${s.name}: ${s.verified}`); }
+  else { const ch = db.chats[p.id]; need(ch && !ch.server, 'Чат не найден'); if (p.del) { log(c, 'chat.del', ch.title); return C.destroyChat(ch); } senior(c, 'ver.' + ch.id, 'Галочка'); ch.verified = !!p.verified; save(); C.emitChat(ch); log(c, 'chat.verify', `${ch.title}: ${ch.verified}`); }
 };
 H['admin.flags'] = (c, p) => {
-  if (p.set) { guard(c, 'admin'); for (const k of Object.keys(db.flags)) if (typeof p.set[k] === 'boolean' && p.set[k] !== db.flags[k]) { db.flags[k] = p.set[k]; log(c, 'flag', `${k} = ${p.set[k]}`); } save(); C.emitAll('flags', db.flags); }
+  if (p.set) { guard(c, 'admin'); const ch = Object.keys(db.flags).filter(k => typeof p.set[k] === 'boolean' && p.set[k] !== db.flags[k]); for (const k of ch) senior(c, 'flag.' + k, 'Выключатель «' + k + '»', true); for (const k of ch) { senior(c, 'flag.' + k, 'Выключатель'); db.flags[k] = p.set[k]; log(c, 'flag', `${k} = ${p.set[k]}`); } save(); C.emitAll('flags', db.flags); }
   else guard(c, 'viewer');
   return db.flags;
 };

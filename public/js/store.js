@@ -1,5 +1,5 @@
 // Логика клиента: обработка событий сервера, история, отправка, уведомления, E2EE для секретных чатов.
-import { S, bump, on, rpc, call, toast, needUsers, addUsers, loadSettings, local, connect, disconnect, isMuted, msgPreview, chatInfo, userName, uid, setSetting, upload, compressImage, imageSize } from './lib.js';
+import { openModal, S, bump, on, rpc, call, toast, needUsers, addUsers, loadSettings, local, connect, disconnect, isMuted, msgPreview, chatInfo, userName, uid, setSetting, upload, compressImage, imageSize } from './lib.js';
 import { sfx, confetti, shake } from './fun.js';
 
 export const msgKey = (chat, thread) => (thread ? chat + '#' + thread : chat);
@@ -101,6 +101,7 @@ const saveDraft = (id, text) => { const c = S.chats[id]; if (!c || (c.draft || '
 export { saveDraft };
 export function openChat(id, o = {}) {
   const c = S.chats[id]; if (!c) return;
+  S.ui.ret = null;
   // След для кнопки «Назад»: если в чат перешли прямо из другого чата (ссылка, упоминание, профиль), назад вернёмся в него.
   if (!o.noTrail) { if (S.ui.chat && !S.ui.list && S.ui.chat !== id && innerWidth <= 800) { S.ui.trail = [...(S.ui.trail || []).filter(x => x !== id), S.ui.chat].slice(-8); } else if (S.ui.chat !== id || S.ui.list) S.ui.trail = []; }
   S.ui.chat = id; S.ui.thread = o.thread || null; S.ui.list = false; S.ui.reply = null; S.ui.edit = null; S.ui.sel = null; S.ui.jump = o.jump || null;
@@ -113,7 +114,18 @@ export function openChat(id, o = {}) {
   else if (!h.loaded || h.moreAfter) loadHistory(id, { thread: o.thread, around: !o.thread && c.unread > 35 ? c.read + 1 : undefined });
   bump();
 }
-export function closeChat() { S.ui.trail = []; S.ui.chat = null; S.ui.thread = null; S.ui.list = true; history.replaceState(history.state, '', location.pathname); bump(); }
+export function closeChat() { const r = S.ui.ret; S.ui.ret = null; S.ui.trail = []; S.ui.chat = null; S.ui.thread = null; S.ui.list = true; if (r) { S.ui.hub = r.hub; S.ui.feed = r.feed; } history.replaceState(history.state, '', location.pathname); bump(); }
+// Каналы живут в ленте, историях и видео, а не в списке чатов. Канал открывается поверх, а «Назад» возвращает туда, откуда пришли.
+export function openChannel(id) { if (!S.chats[id]) return false; const ret = S.ui.hub ? { hub: S.ui.hub, feed: S.ui.feed } : null; S.ui.hub = null; openChat(id); S.ui.ret = ret; bump(); return true; }
+/** Открыть канал по id; на который человек не подписан — карточкой с кнопкой «Подписаться». */
+export function showChannel(id, username) {
+  if (S.chats[id]) return openChannel(id);
+  if (username) import('./panels.js').then(m => openModal(m.JoinPreview, { q: '@' + username })); else toast('Это закрытый канал', 'err');
+}
+export const isChannel = c => !!c && c.type === 'channel' && !c.server;
+/** Каналы человека: сначала с непрочитанным, потом по свежести. */
+export const myChannels = () => Object.values(S.chats).filter(isChannel).sort((a, b) => ((b.unread > 0) - (a.unread > 0)) || (((b.last ? b.last.ts : b.created) || 0) - ((a.last ? a.last.ts : a.created) || 0)));
+export const channelUnread = () => { let n = 0; for (const c of Object.values(S.chats)) if (isChannel(c) && !isMuted(c) && c.unread > 0) n++; return n; };
 export async function openUser(userId) {
   try { const r = await rpc('dm.open', { user: userId }); const v = r.chat || r; if (r.user) S.users[r.user.id] = r.user; upsertChat(v); openChat(v.id); } catch (e) { toast(e.message, 'err'); }
 }
@@ -199,7 +211,7 @@ function notify(chat, m, mention) {
     } catch (e) { /* уведомления недоступны */ }
   }
 }
-export function totalUnread() { let n = 0; for (const c of Object.values(S.chats)) if (!isMuted(c) && !c.archived && !c.server) n += c.unread || 0; return n; }
+export function totalUnread() { let n = 0; for (const c of Object.values(S.chats)) if (!isMuted(c) && !c.archived && !c.server && c.type !== 'channel') n += c.unread || 0; return n; }      // каналы считаются отдельно: они в ленте
 setInterval(() => { if (!S.ready) return; const n = totalUnread(); if (!S.ui.boss) document.title = (n ? `(${n}) ` : '') + 'Нудист'; }, 1000);
 
 // ───── события сервера

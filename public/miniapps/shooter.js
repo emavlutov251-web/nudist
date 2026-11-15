@@ -1,5 +1,5 @@
 // «Комариный спецназ»: шутер с видом сверху. Волны насекомых, листья вместо пуль, бонусы с неба.
-import { ready, share, $, store, earn } from '/miniapps/kit.js';
+import { ready, share, $, store, earn, result } from '/miniapps/kit.js';
 import { leafy, item } from '/miniapps/art.js';
 import { stage, loop, text, rnd, pick, clamp, dist, sticks, drawStick, axis } from '/miniapps/game.js';
 const W = 360, H = 520, cv = $('#cv'), { ctx, pos } = stage(cv, W, H), [mv, aim] = sticks(cv, pos, [p => p.x < W / 2, p => p.x >= W / 2]);
@@ -32,7 +32,7 @@ function step(dt) {
   }
   if (G) { for (const f of G.fx) f.t -= dt; G.fx = G.fx.filter(f => f.t > 0); } draw();
 }
-function end() { G.over = true; const best = Math.max(store.get('shooter.best', 0), G.score); store.set('shooter.best', best); $('#ovE').textContent = '🩹'; $('#ovT').textContent = 'Закусали'; $('#ovP').textContent = `Волна ${G.wave}, сбито: ${G.score}. Рекорд: ${best}.`; $('#go').textContent = 'Ещё раз'; $('#share').hidden = false; $('#ov').hidden = false; }
+function end() { G.over = true; result(G.wave); const best = Math.max(store.get('shooter.best', 0), G.score); store.set('shooter.best', best); $('#ovE').textContent = '🩹'; $('#ovT').textContent = 'Закусали'; $('#ovP').textContent = `Волна ${G.wave}, сбито: ${G.score}. Рекорд: ${best}.`; $('#go').textContent = 'Ещё раз'; $('#share').hidden = false; $('#ov').hidden = false; }
 function draw() {
   ctx.fillStyle = '#e9d6a3'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#dfc98f'; for (let i = 0; i < 40; i++) ctx.fillRect((i * 97) % W, (i * 61) % H, 5, 3); ctx.fillStyle = '#58b7e0'; ctx.fillRect(0, 0, W, 26); ctx.fillStyle = '#8fd3ee'; ctx.fillRect(0, 22, W, 6); item(ctx, 'parasol', 44, 92, 18, performance.now() / 1000); item(ctx, 'palm', 318, 430, 20, performance.now() / 1000);
   if (!G) return; const p = G.p;

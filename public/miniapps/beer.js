@@ -1,5 +1,5 @@
 // «Пивная битва»: кто больше выпьет и не уснёт. Каждая кружка поднимает градус, а с ним и шанс на бесславный финал.
-import { ready, share, $, store, earn, host } from '/miniapps/kit.js';
+import { ready, share, $, store, earn, host, result } from '/miniapps/kit.js';
 const BOTS = [{ n: 'Дядя Толя', nerve: .22, say: 'Я своё отпил ещё в девяностых.' }, { n: 'Сосед Валера', nerve: .4, say: 'Наливай, чё ты как неродной.' }, { n: 'Баба Зина', nerve: .55, say: 'Милок, я на свадьбах троих таких перепивала.' }, { n: 'Студент Гоша', nerve: .7, say: 'У меня завтра пара в восемь, так что по-быстрому.' }];
 const FINE = ['Тебе ничего не было.', 'Пошло как по маслу.', 'Только румянец на щеках.', 'Даже не поморщился.', 'Организм сказал «спасибо» и попросил ещё.'];
 const FACES = ['🙂', '😊', '😄', '🥴', '😵‍💫', '🫠'];
@@ -34,7 +34,7 @@ function turn(act) {
 }
 function finish() {
   const r = me.out && bot.out ? 0 : me.out ? -1 : bot.out ? 1 : me.done && bot.done ? Math.sign(me.mugs - bot.mugs) : null; if (r == null) return;
-  over = true; last = r; const best = Math.max(store.get('beer.best', 0), r > 0 ? me.mugs : 0); store.set('beer.best', best); if (r > 0) earn('win');
+  over = true; last = r; const best = Math.max(store.get('beer.best', 0), r > 0 ? me.mugs : 0); store.set('beer.best', best); if (r > 0) earn('win'); result(me.out ? 0 : me.mugs);      // для дуэли: сколько кружек выпито на своих ногах; уснул — ноль
   $('#log').innerHTML += `<b>${r > 0 ? (bot.out ? 'Победа! Соперник под столом, а вы на ногах.' : `Победа! ${me.mugs} против ${bot.mugs}.`) : r < 0 ? (me.out ? 'Поражение. Проснётесь — будет стыдно.' : `Поражение: ${me.mugs} против ${bot.mugs}.`) : me.out ? 'Ничья: оба под столом.' : 'Ничья. Расходимся друзьями.'}</b>`;
 }
 function draw() {

@@ -1,34 +1,42 @@
 // «Нудист»: музыка, клипы, прямые эфиры, каталог мини-приложений и поддержка. Один экран с вкладками поверх чатов.
-import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, fmtDur, fmtNum, fmtSize, fmtShort, confirmDlg, promptDlg, pickFile, upload, addUsers, Empty, Spinner, local, plural, showMenu, Toggle, md } from './lib.js';
-import { openChat, sendPayload } from './store.js';
+import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, fmtDur, fmtNum, fmtSize, fmtShort, confirmDlg, promptDlg, pickFile, upload, addUsers, Empty, Spinner, local, plural, showMenu, Toggle, md, copyText } from './lib.js';
+import { openChat, showChannel, sendPayload } from './store.js';
 import { playAudio, AudioBar } from './media.js';
 import { openMiniApp } from './panels.js';
 import { Feed, Viewers } from './feed.js';
-import { openDock } from './dock.js';
-import { TV } from './tv.js';
+import { openDock, ytDock, oldShell } from './dock.js';
 import { Events } from './events.js';
 
-const TABS = [['feed', 'list', 'Лента'], ['events', 'party-popper', 'События'], ['music', 'music', 'Музыка'], ['clips', 'film', 'Клипы'], ['live', 'radio', 'Эфиры'], ['tv', 'tv', 'Телевизор'], ['apps', 'layout-grid', 'Приложения'], ['help', 'life-buoy', 'Поддержка']];
+const TABS = [['events', 'party-popper', 'События'], ['music', 'music', 'Музыка'], ['apps', 'gamepad-2', 'Игры'], ['help', 'life-buoy', 'Поддержка']];
+// «Лента» — отдельная вкладка внизу. В ней три раздела: общая лента (люди и каналы), «Видео» (клипы, ролики каналов и эфиры) и свои записи.
+const FEED_TABS = [['feed', 'list', 'Лента'], ['video', 'film', 'Видео'], ['user', 'user', 'Мои']];
+const VID = { mode: 'clips' };      // что открыто в «Видео»: клипы или эфиры
 const isStaff = () => ['moderator', 'admin', 'superadmin'].includes((S.me || {}).admin);
 const err = e => toast(e.message || String(e), 'err');
 let MB = 45;      // предел размера файла, сервер уточняет
 const who = id => S.users[id] || { name: 'Кто-то', color: 0 };
 
-export function openHub(tab) { const keep = local.get('hub.tab'); S.ui.hub = tab || (keep && keep !== 'feed' ? keep : 'music'); if (S.ui.hub !== 'feed') local.set('hub.tab', S.ui.hub); S.ui.boss = false; bump(); }
+export function openHub(tab) {
+  if (tab === 'clips' || tab === 'live' || tab === 'video') { S.ui.hub = 'feed'; S.ui.feed = 'video'; if (tab !== 'video') VID.mode = tab; }
+  else if (tab === 'feed' || tab === 'user') { S.ui.hub = 'feed'; S.ui.feed = tab === 'user' ? 'user' : S.ui.feed || 'feed'; }
+  else { const keep = local.get('hub.tab'), ok = t => TABS.some(x => x[0] === t); S.ui.hub = ok(tab) ? tab : ok(keep) ? keep : 'music'; local.set('hub.tab', S.ui.hub); }
+  S.ui.boss = false; bump();
+}
 export function closeHub() { if (LV.cur && !leaveGuard()) return; S.ui.hub = null; bump(); }
 // Не даём случайно уронить эфир переключением вкладки.
 function leaveGuard() { if (!LV.cur) return true; if (LV.role === 'host' && !confirm('Эфир идёт. Завершить его?')) return false; leaveLive(); return true; }
-function setTab(t) { if (t !== 'live' && !leaveGuard()) return; openHub(t); }
-
+function setTab(t) { if (!leaveGuard()) return; openHub(t); }
+function setFeedTab(t) { if (t !== 'video' && !leaveGuard()) return; S.ui.hub = 'feed'; S.ui.feed = t; bump(); }
 export function Hub() {
   const tab = S.ui.hub; if (!tab) return null;
-  return html`<section class=${cx('hub', 'hub-' + tab)} aria-label="Развлечения">
+  const feed = tab === 'feed', ft = feed ? (FEED_TABS.some(t => t[0] === S.ui.feed) ? S.ui.feed : 'feed') : null, video = ft === 'video';
+  return html`<section class=${cx('hub', 'hub-' + (video ? 'video' : tab))} aria-label=${feed ? 'Лента' : 'Хаб'}>
     <header class="hub-h">
-      ${tab === 'feed' ? html`<h2 class="hub-title"><${Icon} n="list" s=${20} /> Лента</h2>` : html`<nav class="hub-tabs" role="tablist">${TABS.filter(t => t[0] !== 'feed').map(([k, ic, name]) => html`<button role="tab" aria-selected=${tab === k} class=${cx(tab === k && 'on')} onClick=${() => setTab(k)} title=${name}><${Icon} n=${ic} s=${19} /><span>${name}</span>${k === 'live' && LIVE.n > 0 && html`<b class="hub-dot">${LIVE.n}</b>`}</button>`)}</nav>`}
-      <button class="ib" onClick=${closeHub} title="Закрыть и вернуться к чатам"><${Icon} n="x" /></button>
+      <nav class=${cx('hub-tabs', feed && 'even')} role="tablist">${(feed ? FEED_TABS : TABS).map(([k, ic, name]) => { const on = feed ? ft === k : tab === k; return html`<button role="tab" aria-selected=${on} class=${cx(on && 'on')} onClick=${() => (feed ? setFeedTab(k) : setTab(k))} title=${name}><${Icon} n=${ic} s=${19} /><span>${name}</span>${k === 'video' && LIVE.n > 0 && html`<b class="hub-dot" title="Идут эфиры">${LIVE.n}</b>`}</button>`; })}</nav>
+      <button class="ib hub-x" onClick=${closeHub} title="Закрыть и вернуться к чатам" aria-label="Закрыть"><${Icon} n="x" /></button>
     </header>
-    <div class="hub-b">${tab === 'feed' ? html`<${Feed} />` : tab === 'music' ? html`<${Music} />` : tab === 'clips' ? html`<${Clips} />` : tab === 'live' ? html`<${Live} />` : tab === 'tv' ? html`<${TV} />` : tab === 'events' ? html`<${Events} />` : tab === 'apps' ? html`<div class="hub-pad"><${AppsCatalog} /></div>` : html`<${Help} />`}</div>
-    ${tab !== 'clips' && !(tab === 'live' && LV.cur) && html`<${AudioBar} />`}
+    <div class="hub-b">${feed ? (video ? html`<${Video} />` : html`<${Feed} key=${ft} tab=${ft} />`) : tab === 'music' ? html`<${Music} />` : tab === 'events' ? html`<${Events} />` : tab === 'apps' ? html`<div class="hub-pad"><${AppsCatalog} /></div>` : html`<${Help} />`}</div>
+    ${!video && html`<${AudioBar} />`}
   </section>`;
 }
 
@@ -148,19 +156,26 @@ function Music() {
 const videoMeta = f => new Promise(res => { const v = document.createElement('video'); v.preload = 'metadata'; v.onloadedmetadata = () => res({ w: v.videoWidth, h: v.videoHeight, dur: isFinite(v.duration) ? v.duration : 0 }); v.onerror = () => res({}); setTimeout(() => res({}), 8000); v.src = URL.createObjectURL(f); });
 const CL = { list: null, more: false, sound: true, seen: new Set() };      // лента живёт между открытиями вкладки
 
-function Clips() {
-  const [act, setAct] = useState(0), [busy, setBusy] = useState(null), box = useRef(), [paused, setPaused] = useState(false), loading = useRef(false);
-  const load = async reset => { if (loading.current) return; loading.current = true; try { const r = await rpc('clip.feed', { off: reset ? 0 : CL.next || (CL.list || []).length }); CL.next = r.next != null ? r.next : (reset ? 0 : CL.next || 0) + r.clips.length; addUsers(r.users); if (r.mb) MB = r.mb; CL.list = reset ? r.clips : (CL.list || []).concat(r.clips.filter(k => !CL.list.some(x => x.id === k.id))); CL.more = r.more; bump(); } catch (e) { err(e); if (!CL.list) { CL.list = []; bump(); } } loading.current = false; };
+// Команда встроенному плееру YouTube (пауза и продолжение) — без загрузки их скрипта.
+const ytCmd = (fr, func) => { try { fr.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: [] }), 'https://www.youtube.com'); } catch (e) { /* плеер ещё не готов */ } };
+const YT_SANDBOX = 'allow-scripts allow-same-origin allow-presentation';
+function Clips({ on }) {
+  const [act, setAct] = useState(0), [busy, setBusy] = useState(null), box = useRef(), [paused, setPaused] = useState(false), loading = useRef(false), old = oldShell();
+  const load = async reset => { if (loading.current) return; loading.current = true; try { const r = await rpc('clip.feed', { yt: true, off: reset ? 0 : CL.next || (CL.list || []).length }); CL.next = r.next != null ? r.next : (reset ? 0 : CL.next || 0) + r.clips.length; addUsers(r.users); if (r.mb) MB = r.mb; CL.list = reset ? r.clips : (CL.list || []).concat(r.clips.filter(k => !CL.list.some(x => x.id === k.id))); CL.more = r.more; bump(); } catch (e) { err(e); if (!CL.list) { CL.list = []; bump(); } } loading.current = false; };
   useEffect(() => { load(true); }, []);
   const list = CL.list || [];
-  // Какой клип сейчас на экране: тот, чья середина ближе всего к середине ленты.
+  // Какой ролик сейчас на экране: лента листается ровно по одному.
   const onScroll = () => { const el = box.current; if (!el) return; const i = Math.round(el.scrollTop / (el.clientHeight || 1)); if (i !== act) { setAct(i); setPaused(false); } if (CL.more && i >= list.length - 3) load(); };
-  useEffect(() => {      // играет только активный; остальные стоят на паузе в начале
+  useEffect(() => {      // играет только ролик на экране; остальные стоят на паузе в начале
     const el = box.current; if (!el) return;
-    el.querySelectorAll('video').forEach((v, i) => { if (i === act && !paused) { v.muted = !CL.sound; const p = v.play(); if (p && p.catch) p.catch(() => { v.muted = true; CL.sound = false; v.play().catch(() => {}); bump(); }); } else { v.pause(); if (i !== act) try { v.currentTime = 0; } catch (e) { /* ещё не загружено */ } } });
-    const k = list[act]; if (!k || CL.seen.has(k.id)) return;
+    el.querySelectorAll('.clip').forEach((a, i) => {
+      const v = a.querySelector('video'), fr = a.querySelector('iframe');
+      if (v) { if (i === act && !paused && on) { v.muted = !CL.sound; const p = v.play(); if (p && p.catch) p.catch(() => { v.muted = true; CL.sound = false; v.play().catch(() => {}); bump(); }); } else { v.pause(); if (i !== act) try { v.currentTime = 0; } catch (e) { /* ещё не загружено */ } } }
+      if (fr && i === act) ytCmd(fr, paused || !on ? 'pauseVideo' : 'playVideo');
+    });
+    const k = list[act]; if (!k || !on || CL.seen.has(k.id)) return;
     const t = setTimeout(() => { CL.seen.add(k.id); k.views++; rpc('clip.view', { id: k.id }).catch(() => {}); }, 2000); return () => clearTimeout(t);
-  }, [act, paused, list.length, CL.sound]);
+  }, [act, paused, list.length, CL.sound, on]);
   const add = async () => {
     const f = await pickFile('video/mp4,video/webm,video/quicktime,video/*', false); if (!f) return;
     if (f.size > MB * 1048576) return toast(`Видео весит ${fmtSize(f.size)}, а предел — ${MB} МБ. Сожмите его или обрежьте.`, 'err');
@@ -171,12 +186,27 @@ function Clips() {
     try { const up = await upload(f, { name: f.name, onProgress: p => setBusy(p) }); await rpc('clip.add', { media: { url: up.url, size: f.size, ...m }, text }); toast('Клип выложен'); await load(true); if (box.current) box.current.scrollTop = 0; setAct(0); } catch (e) { err(e); }
     setBusy(null);
   };
-  const like = k => { const on = !k.liked; k.liked = on; k.likes += on ? 1 : -1; bump(); rpc('clip.like', { id: k.id, on }).then(r => { Object.assign(k, r); bump(); }).catch(err); };
+  const like = k => { const to = !k.liked; k.liked = to; k.likes += to ? 1 : -1; bump(); rpc('clip.like', { id: k.id, on: to }).then(r => { Object.assign(k, r); bump(); }).catch(err); };
   const del = async k => { if (await confirmDlg({ title: 'Удалить клип?', text: 'Видео и комментарии исчезнут насовсем.', ok: 'Удалить', danger: true })) rpc('clip.del', { id: k.id }).then(() => { CL.list = CL.list.filter(x => x !== k); bump(); }).catch(err); };
+  const ytLink = k => 'https://www.youtube.com/' + (k.short ? 'shorts/' : 'watch?v=') + k.yt;
+  const sound = html`<button onClick=${() => { CL.sound = !CL.sound; bump(); }} title=${CL.sound ? 'Выключить звук' : 'Включить звук'}><${Icon} n=${CL.sound ? 'volume-2' : 'volume-x'} s=${24} /><small>Звук</small></button>`;
   return html`<div class="clips-wrap">
-    <div class="clips-top"><button class="btn" disabled=${busy != null} onClick=${add}><${Icon} n=${busy != null ? 'upload' : 'plus'} s=${16} /> ${busy != null ? `Загрузка ${Math.round(busy * 100)}%` : 'Выложить клип'}</button></div>
-    ${!CL.list ? html`<${Spinner} />` : !list.length ? html`<${Empty} icon="film" title="Клипов пока нет" text="Выложите первое вертикальное видео до 3 минут — и лента оживёт.">${html`<button class="btn" onClick=${add}><${Icon} n="plus" s=${16} /> Выложить клип</button>`}<//>` : html`
-    <div class="clips" ref=${box} onScroll=${onScroll}>${list.map((k, i) => { const u = who(k.by); return html`<article class="clip" key=${k.id}>
+    <button class="vid-add" disabled=${busy != null} onClick=${add} title="Выложить своё видео до 3 минут" aria-label="Выложить клип"><${Icon} n=${busy != null ? 'upload' : 'plus'} s=${18} /><span>${busy != null ? `${Math.round(busy * 100)}%` : 'Клип'}</span></button>
+    ${!CL.list ? html`<${Spinner} />` : !list.length ? html`<${Empty} icon="film" title="Видео пока нет" text="Выложите первое вертикальное видео до 3 минут — и лента оживёт.">${html`<button class="btn" onClick=${add}><${Icon} n="plus" s=${16} /> Выложить клип</button>`}<//>` : html`
+    <div class="clips" ref=${box} onScroll=${onScroll}>${list.map((k, i) => {
+      if (k.yt) return html`<article class="clip yt" key=${k.id}>
+        <div class=${cx('clip-v', !k.short && 'wide')}>
+          ${i === act && on && !old ? html`<iframe class="clip-yt" src=${`https://www.youtube.com/embed/${k.yt}?autoplay=1&playsinline=1&rel=0&enablejsapi=1&controls=0&origin=${encodeURIComponent(location.origin)}`} sandbox=${YT_SANDBOX} allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" title=${k.text || 'Видео'}></iframe>` : html`<img class="clip-poster" src=${`https://i.ytimg.com/vi/${k.yt}/hqdefault.jpg`} alt="" loading="lazy" referrerpolicy="no-referrer" />`}
+          <div class="clip-touch" onClick=${() => (old ? window.open(ytLink(k), '_blank', 'noopener') : i === act && setPaused(!paused))}></div>
+          ${i === act && (paused || old) && html`<span class="clip-pause"><${Icon} n="play" s=${44} /></span>`}
+          <div class="clip-info"><button class="clip-au" onClick=${e => { e.stopPropagation(); showChannel(k.chat, k.username); }}><${Avatar} src=${k.avatar} name=${k.title} color=${k.color} s=${34} /><b>${k.title}</b><small>канал · ${fmtShort(k.ts)}</small></button>${k.text && html`<p>${k.text}</p>`}</div>
+        </div>
+        <div class="clip-act">
+          <button onClick=${() => showChannel(k.chat, k.username)} title="Открыть канал"><${Icon} n="megaphone" s=${24} /><small>Канал</small></button>
+          <button onClick=${() => openDock(ytDock({ id: k.yt, short: k.short }, k.text))} title="Открыть в большом плеере: перемотка, качество, полный экран"><${Icon} n="maximize" s=${24} /><small>Плеер</small></button>
+          <button onClick=${() => { copyText(ytLink(k)); toast('Ссылка на ролик скопирована'); }} title="Скопировать ссылку"><${Icon} n="share-2" s=${24} /><small>Ссылка</small></button>
+        </div></article>`;
+      const u = who(k.by); return html`<article class="clip" key=${k.id}>
       <div class="clip-v" onClick=${() => i === act && setPaused(!paused)}>
         <video src=${Math.abs(i - act) <= 1 ? k.url : undefined} loop playsinline disableRemotePlayback preload=${i === act ? 'auto' : 'metadata'}></video>
         ${i === act && paused && html`<span class="clip-pause"><${Icon} n="play" s=${44} /></span>`}
@@ -186,9 +216,26 @@ function Clips() {
         <button class=${cx(k.liked && 'on')} onClick=${() => like(k)} title="Нравится"><${Icon} n="heart" s=${26} /><small>${fmtNum(k.likes)}</small></button>
         <button onClick=${() => openModal(ClipComments, { clip: k })} title="Комментарии"><${Icon} n="message-circle" s=${26} /><small>${fmtNum(k.comments)}</small></button>
         <button title=${k.own ? 'Кто посмотрел' : 'Просмотры'} disabled=${!k.own} onClick=${() => k.own && openModal(Viewers, { title: 'Кто посмотрел клип', method: 'clip.viewers', target: k.id })}><${Icon} n="eye" s=${24} /><small>${fmtNum(k.views)}</small></button>
-        <button onClick=${() => { CL.sound = !CL.sound; bump(); }} title=${CL.sound ? 'Выключить звук' : 'Включить звук'}><${Icon} n=${CL.sound ? 'volume-2' : 'volume-x'} s=${24} /></button>
-        ${(k.own || isStaff()) && html`<button onClick=${() => del(k)} title="Удалить клип"><${Icon} n="trash-2" s=${22} /></button>`}
+        ${sound}
+        ${(k.own || isStaff()) && html`<button onClick=${() => del(k)} title="Удалить клип"><${Icon} n="trash-2" s=${22} /><small>Убрать</small></button>`}
       </div></article>`; })}</div>`}
+  </div>`;
+}
+// «Видео»: слева клипы и ролики, справа эфиры. Между ними — свайп вбок или переключатель наверху.
+function Video() {
+  const pager = useRef(), [mode, setM] = useState(VID.mode);
+  const set = m => { if (VID.mode !== m) { VID.mode = m; setM(m); } };
+  const go = m => { set(m); const el = pager.current; if (el) el.scrollTo({ left: m === 'live' ? el.clientWidth : 0, behavior: 'smooth' }); };
+  useEffect(() => { loadLives(); const t = setInterval(() => { if (!LV.cur) loadLives(); }, 20000); return () => clearInterval(t); }, []);
+  useEffect(() => { const el = pager.current; if (el && VID.mode === 'live') el.scrollLeft = el.clientWidth; }, [!!LV.cur]);
+  const onScroll = () => { const el = pager.current; if (el && el.clientWidth) set(el.scrollLeft > el.clientWidth / 2 ? 'live' : 'clips'); };
+  if (LV.cur) return html`<${LiveRoom} />`;
+  return html`<div class="vid">
+    <div class="vid-sw" role="tablist" aria-label="Клипы или эфиры"><button role="tab" aria-selected=${mode === 'clips'} class=${cx(mode === 'clips' && 'on')} onClick=${() => go('clips')}>Клипы</button><button role="tab" aria-selected=${mode === 'live'} class=${cx(mode === 'live' && 'on')} onClick=${() => go('live')}>Эфиры${LIVE.n > 0 && html`<b>${LIVE.n}</b>`}</button></div>
+    <div class="vpager" ref=${pager} onScroll=${onScroll}>
+      <div class="vpane"><${Clips} on=${mode === 'clips'} /></div>
+      <div class="vpane"><${Lives} /></div>
+    </div>
   </div>`;
 }
 function ClipComments({ id, clip }) {
@@ -219,10 +266,10 @@ async function startLive(title, kind) {
   catch (e) { stream.getTracks().forEach(t => t.stop()); err(e); }
 }
 async function joinLive(l) {
-  try { const r = await rpc('live.join', { id: l.id }); addUsers(r.users); Object.assign(LV, { cur: r.live, role: 'viewer', ice: r.ice, chat: r.chat || [], n: r.live.viewers, state: 'wait' }); bump(); setTimeout(() => { if (LV.cur && LV.cur.id === l.id && LV.state === 'wait') { LV.state = 'fail'; bump(); } }, 15000); }
+  try { const r = await rpc('live.join', { id: l.id }); addUsers(r.users); Object.assign(LV, { cur: r.live, role: 'viewer', ice: r.ice, chat: r.chat || [], n: r.live.viewers, state: 'wait' }); VID.mode = 'live'; bump(); setTimeout(() => { if (LV.cur && LV.cur.id === l.id && LV.state === 'wait') { LV.state = 'fail'; bump(); } }, 15000); }
   catch (e) { err(e); loadLives(); }
 }
-on('live.upd', () => { if (S.ui.hub === 'live' || LIVE.list) loadLives(); else rpc('live.list').then(r => { LIVE.n = r.list.length; bump(); }).catch(() => {}); });
+on('live.upd', () => { if ((S.ui.hub === 'feed' && S.ui.feed === 'video') || LIVE.list) loadLives(); else rpc('live.list').then(r => { LIVE.n = r.list.length; bump(); }).catch(() => {}); });
 on('live.viewer', async d => {      // ведущему: пришёл зритель — отдаём ему дорожки
   if (!LV.cur || LV.role !== 'host' || d.id !== LV.cur.id) return;
   const pc = new RTCPeerConnection({ iceServers: LV.ice }); LV.pcs.set(d.conn, pc);
@@ -285,16 +332,23 @@ function LiveRoom() {
       <form class="live-form" onSubmit=${send}><input value=${text} maxlength="300" placeholder="Написать в чат эфира" onInput=${e => setText(e.target.value)} /><button type="button" class="ib" title="Сердечко" onClick=${() => rpc('live.react', { id: l.id, e: '❤️' }).catch(() => {})}><${Icon} n="heart" /></button><button class="ib" disabled=${!text.trim()} title="Отправить"><${Icon} n="send" /></button></form>
     </aside></div>`;
 }
-function Live() {
-  useEffect(() => { loadLives(); const t = setInterval(() => { if (!LV.cur) loadLives(); }, 20000); return () => clearInterval(t); }, []);
-  if (LV.cur) return html`<${LiveRoom} />`;
-  const list = LIVE.list;
-  return html`<div class="hub-pad">
-    <div class="hub-bar"><h2 class="hub-t">Прямые эфиры</h2><span class="grow"></span><button class="btn" onClick=${() => openModal(StartLive)}><${Icon} n="radio" s=${16} /> Начать эфир</button></div>
-    ${!list ? html`<${Spinner} />` : !list.length ? html`<${Empty} icon="radio" title="Сейчас никто не в эфире" text="Включите камеру или покажите экран — зрители увидят вас вживую и смогут писать в чат.">${html`<button class="btn" onClick=${() => openModal(StartLive)}><${Icon} n="radio" s=${16} /> Начать эфир</button>`}<//>` : html`
-      <div class="live-grid">${list.map(l => { const u = who(l.by); return html`<button class="live-card" key=${l.id} onClick=${() => (l.by === S.me.id ? toast('Это ваш эфир с другого устройства') : joinLive(l))}>
-        <span class="live-thumb" style=${`--c:${u.color || 0}`}><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${72} /><b class="live-on">В ЭФИРЕ</b><em><${Icon} n="eye" s=${13} /> ${l.viewers}</em></span>
-        <span class="live-meta"><b>${l.title}</b><small>${userName(u)} · ${l.kind === 'screen' ? 'экран' : 'камера'} · с ${fmtShort(l.started)}</small></span>${isStaff() && l.by !== S.me.id && html`<span class="live-mod" role="button" tabindex="0" onClick=${async e => { e.stopPropagation(); if (await confirmDlg({ title: 'Остановить эфир?', text: `Эфир «${l.title}» прервётся у всех зрителей.`, ok: 'Остановить', danger: true })) rpc('live.stop', { id: l.id }).then(loadLives).catch(err); }}><${Icon} n="x" s=${14} /> Остановить как модератор</span>`}</button>`; })}</div>`}
+// Чужие эфиры листаются как лента: один эфир — один экран. «Свой эфир» всегда в правом верхнем углу.
+function Lives() {
+  const list = LIVE.list, start = () => openModal(StartLive);
+  if (!list) return html`<div class="lives"><${Spinner} /></div>`;
+  if (!list.length) return html`<div class="lives"><${Empty} icon="radio" title="Сейчас никто не в эфире" text="Станьте первым: включите камеру или покажите экран. Зрители увидят вас вживую и смогут писать в чат.">${html`<button class="btn" onClick=${start}><${Icon} n="radio" s=${16} /> Выйти в эфир</button>`}<//></div>`;
+  return html`<div class="lives">
+    <button class="vid-add live" onClick=${start} title="Начать свой эфир"><${Icon} n="radio" s=${18} /><span>Свой эфир</span></button>
+    <div class="clips">${list.map(l => { const u = who(l.by), mine = l.by === S.me.id; return html`<article class="clip live-slide" key=${l.id} style=${`--c:${u.color || 0}`}>
+      <div class="live-slide-b">
+        <${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${112} />
+        <div class="live-badges in"><b class="live-on">В ЭФИРЕ</b><span><${Icon} n="eye" s=${14} /> ${l.viewers}</span></div>
+        <h3>${l.title}</h3>
+        <p>${userName(u)} · ${l.kind === 'screen' ? 'показывает экран' : 'камера'} · с ${fmtShort(l.started)}</p>
+        <button class="btn big" onClick=${() => (mine ? toast('Это ваш эфир с другого устройства') : joinLive(l))}><${Icon} n="play" s=${18} /> Смотреть</button>
+        ${isStaff() && !mine && html`<button class="btn ghost" onClick=${async () => { if (await confirmDlg({ title: 'Остановить эфир?', text: `Эфир «${l.title}» прервётся у всех зрителей.`, ok: 'Остановить', danger: true })) rpc('live.stop', { id: l.id }).then(loadLives).catch(err); }}><${Icon} n="x" s=${14} /> Остановить как модератор</button>`}
+        ${list.length > 1 && html`<small class="live-more">Листайте вверх — там ещё эфиры</small>`}
+      </div></article>`; })}</div>
   </div>`;
 }
 
@@ -308,8 +362,26 @@ export function launchApp(app, chatId) {
 }
 // Листик — герой рисованных игр
 const Leafy = () => html`<svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><path d="M24 4c15 5 19 24 0 39C5 28 9 9 24 4z" fill="#8FE08A" stroke="#1F7A45" stroke-width="2"/><path d="M24 4c2-4 5-4 7-3" fill="none" stroke="#1F7A45" stroke-width="2.4" stroke-linecap="round"/><ellipse cx="18.5" cy="24" rx="3.4" ry="4" fill="#fff"/><ellipse cx="29.5" cy="24" rx="3.4" ry="4" fill="#fff"/><circle cx="19.3" cy="24.6" r="1.9" fill="#1B3B26"/><circle cx="30.3" cy="24.6" r="1.9" fill="#1B3B26"/><path d="M19.5 31.5q4.5 4 9 0" fill="none" stroke="#1B3B26" stroke-width="2" stroke-linecap="round"/></svg>`;
-function AppFrame({ id, app, chat }) {
-  const fr = useRef();
+// Игры, в которых можно вызвать человека на дуэль: значок и слово для счёта. Потолки и сами дуэли — на сервере.
+const DUEL = { beer: ['🍺', ['кружка', 'кружки', 'кружек']], royale: ['🍌', ['банан', 'банана', 'бананов']], catch: ['🍃', ['очко', 'очка', 'очков']], run: ['🏃', ['очко', 'очка', 'очков']], pairs: ['🃏', ['очко', 'очка', 'очков']], shooter: ['🦟', ['волна', 'волны', 'волн']], g2048: ['🔢', ['очко', 'очка', 'очков']] };
+/** Открыть игру по вызову из сообщения. Если дуэль уже сыграна — просто показать итог над игрой. */
+export async function openDuel(duelId) {
+  try { const d = await rpc('duel.get', { id: duelId }); if (!d.url) return toast('Эта игра сейчас недоступна', 'err'); openModal(AppFrame, { app: { id: d.app, title: d.name, url: d.url }, chat: null, duel: d }); }
+  catch (e) { toast(e.message, 'err'); }
+}
+function AppFrame({ id, app, chat, duel }) {
+  const fr = useRef(), [res, setRes] = useState(null), [dv, setDv] = useState(duel || null), [busy, setBusy] = useState(false), live = useRef({});
+  live.current = { dv, busy };
+  const D = DUEL[app.id], n2 = (n, f) => n + ' ' + plural(n, f);
+  // Вызвать человека: выбираем соперника, вызов с нашим результатом уходит ему в личку. Листиков на кону нет — только честь.
+  const challenge = async (to, score) => {
+    if (busy) return;
+    if (!to) { const { pickUsers } = await import('./panels.js'); const ids = await pickUsers({ title: 'Кого вызвать на дуэль?' }); if (!ids || !ids[0]) return; to = ids[0]; }
+    setBusy(true);
+    try { await rpc('duel.new', { app: app.id, to, score }); toast('Вызов отправлен в личку. Ждём ответа ⚔️'); setRes(null); }
+    catch (e) { toast(e.message, 'err'); }
+    setBusy(false);
+  };
   useEffect(() => {
     const onMsg = async e => {
       if (!fr.current || e.source !== fr.current.contentWindow || e.origin !== location.origin || !e.data) return;
@@ -323,11 +395,26 @@ function AppFrame({ id, app, chat }) {
       }
       if (d.nudist === 'earn') { try { reply({ nudist: 'earned', ...(await rpc('apps.earn', { app: app.id, what: String(d.what) })) }); } catch (x) { reply({ nudist: 'error', text: x.message }); } }
       if (d.nudist === 'score') { try { reply({ nudist: 'top', ...(await rpc('apps.score', { app: app.id, t: String(d.t || ''), score: d.score })) }); } catch (x) { /* таблица не обязательна для игры */ } }
+      if (d.nudist === 'result' && DUEL[app.id]) {
+        const n = Math.max(0, Math.floor(Number(d.score) || 0)), cur = live.current.dv;
+        if (cur && cur.mine === 'b' && !cur.done) {      // ответ на вызов: засчитывается первая же партия
+          if (live.current.busy) return; live.current.busy = true;
+          try { setDv(await rpc('duel.done', { id: cur.id, score: n })); } catch (x) { toast(x.message, 'err'); }
+          live.current.busy = false;
+        } else setRes(n);
+      }
       if (d.nudist === 'close') closeModal(id);
     };
     addEventListener('message', onMsg); return () => removeEventListener('message', onMsg);
   }, []);
-  return html`<${Modal} id=${id} title=${app.title} icon="app-window" cls="miniapp nopad"><iframe ref=${fr} title=${app.title} src=${app.url} sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer"></iframe><//>`;
+  const mineB = dv && dv.mine === 'b', won = dv && dv.done && (dv.sb === dv.sa ? 0 : (dv.sb > dv.sa) === mineB ? 1 : -1);
+  const bar = !D ? null
+    : dv && !dv.done && mineB ? html`<div class="duel-bar go"><span>⚔️ <b>${dv.an}</b>: ${n2(dv.sa, D[1])} ${D[0]}. У вас одна попытка — первая партия идёт в зачёт.</span></div>`
+    : dv && !dv.done ? html`<div class="duel-bar"><span>⚔️ Вызов отправлен: <b>${dv.bn}</b> ещё не ответил(а). Ваш результат — ${n2(dv.sa, D[1])} ${D[0]}.</span></div>`
+    : dv && res == null ? html`<div class=${cx('duel-bar', won > 0 ? 'win' : won < 0 ? 'lose' : '')}><span>${won > 0 ? '🏆 Победа!' : won < 0 ? '🥲 Поражение.' : '🤝 Ничья.'} ${mineB ? dv.sb : dv.sa} против ${mineB ? dv.sa : dv.sb} ${D[0]}</span>${mineB && html`<button class="btn sm" disabled=${busy} onClick=${() => challenge(dv.a, dv.sb)}>Реванш</button>`}</div>`
+    : res != null ? html`<div class="duel-bar"><span>Ваш результат: <b>${n2(res, D[1])}</b> ${D[0]}</span><button class="btn sm" disabled=${busy} onClick=${() => challenge(null, res)}>⚔️ Вызвать на дуэль</button></div>`
+    : html`<div class="duel-bar dim"><span>⚔️ Доиграйте партию — и сможете вызвать друга на дуэль</span></div>`;
+  return html`<${Modal} id=${id} title=${app.title} icon="app-window" cls="miniapp nopad"><div class="miniapp-col"><iframe ref=${fr} title=${app.title} src=${app.url} sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer"></iframe>${bar}</div><//>`;
 }
 // Каталог: и вкладка, и окно из «скрепки» в чате.
 export function AppsCatalog({ chat, onPick }) {
@@ -350,14 +437,20 @@ export const openApps = chat => openModal(AppsModal, { chat });
 // ───────────────────────────── поддержка
 const FAQ = [
   ['Что за события и где их искать?', 'Внизу «Хаб» → «События». Там расписание: «Чёрная пятница» (24–30 ноября), адвент-календарь (1–25 декабря), «Тайный Санта» (запись 10–24 декабря), гонка «Снежный ком» (весь декабрь) и «Голый Новый год» (с 20:00 31 декабря, 48 часов). Время — московское. Вещи событий продаются только пока идёт событие, купленное остаётся навсегда. Боту «Нудист» можно написать /events.'],
-  ['Где лента, клубы и настройки?', 'Внизу пять вкладок: «Чаты», «Лента», «Хаб» (музыка, клипы, эфиры, телевизор, игры), «Магазин» и «Профиль» (настройки, листики, выход). Клубы — это бывшие серверы: они лежат прямо в списке чатов, рядом с группами и каналами.'],
+  ['Где лента, каналы, видео и настройки?', 'Внизу пять вкладок. «Чаты» — личные переписки и группы. «Лента» — записи людей и каналов; наверху там же «Видео» (клипы, ролики каналов и эфиры) и «Мои» записи. «Хаб» — события, музыка, игры и поддержка. «Магазин» и «Профиль» (настройки, листики, выход) — справа.'],
+  ['Куда делись каналы из списка чатов?', 'Каналы переехали в ленту: кружки каналов стоят над лентой и в ряду историй, цифра на кружке — сколько новых записей. Нажмите на кружок или на аватар канала у записи — откроется сам канал. Найти новый канал можно через поиск над списком чатов.'],
+  ['Что стало с клубами?', 'Клубов как отдельной вещи больше нет: это теперь группы с комнатами. Всё, что было в клубе — текстовые и голосовые комнаты, роли, события, свои эмодзи, бусты — осталось на месте, в настройках такой группы. Создать: кнопка с карандашом → «Группа с комнатами».'],
+  ['Кто прочитал моё сообщение и кто поставил реакцию?', 'Зажмите сообщение (на компьютере — правая кнопка) → «Кто прочитал и реакции». Реакции видят все участники. Список прочитавших виден автору сообщения и администраторам чата; в чатах больше 500 человек показывается только число.'],
+  ['Как вызвать человека на дуэль в игре?', 'Откройте игру в «Хабе», сыграйте партию и нажмите «⚔️ Дуэль» — выберите соперника. Ему в личку придёт вызов с вашим результатом, у него одна попытка. Итог появится в той же переписке. Дуэли есть в «Пивной битве», «Банном рояле» (счёт в бананах), «Ловце», «Пробежке», «Парах», «Комарином спецназе» и «2048». Листики за дуэли не дают: на кону только честь.'],
+  ['Как увидеть ответ на мой анонимный вопрос?', 'Меню ☰ → «Голая правда» → «Мои вопросы». Там все вопросы, которые вы задали с этого устройства, и ответы на них. Ответ вместе с вопросом ещё и появляется в историях отвечавшего. Кто спросил, не узнаёт никто: ключ от вопроса хранится только у вас в телефоне.'],
+  ['Почему я не могу изменить настройку или снять бан?', 'Действует старшинство: то, что сделал старший по роли (владелец старше админа, админ старше модератора), младший изменить не может. Это касается ролей, банов, мутов, закрепов и настроек группы или канала, а в администрации сервиса — особых статусов, бейджей и блокировок.'],
   ['Как позвать друга?', 'Меню ☰ → «Позвать друзей». Там личная ссылка и QR-код. Друг открывает ссылку в браузере, регистрируется — и вы сразу друг у друга в контактах, обоим по 100 🍃.'],
   ['Сайт не открывается или грузится вечно', 'Сервер стоит на зарубежном хостинге, и у части российских операторов без VPN он работает с перебоями. Попробуйте другую сеть. Если приложение зависло на заставке, нажмите «Повторить».'],
   ['Как добавить свои стикеры?', 'В чате нажмите на смайлик → «Стикеры» → «Добавить». Там три способа: взять готовый набор в одно касание, забрать свой набор из Telegram (в Telegram нажмите на стикер → ⋮ → «Копировать ссылку» и вставьте её) или сделать стикер из своей картинки. Понравился чужой стикер — нажмите на него: набор можно попросить у хозяина, он разрешит одним касанием.'],
   ['Как загрузить музыку?', 'Вкладка «Музыка» → «Загрузить». Подходят mp3, m4a, ogg, wav и flac. Трек по умолчанию слышите только вы; в меню трека его можно выложить в «Общую волну».'],
-  ['Как выложить клип и начать эфир?', 'Клип: вкладка «Клипы» → «Выложить клип», вертикальное видео до 3 минут. Эфир: вкладка «Эфиры» → «Начать эфир», нужны камера или экран. В зале помещается до 30 зрителей.'],
-  ['Где мини-приложения?', 'В чате нажмите на скрепку → «Приложения», или откройте вкладку «Приложения» здесь. Игры и утилиты запускаются поверх чата и умеют отправлять в него результат.'],
-  ['Не приходят уведомления', 'Уведомления работают, пока приложение или вкладка открыты. Проверьте «Настройки → Уведомления» и разрешение в браузере. При закрытом приложении уведомлений пока нет.'],
+  ['Как выложить клип и начать эфир?', 'Внизу «Лента» → наверху «Видео». Клип: кнопка «+ Клип» в правом верхнем углу, вертикальное видео до 3 минут. Эфиры: смахните ленту видео влево или нажмите «Эфиры» наверху. Если никто не в эфире — будет кнопка «Выйти в эфир», если эфиры идут — они листаются как лента, а «Свой эфир» остаётся в правом верхнем углу. В зале помещается до 30 зрителей.'],
+  ['Где игры и мини-приложения?', 'В чате нажмите на скрепку → «Приложения», или откройте «Хаб» → «Игры». Игры и утилиты запускаются поверх чата и умеют отправлять в него результат.'],
+  ['Не приходят уведомления', 'Проверьте «Профиль → Настройки → Уведомления» и разрешение в системе. В приложении для Android уведомления приходят и при закрытом приложении, но телефон не должен его усыплять: на Xiaomi включите «Автозапуск» и в «Контроле активности» выберите «Нет ограничений», после этого один раз откройте приложение. Каналы и группы с комнатами присылают только упоминания.'],
   ['Звонок или эфир не соединяется', 'Разрешите браузеру камеру и микрофон. Между некоторыми мобильными сетями прямое соединение не устанавливается — помогает Wi‑Fi хотя бы с одной стороны.'],
   ['Забыл пароль', 'На экране входа есть «Забыли пароль?» — нужен код восстановления из «Настройки → Аккаунт». Кодов нет — напишите в поддержку свой username.'],
   ['Как пожаловаться на человека или сообщение?', 'Нажмите на сообщение или откройте профиль → «Пожаловаться». Жалобу увидят модераторы.'],

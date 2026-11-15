@@ -22,7 +22,6 @@ require('./year');
 require('./tgpacks');
 require('./tunes');
 require('./common');
-require('./tv');
 const Streak = require('./streak');
 const Seed = require('./seed');
 const { db, save, now, emit } = C;
@@ -197,6 +196,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/yookassa/hook' && req.method === 'POST') { try { A.limit('ykh:' + ipOf(req), 600, 60e3); await Pay.hook(await readJson(req)); } catch (e) { console.warn('[pay] уведомление:', e.message); return json(res, 500, { error: 'retry' }); } return json(res, 200, { ok: true }); }      // уведомления ЮKassa об оплате
     if (p === '/api/ask/info' && req.method === 'GET') return json(res, 200, Ask.info(url.searchParams.get('u'), ipOf(req)));
     if (p === '/api/ask' && req.method === 'POST') return json(res, 200, Ask.send(await readJson(req), ipOf(req)));
+    if (p === '/api/ask/mine' && req.method === 'POST') return json(res, 200, Ask.asked((await readJson(req)).items, ipOf(req)));
     if (p.startsWith('/api/admin/')) { const r = Adm.httpApi(p, req.headers.authorization); return json(res, r.code, r.body); }
     if (p.startsWith('/api/')) {
       const fn = A.api[p.slice(5)]; if (!fn || req.method !== 'POST') return json(res, 404, { error: 'not found' });

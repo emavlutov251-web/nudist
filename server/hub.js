@@ -2,6 +2,7 @@
 'use strict';
 const C = require('./core');
 const R = require('./rpc');
+const A = require('./auth');
 const { db, save, now, id, need, str, int, emit, isUpload, pubUser } = C;
 const H = R.H;
 
@@ -91,7 +92,7 @@ H['clip.add'] = (c, p) => {
 // Соседние клипы одного автора разводятся штрафом. Порядок считается при открытии и держится, пока ленту листают.
 const clipRec = new Map();      // id человека → { at, ids }
 const noise = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; };
-function clipRank(u) {
+function clipRank(u, yt) {
   const t = now(), fol = new Set(u.follows || []), day = C.today(), byAuthor = new Map(), all = [];
   for (const i of order()) {
     const k = db.clips[i]; if (k.ts > t) continue;      // клип с датой в будущем ждёт своего часа
@@ -103,24 +104,51 @@ function clipRank(u) {
     else if (k.seen && k.seen[u.id]) s *= 0.03;
     const x = { id: k.id, s }; all.push(x); let arr = byAuthor.get(k.by); if (!arr) byAuthor.set(k.by, arr = []); arr.push(x);
   }
+  if (yt) for (const v of ytItems(u)) {      // ролики YouTube из открытых каналов («Независимое видео») и каналов, на которые человек подписан
+    let s = (0.2 + 0.8 / (1 + (t - v.ts) / 36e5 / 72)) * (0.8 + 0.4 * noise(u.id + day + v.id)) * (v.short ? 1.25 : 1) * (v.member ? 1.3 : 1);
+    if ((u.ytSeen || []).includes(v.yt)) s *= 0.03;
+    const x = { id: v, s }; all.push(x); let arr = byAuthor.get('ch.' + v.chat); if (!arr) byAuthor.set('ch.' + v.chat, arr = []); arr.push(x);
+  }
   for (const arr of byAuthor.values()) { arr.sort((p, q) => q.s - p.s); arr.forEach((x, n) => { x.s /= 1 + 0.5 * n; }); }
   return all.sort((p, q) => q.s - p.s).map(x => x.id);
+}
+// Ролики YouTube, которые лежат ссылками в каналах: по одному на сообщение, не старше 45 дней, не больше 40 с канала.
+const YT_RE = /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:[^\s#]*&)?v=|(shorts)\/|live\/|embed\/)|youtu\.be\/)([\w-]{11})(?![\w-])/;
+function ytItems(u) {
+  const out = [], t = now(), seen = new Set();
+  const open = Object.values(db.chats).filter(c => c.type === 'channel' && c.pub && !c.server && c.rss && c.rss.length && !c.price).map(c => c.id);
+  for (const cid of new Set([...(u.chats || []), ...open])) {
+    const ch = db.chats[cid]; if (!ch || ch.type !== 'channel' || !ch.members || ch.server) continue;
+    const member = !!ch.members[u.id]; if (!member && !open.includes(cid)) continue;
+    if ((u.feedHide || []).includes('ch.' + cid)) continue;
+    const arr = db.msgs[cid] || []; let n = 0;
+    for (let i = arr.length - 1; i >= 0 && n < 40; i--) {
+      const m = arr[i]; if (m.ts > t || t - m.ts > 45 * 864e5) { if (m.ts <= t) break; continue; }
+      if (m.type === 'service' || m.enc || m.once || m.thread || !m.text) continue;
+      const r = YT_RE.exec(m.text); if (!r || seen.has(r[2])) continue; seen.add(r[2]); n++;
+      const title = m.text.split('\n').map(x => x.replace(/^(?:▶️|🔴|⚡)\s*/, '').replace(/\*\*|__|~~|\|\||`/g, '').trim()).filter(x => x && !/^https?:\/\//.test(x))[0] || '';
+      out.push({ id: 'yt.' + cid + '.' + m.id, yt: r[2], short: !!r[1] || undefined, text: title.slice(0, 200), chat: cid, title: ch.title, avatar: ch.avatar, color: ch.color || 0, username: ch.username, member: member || undefined, ts: m.ts, views: count(m.ytv) });
+    }
+  }
+  return out;
 }
 H['clip.feed'] = (c, p) => {
   const off = int(p.off, 0, 1e6), by = str(p.user, 32), t = now(), u = me(c); let ids;
   if (by) ids = order().filter(i => db.clips[i].ts <= t && db.clips[i].by === by);
   else {
     let rc = clipRec.get(u.id);
-    if (!off || !rc || t - rc.at > 30 * 60e3) { if (clipRec.size > 3000) clipRec.clear(); rc = { at: t, ids: clipRank(u) }; clipRec.set(u.id, rc); }
+    if (!off || !rc || rc.yt !== !!p.yt || t - rc.at > 30 * 60e3) { if (clipRec.size > 3000) clipRec.clear(); rc = { at: t, yt: !!p.yt, ids: clipRank(u, !!p.yt) }; clipRec.set(u.id, rc); }
     ids = rc.ids;
   }
-  const page = ids.slice(off, off + 8).map(i => db.clips[i]).filter(Boolean);
-  return { clips: page.map(k => clipView(k, c.uid)), more: off + 8 < ids.length, next: off + 8, mb: upMb(u), users: usersOf(page.map(k => k.by), c.uid) };
+  const page = ids.slice(off, off + 8).map(i => (typeof i === 'string' ? db.clips[i] : i)).filter(Boolean);
+  return { clips: page.map(k => (k.yt ? k : clipView(k, c.uid))), more: off + 8 < ids.length, next: off + 8, mb: upMb(u), users: usersOf(page.filter(k => !k.yt).map(k => k.by), c.uid) };
 };
 const clip = p => { const k = db.clips[str(p.id, 32)]; need(k, 'Клип не найден. Возможно, автор одумался.'); return k; };
 H['clip.like'] = (c, p) => { const k = clip(p); if (p.on === false) delete k.likes[c.uid]; else k.likes[c.uid] = 1; save(); return { likes: count(k.likes), liked: !!k.likes[c.uid] }; };
 const seenClips = new Map();      // кто что уже смотрел с момента запуска: просмотр считается один раз на человека
 H['clip.view'] = (c, p) => {
+  const ym = /^yt\.([\w-]{1,40})\.([\w-]{1,40})$/.exec(String(p.id || ''));      // ролик из канала: помним, что человек его уже видел, и считаем просмотр в самом сообщении
+  if (ym) { const m = C.findMsg(ym[1], ym[2]), r = m && m.text && YT_RE.exec(m.text), u = me(c); if (!r) return; u.ytSeen = (u.ytSeen || []).filter(x => x !== r[2]); u.ytSeen.push(r[2]); if (u.ytSeen.length > 400) u.ytSeen.shift(); m.ytv = m.ytv || {}; if (count(m.ytv) < 5000) m.ytv[c.uid] = 1; save(); return; }
   const k = db.clips[str(p.id, 32)]; if (!k || k.by === c.uid) return;
   let set = seenClips.get(c.uid); if (!set) { if (seenClips.size > 50000) seenClips.clear(); seenClips.set(c.uid, set = new Set()); }
   if (set.has(k.id)) return; if (set.size > 2000) set.clear(); set.add(k.id);
@@ -202,10 +230,51 @@ const APPS = [
   { id: 'catch', title: 'Пляжный ловец', about: 'Листик ловит ракушки и мороженое и уворачивается от крабов. Рекорды недели', cat: 'games', emoji: '🍃', art: 'catch', url: '/miniapps/catch.html' },
   { id: 'run', title: 'Пляжная пробежка', about: 'Бег с двойным прыжком: перепрыгивайте крабов, собирайте листики', cat: 'games', emoji: '🏃', art: 'run', url: '/miniapps/run.html' },
   { id: 'pairs', title: 'Пляжные пары', about: 'Найдите все пары рисованных карточек за меньшее число ходов', cat: 'games', emoji: '🃏', art: 'pairs', url: '/miniapps/pairs.html' },
-  { id: 'rp', title: 'Нудищево РП', about: 'Жизнь в провинции: почта, завод, шаурма и мечта о «бэхе»', cat: 'games', emoji: '🏘️', url: '/miniapps/rp.html' },
+  { id: 'rp', title: 'Нудищево РП', about: 'Жизнь в провинции: почта, завод, шаурма, пляж со спасателями и мечта о «бэхе»', cat: 'games', emoji: '🏘️', url: '/miniapps/rp.html' },
   { id: 'lot', title: 'Жребий', about: 'Монетка, кубик и «кто идёт за пиццей»', cat: 'tools', emoji: '🎲', url: '/miniapps/lot.html' },
   { id: 'split', title: 'Скинемся', about: 'Делит счёт на компанию с чаевыми', cat: 'tools', emoji: '🧾', url: '/miniapps/split.html' },
 ];
+// ───── Дуэли. Человек играет партию и вызывает другого: «побей мой результат». Вызов приходит сообщением в личку,
+// соперник играет ту же игру один раз, итог объявляется там же. Результаты сообщает браузер, проверить их сервер не может,
+// поэтому на кону только честь: листики за дуэли не дают и не забирают.
+const DUELS = {
+  beer: { name: 'Пивная битва', e: '🍺', unit: ['кружка', 'кружки', 'кружек'], max: 40 },
+  royale: { name: 'Банный рояль', title: 'Дуэль на бананах', e: '🍌', unit: ['банан', 'банана', 'бананов'], max: 40 },
+  catch: { name: 'Пляжный ловец', e: '🍃', unit: ['очко', 'очка', 'очков'], max: 3000 },
+  run: { name: 'Пляжная пробежка', e: '🏃', unit: ['очко', 'очка', 'очков'], max: 3000 },
+  pairs: { name: 'Пляжные пары', e: '🃏', unit: ['очко', 'очка', 'очков'], max: 60 },
+  shooter: { name: 'Комариный спецназ', e: '🦟', unit: ['волна', 'волны', 'волн'], max: 200 },
+  g2048: { name: '2048', e: '🔢', unit: ['очко', 'очка', 'очков'], max: 4000000 },
+};
+const plur = (n, f) => f[n % 10 === 1 && n % 100 !== 11 ? 0 : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 1 : 2];
+const duels = () => db.meta.duels || (db.meta.duels = {});
+const duelView = (d, uid) => { const g = DUELS[d.app], a = db.users[d.a], b = db.users[d.b]; return { id: d.id, app: d.app, name: g.title || g.name, e: g.e, unit: g.unit, a: d.a, b: d.b, an: a ? a.name : 'Кто-то', bn: b ? b.name : 'Кто-то', sa: d.sa, sb: d.sb, done: d.sb != null, mine: d.a === uid ? 'a' : d.b === uid ? 'b' : undefined, url: (APPS.find(x => x.id === d.app) || {}).url }; };
+H['duel.new'] = (c, p) => {
+  const u = me(c), app = str(p.app, 16), g = DUELS[app]; need(g, 'В этой игре дуэлей нет');
+  const o = db.users[str(p.to, 32)]; need(o && !o.deleted && !o.bot && o.id !== u.id, 'Вызвать можно только живого человека, и не себя');
+  const n = Math.floor(Number(p.score)); need(n >= 0 && n <= g.max, 'Такого результата не бывает');
+  A.limit('duel:' + u.id, 20, 3600e3);
+  const ch = C.openDm(u.id, o.id); R.checkSend(c, ch, { type: 'text' });
+  const all = duels(), t = now(); for (const k of Object.keys(all)) if (t - all[k].ts > 14 * 864e5) delete all[k];
+  const ks = Object.keys(all); if (ks.length > 3000) for (const k of ks.slice(0, ks.length - 3000)) delete all[k];
+  const d = { id: id(), app, a: u.id, b: o.id, sa: n, ts: t }; all[d.id] = d;
+  const m = C.postMessage(ch, u.id, { text: `⚔️ ${g.title || 'Дуэль: «' + g.name + '»'}. Мой результат — ${n} ${plur(n, g.unit)} ${g.e}. Сможешь больше?`, duel: { id: d.id, app, name: g.title || g.name, e: g.e, sa: n } });
+  d.chat = ch.id; d.mid = m.id; save();
+  return { id: d.id, chat: ch.id };
+};
+H['duel.get'] = (c, p) => { const d = duels()[str(p.id, 32)]; need(d && (d.a === c.uid || d.b === c.uid), 'Дуэль не найдена. Вызовы живут две недели.'); return duelView(d, c.uid); };
+H['duel.done'] = (c, p) => {
+  const d = duels()[str(p.id, 32)]; need(d && d.b === c.uid, 'Этот вызов бросили не вам'); need(d.sb == null, 'Эта дуэль уже сыграна: одна попытка');
+  const g = DUELS[d.app], n = Math.floor(Number(p.score)); need(n >= 0 && n <= g.max, 'Такого результата не бывает');
+  d.sb = n; d.at = now();
+  const ch = db.chats[d.chat], a = db.users[d.a], b = db.users[d.b], win = n > d.sa ? 'b' : n < d.sa ? 'a' : '';
+  if (ch) {
+    const m0 = C.findMsg(ch.id, d.mid); if (m0 && m0.duel) { m0.duel = { ...m0.duel, sb: n, win }; C.updateMsg(ch, m0); }
+    try { C.postMessage(ch, d.b, { text: `⚔️ ${g.title || 'Дуэль: «' + g.name + '»'} — ${n} против ${d.sa} ${g.e}. ` + (win ? `Победа за ${(win === 'b' ? b : a).name} 🏆` : 'Ничья: расходимся друзьями 🤝'), reply: d.mid }); } catch (e) { /* собеседник закрылся — итог всё равно записан в вызове */ }
+  }
+  save();
+  return duelView(d, c.uid);
+};
 // Листики за игры. Игры идут в браузере, и проверить честность партии сервер не может,
 // поэтому главный предохранитель — потолок на день по каждой игре (как у «Листопада»).
 const EARN = { g2048: { cap: 15, what: { 128: 1, 256: 2, 512: 3, 1024: 5, 2048: 10 } }, saper: { cap: 12, what: { win: 4 } }, royale: { cap: 10, what: { win: 5 } }, beer: { cap: 8, what: { win: 2 } }, shooter: { cap: 8, what: { w5: 2, w10: 4 } }, rp: { cap: 8, what: { job: 1 } }, catch: { cap: 6, what: { p15: 1, p40: 2, p80: 3 } }, run: { cap: 6, what: { p15: 1, p40: 2, p80: 3 } }, pairs: { cap: 6, what: { win: 2, ace: 2 } } };

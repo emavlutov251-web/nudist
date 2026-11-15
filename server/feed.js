@@ -63,31 +63,45 @@ function diversify(scored) {      // scored: [{ ref, by, s }] → ссылки �
   for (const a of byAuthor.values()) { a.sort((p, q) => q.s - p.s); a.forEach((x, k) => { x.s /= 1 + 0.6 * k; }); }
   return scored.sort((p, q) => q.s - p.s).map(x => x.ref);
 }
+// Насколько человек близок: контакт или собеседник в личке — «свои» идут выше незнакомых.
+function closeTo(u) { const set = new Set(u.contacts || []); for (const cid of u.chats || []) { const ch = db.chats[cid]; if (ch && ch.type === 'dm' && ch.members) for (const k of Object.keys(ch.members)) if (k !== u.id) set.add(k); } return set; }
+const chSeen = (u, it) => ((u.feedSeen || {})[it.chat] || 0) >= it.ts;
 function recommend(u) {
-  const t = now(), fol = new Set(u.follows || []), day = C.today(), near = {}, cand = [];
+  const t = now(), fol = new Set(u.follows || []), day = C.today(), near = {}, cand = [], pals = closeTo(u), hide = new Set(u.feedHide || []);
   for (const x of Object.values(db.posts)) {
-    if (x.ts > t || !visible(x.by, u)) continue;
-    if (x.by === u.id) continue;
+    if (x.ts > t || !visible(x.by, u) || hide.has(x.by)) continue;
+    if (x.by === u.id) { if (t - x.ts < 10 * 60e3) cand.push(x); continue; }      // своя запись — только что написанная, остальные живут во вкладке «Мои»
     let mine = x.likes[u.id] ? 1 : 0; for (const k of x.cm || []) if (k.by === u.id) { mine++; break; }
-    if (mine) near[x.by] = (near[x.by] || 0) + mine;
+    if (mine) near[x.by] = (near[x.by] || 0) + mine * (0.4 + 0.6 / (1 + (t - x.ts) / 864e5 / 14));      // давний интерес постепенно остывает
     cand.push(x);
   }
   const scored = cand.map(x => {
-    const ageH = (t - x.ts) / 36e5, likes = count(x.likes), cm = (x.cm || []).length, hasMedia = x.media && x.media.length > 0;
-    let s = 0.15 + 0.85 / (1 + ageH / 48);                                   // свежесть
+    const ageH = (t - x.ts) / 36e5, likes = count(x.likes), cm = (x.cm || []).length, views = x.views || 0, hasMedia = x.media && x.media.length > 0, seen = x.seen && x.seen[u.id];
+    let s = 0.12 + 0.88 / (1 + ageH / 30);                                   // свежесть: новое выше, старое не тонет насовсем
     s *= 1 + 0.5 * Math.log2(1 + 2 * likes + 3 * cm);                        // отклик
-    s *= (fol.has(x.by) ? 2 : 1) * (1 + 0.3 * Math.min(3, near[x.by] || 0)); // интерес к автору
+    if (views >= 8) s *= 0.75 + Math.min(0.6, 3 * (likes + 2 * cm) / views); // доля откликнувшихся: запись, которую все пролистали, опускается
+    s *= (fol.has(x.by) ? 2.2 : pals.has(x.by) ? 1.5 : 1) * (1 + 0.3 * Math.min(3, near[x.by] || 0)); // интерес к автору
     s *= hasMedia ? 1.15 : (x.text || '').length < 20 ? 0.7 : 1;
-    s *= 0.8 + 0.4 * noise(u.id + day + x.id);
-    if (x.seen && x.seen[u.id]) s *= 0.03;                                   // уже видели — в хвост
+    s *= 0.85 + 0.3 * noise(u.id + day + x.id);
+    if (!seen && ageH < 12 && (fol.has(x.by) || pals.has(x.by))) s *= 2.5;   // свежая запись «своего» человека, которую ещё не видели, — в самый верх
+    if (x.by === u.id) s *= 100; else if (seen) s *= 0.03;                   // уже видели — в хвост
     return { ref: x.id, by: x.by, s };
   });
-  for (const it of channelItems(u)) scored.push({ ref: it, by: 'ch.' + it.chat, s: (0.15 + 0.85 / (1 + (t - it.ts) / 36e5 / 48)) * (0.8 + 0.4 * noise(u.id + day + it.id)) });
-  return diversify(scored);
+  for (const it of channelItems(u)) {
+    if (hide.has('ch.' + it.chat)) continue;
+    const member = !!(db.chats[it.chat].members || {})[u.id];
+    let s = (0.12 + 0.88 / (1 + (t - it.ts) / 36e5 / 30)) * (0.85 + 0.3 * noise(u.id + day + it.id)) * (member ? 1.4 : 0.9) * (it.media.length ? 1.1 : 1);
+    if (chSeen(u, it)) s *= 0.03;
+    scored.push({ ref: it, by: 'ch.' + it.chat, s });
+  }
+  // не больше двух записей каналов подряд: между ними — люди, если они есть
+  const list = diversify(scored), out = [], wait = []; let run = 0;
+  for (const r of list) { const ch = typeof r !== 'string'; if (ch && run >= 2) { wait.push(r); continue; } out.push(r); run = ch ? run + 1 : 0; if (!ch && wait.length) { out.push(wait.shift()); run = 1; } }
+  return out.concat(wait);
 }
 
 H['feed.list'] = (c, p) => {
-  const u = me(c), tab = ['rec', 'all', 'subs', 'user'].includes(p.tab) ? p.tab : 'all', off = int(p.off, 0, 1e6), who = str(p.user, 32), fol = new Set(u.follows || []);
+  const u = me(c), tab = p.tab === 'feed' ? 'rec' : ['rec', 'all', 'subs', 'user'].includes(p.tab) ? p.tab : 'all', off = int(p.off, 0, 1e6), who = str(p.user, 32), fol = new Set(u.follows || []);
   const t = now();
   if (tab === 'rec') {
     let rc = recCache.get(u.id);
@@ -126,10 +140,18 @@ H['feed.fresh'] = (c, p) => {
 H['feed.seen'] = (c, p) => {
   const u = me(c), t = now(); let n = 0;
   for (const i of (Array.isArray(p.ids) ? p.ids : []).slice(0, 40)) {
+    const cm = /^ch\.([\w-]{1,40})\.([\w-]{1,40})$/.exec(String(i));      // запись канала: помним, до какого места человек дочитал канал в ленте
+    if (cm) { const m = C.findMsg(cm[1], cm[2]); if (m && db.chats[cm[1]] && db.chats[cm[1]].type === 'channel') { u.feedSeen = u.feedSeen || {}; if ((u.feedSeen[cm[1]] || 0) < m.ts) { u.feedSeen[cm[1]] = m.ts; n++; } } continue; }
     const x = db.posts[str(i, 32)]; if (!x || x.by === u.id || x.ts > t) continue;
     if (C.markSeen(x, u.id)) { x.views = (x.views || 0) + 1; n++; }
   }
   if (n) save();
+};
+// «Не интересно»: автор или канал больше не попадает в «Ленту» этого человека. Вернуть можно там же, в меню записи, или сбросить всё разом.
+H['feed.hide'] = (c, p) => {
+  const u = me(c), k = str(p.who, 60); need(/^(ch\.)?[\w-]{1,40}$/.test(k) && k !== u.id, 'Некого скрывать');
+  u.feedHide = (u.feedHide || []).filter(x => x !== k); if (p.on !== false) { u.feedHide.push(k); if (u.feedHide.length > 300) u.feedHide.shift(); }
+  if (p.reset) delete u.feedHide; recCache.delete(u.id); save(); return { hidden: (u.feedHide || []).length };
 };
 H['feed.viewers'] = (c, p) => { const x = post(p); need(x.by === c.uid, 'Кто смотрел запись, видит только её автор'); return { ...C.viewersOf(x, c.uid), total: x.views || 0 }; };
 H['feed.post'] = (c, p) => {

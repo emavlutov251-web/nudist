@@ -19,6 +19,8 @@ export function earn(what) { if (parent !== window) say({ nudist: 'earn', what: 
 const tops = [];
 export function score(n) { if (parent !== window) say({ nudist: 'score', score: Math.floor(n), t: new URLSearchParams(location.search).get('t') || '' }); }
 export function onTop(fn) { tops.push(fn); }
+// Итог партии для дуэли: «Нудист» покажет под игрой кнопку «Вызвать на дуэль», а если это ответ на вызов — запишет результат.
+export function result(n) { if (parent !== window) say({ nudist: 'result', score: Math.max(0, Math.floor(Number(n) || 0)) }); }
 export function toast(text) {
   let t = document.getElementById('toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
   t.textContent = text; t.className = 'on'; clearTimeout(toast.t); toast.t = setTimeout(() => { t.className = ''; }, 1800);

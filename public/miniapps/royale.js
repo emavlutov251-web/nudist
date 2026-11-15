@@ -1,5 +1,5 @@
 // «Банный рояль»: карточная битва на две дорожки против компьютера. Свои внизу, чужие сверху, пар — валюта.
-import { ready, share, $, earn } from '/miniapps/kit.js';
+import { ready, share, $, earn, result } from '/miniapps/kit.js';
 import { stage, loop, emo, text, rnd, pick, clamp, dist } from '/miniapps/game.js';
 const W = 360, H = 470, RIVER = 235, LANES = [80, 280], { ctx, pos } = stage($('#cv'), W, H);
 const CARDS = {
@@ -62,6 +62,7 @@ function step(dt) {
 }
 function end(r) {
   G.over = true; G.result = r; if (r > 0) earn('win');
+  { const down = G.towers.filter(t => t.side !== 0 && t.hp <= 0).length, kept = G.towers.filter(t => t.side === 0 && t.hp > 0).length; result(down * 10 + kept * 3 + (r > 0 ? 1 : 0)); }      // дуэль на бананах: 10 за снесённую башню, 3 за свою уцелевшую, 1 за победу
   $('#ovE').textContent = r > 0 ? '🏆' : r < 0 ? '🥶' : '🤝'; $('#ovT').textContent = r > 0 ? 'Победа!' : r < 0 ? 'Вас выгнали из бани' : 'Ничья';
   $('#ovP').textContent = `Башни: ${$('#mine').textContent} : ${$('#his').textContent}. ` + (r > 0 ? 'С лёгким паром.' : r < 0 ? 'Веник отобрали, тазик тоже.' : 'Разошлись по парилкам.');
   $('#go').textContent = 'Ещё раз'; $('#share').hidden = false; $('#ov').hidden = false;

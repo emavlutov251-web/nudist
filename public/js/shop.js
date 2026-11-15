@@ -141,7 +141,7 @@ function ShopModal({ id, tab: tab0 }) {
           ${t.gotF ? html`<span class="pass-c got"><${Icon} n="check" s=${13} /> ${rw(t.free)}</span>` : html`<button class="pass-c" disabled=${!open} onClick=${() => claimPass(t.lvl, false)}>${rw(t.free)}</button>`}
           ${t.gotP ? html`<span class="pass-c prem got"><${Icon} n="check" s=${13} /> ${rw(t.prem)}</span>` : html`<button class=${cx('pass-c prem', !season.pass.premium && 'lock')} disabled=${!open || !season.pass.premium} onClick=${() => claimPass(t.lvl, true)}>${!season.pass.premium && html`<${Icon} n="lock" s=${12} /> `}${rw(t.prem)}</button>`}
         </div>`; })}</div>
-        <p class="hint">Опыт: сообщение и реакция — по 1, подарок — 5, чаевые — 10, приглашённый друг — 20, буст клуба — 25, ежедневный бонус — 50. Левая награда — всем, правая — на премиум-дорожке.</p>
+        <p class="hint">Опыт: сообщение и реакция — по 1, подарок — 5, чаевые — 10, приглашённый друг — 20, буст группы — 25, ежедневный бонус — 50. Левая награда — всем, правая — на премиум-дорожке.</p>
         <h4 class="shop-h">Задания месяца</h4>
         <p class="shop-note">Сезон — это месяц. Задания считаются сами, награду забираете кнопкой. До конца сезона ${Math.max(1, Math.ceil((season.end - Date.now()) / 864e5))} дн.${season.mult > 1 ? ` С вашим тарифом награды ×${String(season.mult).replace('.', ',')}.` : ' С тарифом Pro награды в полтора раза больше, с Max — вдвое.'}</p>
         <div class="shop-tasks">${season.tasks.map(t => html`<div class=${cx('shop-task', t.done && 'done', t.claimed && 'got')} key=${t.id}>

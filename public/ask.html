@@ -40,6 +40,7 @@ button[disabled]{opacity:.55;cursor:default}
 .promo b{font-size:21px;line-height:1.2}
 .promo p{font-size:14px;opacity:.92}
 .promo .btn{background:#fff;color:#0E191B}
+.mq{padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.07);display:flex;flex-direction:column;gap:4px}.mq+.mq{margin-top:8px}.mq small{opacity:.6;font-size:12px}.mq b{font-weight:600;overflow-wrap:anywhere}.mq p{margin:4px 0 0;padding-left:10px;border-left:3px solid #1F9D57;white-space:pre-wrap;overflow-wrap:anywhere}.mq i{opacity:.55;font-size:13px}
 footer{margin-top:18px;font-size:13px;opacity:.6;text-align:center}
 footer a{color:inherit}
 [hidden]{display:none!important}
@@ -61,7 +62,7 @@ footer a{color:inherit}
   <section class="card done" id="done" hidden>
     <div class="big">🍃</div>
     <h1>Отправлено!</h1>
-    <p class="hint">Вопрос уже у получателя. Кто спросил — останется тайной.</p>
+    <p class="hint">Вопрос уже у получателя. Кто спросил — останется тайной. Ответ появится ниже, в «Моих вопросах», и в его историях.</p>
     <button type="button" class="ghost wide" id="again">Спросить ещё</button>
   </section>
 
@@ -69,6 +70,12 @@ footer a{color:inherit}
     <div class="big">🙈</div>
     <h1 id="closedTitle">Вопросы закрыты</h1>
     <p class="hint" id="closedText">Этот человек сейчас не принимает анонимные вопросы.</p>
+  </section>
+
+  <section class="card" id="mine" hidden>
+    <div class="row"><b>Мои вопросы</b><span class="cnt" id="mineN"></span></div>
+    <div id="mineList"></div>
+    <p class="hint">Вопросы с этого устройства. Ответ появится здесь и в историях того, кого вы спросили. Кто спрашивал, не видит никто.</p>
   </section>
 
   <section class="card promo">

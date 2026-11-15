@@ -214,6 +214,13 @@ H['chat.update'] = (c, p) => {
     need(can(ch, c.uid, 'info') || p.ttl !== undefined, 'Недостаточно прав');
     if (can(ch, c.uid, 'info')) {
       const before = { title: ch.title, pub: ch.pub, slow: ch.slow };
+      // старшинство: настройку, которую выставил старший по роли, младший не трогает
+      const J = JSON.stringify, pm = x => (x ? { send: x.send !== false, invite: !!x.invite, pin: !!x.pin, info: !!x.info } : { send: true, invite: false, pin: false, info: false }), am = x => (x ? [(Array.isArray(x.words) ? x.words : []).map(w => String(w).toLowerCase()).filter(Boolean), !!x.flood, !!x.links] : [[], false, false]);
+      const diff = { title: () => str(p.title, 100) !== ch.title, about: () => str(p.about, 500) !== (ch.about || ''), rules: () => str(p.rules, 2000) !== (ch.rules || ''), avatar: () => (p.avatar || undefined) !== ch.avatar, pub: () => !!p.pub !== !!ch.pub, username: () => String(p.username || '').replace(/^@/, '').toLowerCase() !== String(ch.username || '').toLowerCase(), slow: () => int(p.slow, 0, 86400) !== (ch.slow || 0), perms: () => ch.type === 'group' && J(pm(p.perms)) !== J(pm(ch.perms)), sign: () => !!p.sign !== !!ch.sign, approval: () => !!p.approval !== !!ch.approval, captcha: () => !!p.captcha !== !!ch.captcha, price: () => ch.type === 'channel' && int(p.price, 0, 100000) !== (ch.price || 0), automod: () => J(am(p.automod)) !== J(am(ch.automod)), rss: () => ch.type === 'channel' && J((Array.isArray(p.rss) ? p.rss : []).map(r => String(r.url || r))) !== J((ch.rss || []).map(r => r.url)) };
+      const NAMES = { title: 'Название', about: 'Описание', rules: 'Правила', avatar: 'Аватар', pub: 'Открытость', username: 'Адрес', slow: 'Медленный режим', perms: 'Права участников', sign: 'Подписи', approval: 'Вступление по заявке', captcha: 'Проверка новичков', price: 'Цена подписки', automod: 'Автомодерация', rss: 'Автопостинг' };
+      const touched = Object.keys(diff).filter(k => p[k] !== undefined && diff[k]());
+      for (const k of touched) C.senior(ch, C.chatRank(ch), c.uid, 'set.' + k, NAMES[k], true);
+      for (const k of touched) C.senior(ch, C.chatRank(ch), c.uid, 'set.' + k, NAMES[k]);
       if (p.title !== undefined) { const t = str(p.title, 100); need(t, 'Нужно название'); if (t !== ch.title) { ch.title = t; service(ch, c.uid, 'изменил(а) название на «' + t + '»'); } }
       if (p.about !== undefined) ch.about = str(p.about, 500);
       if (p.rules !== undefined) ch.rules = str(p.rules, 2000);
@@ -343,6 +350,13 @@ H['chat.role'] = (c, p) => {
   const ch = getChat(c, p.id); need(ch.type === 'group' || ch.type === 'channel', 'Недоступно');
   need(can(ch, c.uid, 'promote'), 'Назначать роли может только владелец или админ с этим правом');
   const m = ch.members[p.user]; need(m, 'Участник не найден'); need(m.role !== 'owner', 'Владельца нельзя разжаловать');
+  const rk = C.chatRank(ch), mine = rk(c.uid);
+  if (mine < 3) {      // не владелец: только те, кто младше, и только роли ниже своей
+    need(p.user !== c.uid, 'Свою роль менять нельзя');
+    need(rk(p.user) < mine, 'Нельзя менять роль того, кто равен вам или старше');
+    need((C.CHAT_RANK[p.role] || 0) < mine, 'Нельзя выдать роль, равную своей или выше');
+  }
+  C.senior(ch, rk, c.uid, 'role.' + p.user, 'Роль участника');
   if (p.role === 'owner') {
     need(ch.members[c.uid].role === 'owner', 'Передать владение может только владелец');
     ch.members[c.uid].role = 'admin'; m.role = 'owner'; delete m.rights;
@@ -362,7 +376,7 @@ H['chat.kick'] = (c, p) => {
   for (const uid of (Array.isArray(p.users) ? p.users : [p.user]).slice(0, 500)) {
     const m = ch.members[uid];
     if (m) { if (uid === c.uid || rank[m.role] >= rank[ch.members[c.uid].role]) continue; }
-    if (p.ban) { ch.banned = ch.banned || []; if (!ch.banned.includes(uid)) ch.banned.push(uid); }
+    if (p.ban) { ch.banned = ch.banned || []; if (!ch.banned.includes(uid)) ch.banned.push(uid); (ch.locks = ch.locks || {})['ban.' + uid] = c.uid; }
     if (p.purge) C.deleteMessages(ch, (db.msgs[ch.id] || []).filter(x => x.from === uid).map(x => x.id));
     if (m) { if (ch.type === 'group') service(ch, uid, p.ban ? 'забанен(а). Листок изъят.' : 'исключён(а) из группы'); C.removeFromChat(ch, uid); }
     audit(ch, c.uid, p.ban ? 'ban' : 'kick', uname(db.users[uid]));
@@ -377,6 +391,7 @@ H['chat.mute'] = (c, p) => {
   need(can(ch, c.uid, 'ban'), 'Недостаточно прав');
   const o = getUser(p.user), m = ch.members[o.id], rank = { owner: 3, admin: 2, mod: 1, member: 0 }; need(o.id !== c.uid, 'Себе рот не заклеивают');
   need(!m || rank[m.role] < rank[ch.members[c.uid].role], 'Нельзя запретить писать тому, кто равен вам по роли или выше');
+  C.senior(ch, C.chatRank(ch), c.uid, 'mute.' + o.id, 'Запрет писать');
   const h = Number(p.hours) || 0, was = C.chatMuted(ch, o.id); ch.mutes = ch.mutes || {};
   if (h) ch.mutes[o.id] = now() + (h < 0 ? 100 * 365 * 864e5 : Math.min(h, 8760) * 3600e3); else delete ch.mutes[o.id];
   for (const k in ch.mutes) if (!(ch.mutes[k] > now())) delete ch.mutes[k];
@@ -386,7 +401,7 @@ H['chat.mute'] = (c, p) => {
   save(); C.emitChat(ch, [c.uid, o.id]);
   return { muted: C.chatMuted(ch, o.id) };
 };
-H['chat.unban'] = (c, p) => { const ch = getChat(c, p.id); need(can(ch, c.uid, 'ban'), 'Недостаточно прав'); ch.banned = (ch.banned || []).filter(u => u !== p.user); audit(ch, c.uid, 'unban', uname(db.users[p.user])); save(); };
+H['chat.unban'] = (c, p) => { const ch = getChat(c, p.id); need(can(ch, c.uid, 'ban'), 'Недостаточно прав'); C.senior(ch, C.chatRank(ch), c.uid, 'ban.' + str(p.user, 32), 'Бан'); delete ch.locks['ban.' + str(p.user, 32)]; ch.banned = (ch.banned || []).filter(u => u !== p.user); audit(ch, c.uid, 'unban', uname(db.users[p.user])); save(); };
 H['invite.new'] = (c, p) => {
   let target;
   if (p.server) { const s = db.servers[p.server]; need(s && C.sCan(s, c.uid, 'invite'), 'Недостаточно прав'); target = { server: s.id }; if (p.role && s.roles.some(r => r.id === p.role && !r.perms.admin) && C.sCan(s, c.uid, 'promote')) target.role = p.role; audit(s, c.uid, 'invite.new'); }
@@ -670,9 +685,26 @@ H['msg.react'] = (c, p) => {
   C.updateMsg(chat, m);
   if (!had && m.from !== c.uid && chat.type !== 'channel') emit(m.from, 'rx', { chat: chat.id, msg: m.id, user: c.uid, e });
 };
+// Кто прочитал сообщение и кто какую реакцию поставил.
+// Реакции видят все участники (они и так подписаны под сообщением). Список прочитавших — автор сообщения и администраторы чата;
+// в личке — оба собеседника. В больших чатах (больше 500 человек) поимённого списка нет, только число.
+H['msg.who'] = (c, p) => {
+  const chat = getChat(c, p.chat), m = C.findMsg(chat.id, p.id); need(m && m.type !== 'service', 'Сообщение не найдено');
+  const ids = new Set(), rx = Object.entries(m.rx || {}).map(([e, us]) => ({ e, users: us.filter(u => db.users[u] && !db.users[u].deleted).slice(0, 200), n: us.length })).filter(x => x.n).sort((a, b) => b.n - a.n);
+  for (const x of rx) for (const u of x.users) ids.add(u);
+  const priv = chat.type === 'dm' || chat.type === 'secret', mayRead = priv || m.from === c.uid || can(chat, c.uid, 'del') || can(chat, c.uid, 'ban');
+  let read = null, readN = null, total = null;
+  if (mayRead && chat.type !== 'saved' && chat.members) {
+    const all = Object.keys(chat.members).filter(u => u !== m.from && db.users[u] && !db.users[u].deleted && !db.users[u].bot); total = all.length;
+    const got = all.filter(u => (st(chat, u).read || 0) >= m.seq); readN = got.length;
+    if (all.length <= 500) { read = got.slice(0, 300); for (const u of read) ids.add(u); }
+  }
+  return { rx, read, readN, total, users: usersFor(c, [...ids]) };
+};
 H['msg.pin'] = (c, p) => {
   const chat = getChat(c, p.chat), m = C.findMsg(chat.id, p.id); need(m, 'Сообщение не найдено');
   need(can(chat, c.uid, 'pin'), 'Недостаточно прав, чтобы закреплять');
+  if (chat.type === 'group' || chat.type === 'channel') { C.senior(chat, C.chatRank(chat), c.uid, 'pin.' + m.id, 'Закреп'); if (p.on === false) delete chat.locks['pin.' + m.id]; }
   chat.pinned = (chat.pinned || []).filter(x => x !== m.id);
   if (p.on !== false) { chat.pinned.push(m.id); if (chat.pinned.length > 50) chat.pinned.shift(); if (!p.quiet && chat.type !== 'channel') service(chat, c.uid, 'закрепил(а) сообщение', { reply: m.id }); }
   if (!chat.pinned.length) delete chat.pinned;
@@ -781,7 +813,15 @@ function storyVisible(s, viewer) {
   if (s.aud === 'contacts') return (a.contacts || []).includes(viewer.id);
   return C.isRobot(a.id) || knows(a, viewer);      // подборки редакции видны всем, остальные истории только знакомым
 }
-const storyView = (s, uid) => ({ id: s.id, user: s.user, ts: s.ts, kind: s.kind, text: s.text, bg: s.bg, media: s.media, aud: s.user === uid ? s.aud : undefined, seen: s.views.some(v => v.u === uid), views: s.user === uid ? s.views.length : undefined, items: s.items });
+const storyView = (s, uid) => ({ id: s.id, user: s.user, ts: s.ts, kind: s.kind, text: s.text, bg: s.bg, media: s.media, aud: s.user === uid ? s.aud : undefined, seen: s.views.some(v => v.u === uid), views: s.user === uid ? s.views.length : undefined, items: s.items, ask: s.ask });
+// История, которую создаёт сам сервер (ответ на анонимный вопрос): кладём и рассылаем тем, кому она видна.
+function storyPush(me, o) {
+  need(db.flags.stories, 'Истории отключены администратором');
+  const s = { id: id(), user: me.id, ts: now(), kind: 'text', text: '', bg: 'leaf', aud: 'all', list: [], views: [], rx: {}, ...o };
+  db.stories[s.id] = s; save();
+  for (const uid of C.conns.keys()) { const v = db.users[uid]; if (v && storyVisible(s, v)) emit(uid, 'story', { story: storyView(s, uid), user: pubUser(me, uid) }); }
+  return s;
+}
 H['story.list'] = (c, p) => {
   const me = user(c), t = now() - 864e5;
   const list = Object.values(db.stories).filter(s => (p.archive ? s.user === me.id : s.ts > t && s.ts <= now()) && storyVisible(s, me)).sort((a, b) => a.ts - b.ts);
@@ -887,4 +927,4 @@ H['stars.history'] = c => { const u = user(c), list = (u.leafLog || []).slice(0,
 H['premium.buy'] = c => { const u = user(c); spend(u, PREMIUM_PRICE, 'Листики копятся в мини-игре «Листопад», ежедневным бонусом и приглашениями друзей.'); u.premiumUntil = Math.max(u.premiumUntil || 0, now()) + 30 * 864e5; save(); selfUpdate(u); C.broadcastUser(u); return { until: u.premiumUntil }; };
 H['fun.buzz'] = (c, p) => { const ch = getChat(c, p.chat); need(ch.type === 'dm' || ch.type === 'group', 'Пинать можно только в личке и группах'); A.limit('buzz:' + c.uid + ch.id, 1, 15000); for (const u of membersOf(ch)) emit(u, 'buzz', { chat: ch.id, user: c.uid }); };
 
-module.exports = { H, getChat, getUser, uname, usersFor, ensureSaved, joinChat, chatPreview, serverPreview, resolveTarget, checkSend, buildPayload, hooksEdit, selfUpdate, spend, giveCheck, leafLog, boostLevel, BOOST_PRICE, PREMIUM_PRICE, LEAF, hook };
+module.exports = { storyPush, H, getChat, getUser, uname, usersFor, ensureSaved, joinChat, chatPreview, serverPreview, resolveTarget, checkSend, buildPayload, hooksEdit, selfUpdate, spend, giveCheck, leafLog, boostLevel, BOOST_PRICE, PREMIUM_PRICE, LEAF, hook };

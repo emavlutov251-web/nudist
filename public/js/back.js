@@ -31,7 +31,7 @@ function layers() {
   if (u.hub) L.push(() => { import('./hub.js').then(h => h.closeHub()); });
   if (S.dock && S.dock.open) L.push(() => { import('./dock.js').then(k => k.foldDock()); });
   if (S.dock && S.dock.open && S.dock.full) L.push(() => { S.dock.full = false; });      // …а из полного экрана сначала выходим в окно
-  // музыка сворачивается и играет дальше, телевизор выключается
+  // музыка и видео сворачиваются и играют дальше
   for (const m of S.modals) {
     L.push(() => { if (m.props && typeof m.props.res === 'function') m.props.res(null); closeModal(m.id); });
     const h = backHooks.get(m.id); if (h && h.depth()) L.push(() => { h(); });          // внутри окна есть свой шаг назад

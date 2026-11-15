@@ -82,7 +82,7 @@ function Auth() {
       <div class="auth-logo"><${Logo} s=${132} /></div>
       <h1 class="wordmark">НУДИСТ</h1>
       <p class="slogan">${slogan}</p>
-      <ul class="auth-points"><li><${Icon} n="message-circle" s=${18} /> Чаты, группы и каналы — как в Telegram</li><li><${Icon} n="headphones" s=${18} /> Клубы, роли и голосовые — как в Discord</li><li><${Icon} n="leaf" s=${18} /> Спойлеры под фиговым листком, мемы и кнопка «Прикрыться»</li></ul>
+      <ul class="auth-points"><li><${Icon} n="message-circle" s=${18} /> Чаты, группы и каналы — как в Telegram</li><li><${Icon} n="headphones" s=${18} /> Группы с комнатами, ролями и голосовыми</li><li><${Icon} n="leaf" s=${18} /> Спойлеры под фиговым листком, мемы и кнопка «Прикрыться»</li></ul>
     </section>
     <section class="auth-form">
       <form class="card" onSubmit=${submit}>
@@ -192,8 +192,14 @@ document.addEventListener('keydown', e => {
   }
 });
 document.addEventListener('click', () => { try { if ('Notification' in window && Notification.permission === 'default' && S.ready && S.settings.notif && !local.get('askedNotif')) { local.set('askedNotif', 1); Notification.requestPermission(); } } catch (e) { /* игнор */ } }, { passive: true });
+// Ничего не утаскивается: картинки, ссылки и аватары не перетаскиваются ни внутри страницы, ни в другие приложения,
+// а бросить что-то на страницу можно только файлом в открытый чат (там свой обработчик).
+addEventListener('dragstart', e => { e.preventDefault(); });
+for (const ev of ['dragover', 'drop']) addEventListener(ev, e => { const t = e.target; if (!(t && t.closest && t.closest('.chat')) || !(e.dataTransfer && [...e.dataTransfer.types].includes('Files'))) e.preventDefault(); });
+// Страница не должна уезжать: если что-то всё же прокрутило окно (фокус в поле, клавиатура), возвращаем на место.
+addEventListener('scroll', () => { if (scrollX || scrollY) scrollTo(0, 0); }, { passive: true });
 async function handleHash(first) {
-  if (/^#hub(=\w+)?$/.test(location.hash)) { const t = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); openHub(['feed', 'events', 'music', 'clips', 'live', 'tv', 'apps', 'help'].includes(t) ? t : 'music'); return; }
+  if (/^#hub(=\w+)?$/.test(location.hash)) { const t = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); openHub(['feed', 'video', 'user', 'events', 'music', 'clips', 'live', 'apps', 'help'].includes(t) ? t : 'music'); return; }
   if (location.hash === '#events') { history.replaceState(history.state, '', location.pathname); openHub('events'); return; }
   if (/^#shop(=\w+)?$/.test(location.hash)) { const tab = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); import('./shop.js').then(m => m.openShop(tab)); return; }
   if (/^#buy(=[\w]+)?$/.test(location.hash)) { const it = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); import('./pay.js').then(m => (it ? m.buyItem(it) : import('./panels.js').then(p => openModal(p.StarsModal)))); return; }

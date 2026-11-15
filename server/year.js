@@ -16,7 +16,7 @@ const CAL = {
   feb: { game: ['catch', 'feb', 'Сердцеед'], top: 'frame_cupid', prize: { leaf: 100 }, tasks: [['val', 3, 'Отправьте 3 валентинки', 20], ['gift', 1, 'Подарите кому-нибудь подарок', 20], ['game', 30, 'Поймайте 30 сердец в «Сердцееде»', 30]] },
   mar: { game: ['pairs', 'mar', 'Весенний букет'], top: 'frame_bloom', prize: { leaf: 100 }, tasks: [['invite', 3, 'Позовите трёх друзей по своей ссылке', 0, { boost: 1 }], ['gift', 1, 'Подарите кому-нибудь подарок', 20], ['game', 34, 'Соберите «Весенний букет» за 26 ходов или быстрее', 30]] },
   apr: { game: ['run', 'apr', 'Банановый забег'], top: 'frame_joker', prize: { item: 'theme_matrix' }, tasks: [['msg', 30, 'Напишите 30 сообщений людям', 20], ['react', 15, 'Поставьте 15 реакций', 20], ['game', 40, 'Наберите 40 очков в «Банановом забеге»', 30]] },
-  may: { game: ['catch', 'may', 'Пляжный волейбол'], prize: { leaf: 100 }, tasks: [['club', 20, 'Напишите 20 сообщений в клубах', 20], ['days', 4, 'Загляните в «Нудист» в 4 разных дня', 20], ['game', 35, 'Наберите 35 очков в «Пляжном волейболе»', 30]] },
+  may: { game: ['catch', 'may', 'Пляжный волейбол'], prize: { leaf: 100 }, tasks: [['club', 20, 'Напишите 20 сообщений в группах', 20], ['days', 4, 'Загляните в «Нудист» в 4 разных дня', 20], ['game', 35, 'Наберите 35 очков в «Пляжном волейболе»', 30]] },
   jun: { game: ['pairs', 'jun', 'Праздничный стол'], top: 'frame_bday', prize: { leaf: 127 }, tasks: [['msg', 20, 'Напишите 20 сообщений людям', 20], ['gift', 1, 'Подарите кому-нибудь подарок', 20], ['game', 34, 'Соберите «Праздничный стол» за 26 ходов или быстрее', 30]] },
   jul: { seq: true, skip: 300, game: ['run', 'jul', 'Полоса выживания'], prize: { item: 'frame_survivor' }, tasks: [['msg', 30, 'Напишите 30 сообщений людям', 15], ['react', 20, 'Поставьте 20 реакций', 15], ['voice', 5, 'Отправьте 5 голосовых', 20], ['game', 30, 'Наберите 30 очков в «Полосе выживания»', 20], ['gift', 2, 'Подарите два подарка', 20], ['days', 5, 'Продержитесь 5 разных дней', 30]] },
   aug: { game: ['catch', 'aug', 'Последний урожай'], top: 'frame_sunset', prize: { leaf: 100 }, tasks: [['msg', 25, 'Напишите 25 сообщений людям', 20], ['gift', 1, 'Подарите кому-нибудь подарок', 20], ['game', 40, 'Наберите 40 очков в «Последнем урожае»', 30]] },
@@ -31,7 +31,7 @@ const active = () => ORDER.filter(k => Ev.on(k));
 const gameUrl = k => `/miniapps/${CAL[k].game[0]}.html?t=${CAL[k].game[1]}`;
 const state = u => { const y = Ev.year(); if (!u.yq || u.yq.y !== y) u.yq = { y, e: {}, stamps: [], album: 0 }; return u.yq; };
 const quest = (u, k) => { const s = state(u); return s.e[k] || (s.e[k] = { c: {}, got: [], days: [] }); };
-const prizeText = p => (!p ? '' : p.leaf ? `${p.leaf} 🍃` : p.boost ? 'бесплатный буст клуба' : p.item ? `${Shop.CATALOG[p.item].kind === 'theme' ? 'тема' : 'рамка'} «${Shop.CATALOG[p.item].name}»` : '');
+const prizeText = p => (!p ? '' : p.leaf ? `${p.leaf} 🍃` : p.boost ? 'бесплатный буст группы' : p.item ? `${Shop.CATALOG[p.item].kind === 'theme' ? 'тема' : 'рамка'} «${Shop.CATALOG[p.item].name}»` : '');
 function award(u, p) { if (!p) return; if (p.leaf) u.stars = (u.stars || 0) + p.leaf; if (p.boost) u.freeBoosts = (u.freeBoosts || 0) + p.boost; if (p.item) Shop.own(u, p.item); }
 // Проверить задания события после изменения счётчика
 function settle(u, k) {
@@ -128,7 +128,7 @@ function awardTops() {
   }
 }
 
-// ───── гонка клубов: выходные «Открытия сезона»
+// ───── гонка групп: выходные «Открытия сезона»
 const RACE = { perDay: 40, prizes: [5, 3, 1] };
 const raceState = () => { const y = Ev.year(); if (!db.meta.race || db.meta.race.y !== y) db.meta.race = { y, pts: {}, day: {} }; return db.meta.race; };
 function race(u, sid) {
@@ -142,7 +142,7 @@ function awardRace() {
   const w = Ev.win('may'), t = T(), r = raceState(); if (r.done || t < w[1] || t > w[1] + 7 * DAY) return; r.done = t;
   const rows = raceRows().slice(0, 3); rows.forEach(([i], n) => { const s = db.servers[i]; s.boosts = (s.boosts || 0) + RACE.prizes[n]; });
   const ch = db.meta.common && db.chats[db.meta.common], bot = Ev.sys();
-  if (ch && bot && rows.length) C.postMessage(ch, bot.id, { text: '🏖️ **Гонка клубов окончена.**\n' + rows.map(([i, n], k) => `${k + 1}. «${db.servers[i].name}» — ${n} сообщений, +${RACE.prizes[k]} к бустам`).join('\n') }, { quiet: true });
+  if (ch && bot && rows.length) C.postMessage(ch, bot.id, { text: '🏖️ **Гонка групп окончена.**\n' + rows.map(([i, n], k) => `${k + 1}. «${db.servers[i].name}» — ${n} сообщений, +${RACE.prizes[k]} к бустам`).join('\n') }, { quiet: true });
   save();
 }
 
@@ -188,7 +188,7 @@ const BORN = Ev.at(2026, 11, 10);
 H['year.album'] = c => { const u = db.users[c.uid], s = state(u), keys = ORDER.filter(k => Ev.win(k)[1] > BORN); return { y: s.y, stamps: keys.map(k => ({ id: k, e: NAME[k].e, name: NAME[k].name, got: s.stamps.includes(k), from: Ev.win(k)[0] })), goals: ALBUM.filter(([n]) => n <= keys.length).map(([n, p]) => ({ n, prize: prizeText(p), got: s.album >= n })) }; };
 
 // ───── бот: /prediction, /album
-const PRED = ['Сегодня вас не узнают без одежды. Впрочем, как и всегда.', 'Звёзды советуют ответить на то сообщение, которое вы читаете третий день.', 'Вас ждёт встреча с холодильником. Не сопротивляйтесь.', 'Кто-то поставит вам реакцию. Скорее всего, по ошибке.', 'День удачный для того, чтобы ничего не делать. Как и вчера.', 'Сегодня вы найдёте носок. Второй — нет.', 'Меркурий ретроградный, поэтому в чате опять спорят.', 'Вас ждёт богатство: целых 30 листиков, если не лениться.', 'К вечеру вы пожалеете о голосовом на четыре минуты.', 'Ваш питомец думает о вас. И о еде. В основном о еде.', 'Вас добавят в клуб, из которого неудобно выйти.', 'Сегодня шутка зайдёт. Но не ваша.', 'Вам напишет тот, кого вы не ждали. Это бот.', 'Отличный день сменить аватар. Старый видел слишком многое.', 'Судьба готовит подарок. Судьба — это вы сами, магазин открыт.', 'Сегодня вы будете правы. Жаль, что никто не спросит.'];
+const PRED = ['Сегодня вас не узнают без одежды. Впрочем, как и всегда.', 'Звёзды советуют ответить на то сообщение, которое вы читаете третий день.', 'Вас ждёт встреча с холодильником. Не сопротивляйтесь.', 'Кто-то поставит вам реакцию. Скорее всего, по ошибке.', 'День удачный для того, чтобы ничего не делать. Как и вчера.', 'Сегодня вы найдёте носок. Второй — нет.', 'Меркурий ретроградный, поэтому в чате опять спорят.', 'Вас ждёт богатство: целых 30 листиков, если не лениться.', 'К вечеру вы пожалеете о голосовом на четыре минуты.', 'Ваш питомец думает о вас. И о еде. В основном о еде.', 'Вас добавят в группу, из которой неудобно выйти.', 'Сегодня шутка зайдёт. Но не ваша.', 'Вам напишет тот, кого вы не ждали. Это бот.', 'Отличный день сменить аватар. Старый видел слишком многое.', 'Судьба готовит подарок. Судьба — это вы сами, магазин открыт.', 'Сегодня вы будете правы. Жаль, что никто не спросит.'];
 Ev.cmd = (u, say, t) => {
   if (/^\/prediction/.test(t)) { const d = Ev.mskDate(), n = [...(u.id + d)].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7); say(`🔮 **Предсказание на ${d.slice(8)}.${d.slice(5, 7)}:** ${PRED[n % PRED.length]}`); return true; }
   if (/^\/album/.test(t)) { const s = state(u); say(`📮 **Альбом ${s.y}:** ${s.stamps.length} из ${ORDER.length} марок.\n` + ORDER.map(k => `${s.stamps.includes(k) ? '✅' : '▫️'} ${NAME[k].e} ${NAME[k].name}`).join('\n') + '\n\nМарку дают за три задания события. 4 марки — 300 🍃, 8 — рамка «Сезонник», 12 — рамка «Старожил».'); return true; }

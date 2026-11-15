@@ -1,4 +1,4 @@
-import { ready, share, toast, $, store, earn } from '/miniapps/kit.js';
+import { ready, share, toast, $, store, earn, result } from '/miniapps/kit.js';
 const N = 4, board = $('#board'); let g, score, over, best = store.get('2048.best', 0);
 const cells = []; for (let i = 0; i < N * N; i++) { const c = document.createElement('i'); c.appendChild(document.createElement('b')); board.appendChild(c); cells.push(c); }
 function spawn() { const free = []; g.forEach((v, i) => { if (!v) free.push(i); }); if (!free.length) return -1; const i = free[Math.floor(Math.random() * free.length)]; g[i] = Math.random() < .9 ? 2 : 4; return i; }
@@ -21,7 +21,7 @@ function move(dir) {      // 0 влево, 1 вправо, 2 вверх, 3 вн�
   draw(spawn());
   const top = Math.max(...g); for (const t of [128, 256, 512, 1024, 2048]) if (top >= t && !paid.has(t)) { paid.add(t); earn(t); }
   const stuck = !g.includes(0) && !g.some((v, i) => (i % N < N - 1 && v === g[i + 1]) || (i < N * (N - 1) && v === g[i + N]));
-  if (stuck) { over = true; $('#hint').textContent = `Ходов больше нет. Счёт ${score}. Одевайтесь и пробуйте снова.`; }
+  if (stuck) { over = true; result(score); $('#hint').textContent = `Ходов больше нет. Счёт ${score}. Одевайтесь и пробуйте снова.`; }
   else if (g.includes(2048) && !start.won) { start.won = true; toast('2048! Можно продолжать'); }
 }
 addEventListener('keydown', e => { const d = { ArrowLeft: 0, ArrowRight: 1, ArrowUp: 2, ArrowDown: 3, a: 0, d: 1, w: 2, s: 3 }[e.key]; if (d !== undefined) { e.preventDefault(); move(d); } });

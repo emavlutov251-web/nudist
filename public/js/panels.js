@@ -36,9 +36,15 @@ export const pickUsers = o => new Promise(res => openModal(UserPicker, { ...o, r
 // ═════ Профиль ═════
 export function showProfile(userId, username, tab) { openModal(Profile, { userId, username, tab }); }
 function Profile({ id, userId, username, tab: tab0 }) {
-  const [d, setD] = useState(null), [tab, setTab] = useState(tab0 === 'gifts' ? 'gifts' : 'info'), [gn, setGn] = useState(0);
-  useEffect(() => { rpc('user.get', userId ? { id: userId } : { username }).then(r => { S.users[r.user.id] = { ...S.users[r.user.id], ...r.user }; setGn(r.gifts || 0); setD(r); }).catch(e => { toast(e.message, 'err'); closeModal(id); }); }, []);
-  if (!d) return html`<${Modal} id=${id} title="Профиль" cls="small"><${Spinner} /><//>`;
+  // Профиль открывается сразу из того, что уже известно о человеке (свой — всегда, чужой — если он есть в чатах), а свежие данные подгружаются следом.
+  // Раньше окно ждало ответа сервера и на плохой связи висело с одним листиком до полуминуты.
+  const known = userId ? (userId === S.me.id ? S.me : S.users[userId]) : Object.values(S.users).find(x => x && x.username && username && x.username.toLowerCase() === String(username).replace(/^@/, '').toLowerCase());
+  const [d, setD] = useState(known && !known.deleted ? { user: known, common: [], stale: true } : null), [tab, setTab] = useState(tab0 === 'gifts' ? 'gifts' : 'info'), [gn, setGn] = useState(0), [err, setErr] = useState('');
+  const load = () => { setErr(''); let over = false;
+    const t = setTimeout(() => { if (!over) { over = true; setErr('Сервер долго не отвечает. Проверьте связь.'); } }, 12000);
+    rpc('user.get', userId ? { id: userId } : { username }).then(r => { over = true; clearTimeout(t); S.users[r.user.id] = { ...S.users[r.user.id], ...r.user }; setGn(r.gifts || 0); setErr(''); setD(r); }).catch(e => { if (over) return; over = true; clearTimeout(t); setErr(e.message || 'Не получилось загрузить профиль'); }); };
+  useEffect(load, []);
+  if (!d) return html`<${Modal} id=${id} title="Профиль" cls="small">${err ? html`<${Empty} icon="circle-alert" title="Профиль не загрузился" text=${err}><button class="btn" onClick=${load}><${Icon} n="refresh-cw" s=${16} /> Повторить</button><//>` : html`<${Spinner} />`}<//>`;
   const u = S.users[d.user.id] || d.user, me = u.id === S.me.id, contact = (S.me.contacts || []).includes(u.id), blocked = (S.me.blocked || []).includes(u.id), pr = u.profile || {};
   const go = f => { closeModal(id); f(); };
   const avatars = (u.avatars || []).filter(Boolean);
@@ -132,7 +138,7 @@ export function StarsModal({ id }) {
       ${prem ? html`<p>Тариф ${TIER[u.tier] || 'Plus'} действует до ${new Date(u.premiumUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>` : html`<p>Рамки для аватара, цветное имя, эффекты сообщений, темы и стикеры — за листики. Подписка Plus, Pro или Max даёт часть украшений бесплатно и прибавку к листикам.</p>`}
       <div class="row"><button class="btn warn" onClick=${() => { closeModal(id); openShop('cosmetics'); }}><${Icon} n="sparkles" s=${16} /> Украшения</button><button class="btn ghost" onClick=${() => { closeModal(id); openShop('plans'); }}><${Icon} n="crown" s=${16} /> ${prem ? 'Тарифы' : 'Подписка'}</button><button class="btn ghost" onClick=${() => { closeModal(id); openShop('season'); }}><${Icon} n="calendar" s=${16} /> Сезон</button></div></div>
     <p class="hint">Откуда берутся листики: ежедневный бонус ${lf.dailyMin === lf.dailyMax ? lf.dailyMin : `от ${lf.dailyMin} до ${lf.dailyMax}`} 🍃 (растёт на ${lf.dailyStep || 3} за каждый день подряд, пропуск начинает заново), «Листопад» — листик за каждые ${lf.per} тапов, не больше ${lf.limit} 🍃 в день, листики за мини-игры (до 30 🍃 в день на все игры вместе), задания и пропуск сезона и 100 🍃 за приглашённого друга. Деревья не резиновые.</p>
-    <p class="hint">На что ещё тратить: буст клуба (${(S.prices || {}).boost || 200} 🍃${u.freeBoosts ? `, у вас ${u.freeBoosts} в подарок от подписки` : ''}), платные каналы, подарки друзьям.</p><//>`;
+    <p class="hint">На что ещё тратить: буст группы (${(S.prices || {}).boost || 200} 🍃${u.freeBoosts ? `, у вас ${u.freeBoosts} в подарок от подписки` : ''}), платные каналы, подарки друзьям.</p><//>`;
 }
 
 // ═════ Поделиться листиками ═════
@@ -202,7 +208,7 @@ export function CreateChat({ id, type }) {
   const ch = type === 'channel', [f, setF] = useState({ title: '', about: '', avatar: '', pub: false, username: '', members: [] }), [busy, setBusy] = useState(false), set = p => setF(s => ({ ...s, ...p }));
   const go = async () => { setBusy(true); const c = await call('chat.create', { type, title: f.title.trim(), about: f.about, avatar: f.avatar || undefined, pub: f.pub, username: f.pub ? f.username : undefined, members: f.members }); setBusy(false); if (c) { S.chats[c.id] = c; closeModal(id); openChat(c.id); toast(ch ? 'Канал создан. Вещайте!' : 'Группа создана'); } };
   return html`<${Modal} id=${id} title=${ch ? 'Новый канал' : 'Новая группа'} icon=${ch ? 'megaphone' : 'users'} cls="small" footer=${html`<button class="btn" disabled=${!f.title.trim() || busy} onClick=${go}>Создать</button>`}>
-    <div class="row top"><button class="ava-pick" onClick=${async () => { const u = await uploadAvatar(); if (u) set({ avatar: u }); }} title="Выбрать аватар">${f.avatar ? html`<img src=${f.avatar} alt="" />` : html`<${Icon} n="camera" s=${24} />`}</button><div class="grow"><label class="fld"><span>Название</span><input autofocus maxlength="100" value=${f.title} placeholder=${ch ? 'Вестник голой правды' : 'Клуб любителей листьев'} onInput=${e => set({ title: e.target.value })} /></label></div></div>
+    <div class="row top"><button class="ava-pick" onClick=${async () => { const u = await uploadAvatar(); if (u) set({ avatar: u }); }} title="Выбрать аватар">${f.avatar ? html`<img src=${f.avatar} alt="" />` : html`<${Icon} n="camera" s=${24} />`}</button><div class="grow"><label class="fld"><span>Название</span><input autofocus maxlength="100" value=${f.title} placeholder=${ch ? 'Вестник голой правды' : 'Любители листьев'} onInput=${e => set({ title: e.target.value })} /></label></div></div>
     <label class="fld"><span>Описание</span><textarea rows="2" maxlength="500" value=${f.about} onInput=${e => set({ about: e.target.value })}></textarea></label>
     <${Toggle} label=${ch ? 'Публичный канал' : 'Публичная группа'} hint="Можно найти в поиске и вступить по ссылке" on=${f.pub} onChange=${v => set({ pub: v })} />
     ${f.pub && html`<label class="fld"><span>Ссылка</span><div class="row"><span class="dim">@</span><input maxlength="32" value=${f.username} placeholder="golye_novosti" onInput=${e => set({ username: e.target.value.replace(/[^a-zA-Z0-9_]/g, '') })} /></div></label>`}
@@ -219,9 +225,9 @@ export function JoinPreview({ id, q, chat, server }) {
   const join = async () => {
     setBusy(true);
     if (c) { if (d.member || S.chats[c.id]) { closeModal(id); return openChat(c.id); } const r = await call('chat.join', d.invite ? { invite: d.invite } : { id: c.id }); setBusy(false); if (!r) return; closeModal(id); if (r.requested) return toast('Заявка отправлена. Ждём, пока админы оденутся и одобрят.'); S.chats[r.id] = r; openChat(r.id); }
-    else { const r = await call('server.join', d.invite ? { invite: d.invite } : { id: s.id }); setBusy(false); if (!r) return; S.servers[r.id] = r; closeModal(id); S.ui.server = r.id; S.ui.chat = null; S.ui.list = true; bump(); toast(`Вы в клубе «${r.name}»`); }
+    else { const r = await call('server.join', d.invite ? { invite: d.invite } : { id: s.id }); setBusy(false); if (!r) return; S.servers[r.id] = r; closeModal(id); S.ui.server = r.id; S.ui.chat = null; S.ui.list = true; bump(); toast(`Вы в группе «${r.name}»`); }
   };
-  return html`<${Modal} id=${id} title=${c ? (c.type === 'channel' ? 'Канал' : 'Группа') : 'Клуб'} cls="small" footer=${html`<button class="btn wide" disabled=${busy} onClick=${join}>${d.member || (c && S.chats[c.id]) || (s && S.servers[s.id]) ? 'Открыть' : c && c.approval && !d.invite ? 'Подать заявку' : c && c.price ? `Подписаться за ${c.price} 🍃 в месяц` : c && c.type === 'channel' ? 'Подписаться' : 'Вступить'}</button>`}>
+  return html`<${Modal} id=${id} title=${c ? (c.type === 'channel' ? 'Канал' : 'Группа') : 'Группа'} cls="small" footer=${html`<button class="btn wide" disabled=${busy} onClick=${join}>${d.member || (c && S.chats[c.id]) || (s && S.servers[s.id]) ? 'Открыть' : c && c.approval && !d.invite ? 'Подать заявку' : c && c.price ? `Подписаться за ${c.price} 🍃 в месяц` : c && c.type === 'channel' ? 'Подписаться' : 'Вступить'}</button>`}>
     <div class="join">${s && s.banner && html`<img class="join-b" src=${s.banner} alt="" />`}<${Avatar} src=${c ? c.avatar : s.icon} name=${title} color=${c ? c.color : 2} s=${84} square=${!!s} />
       <h3>${title} ${(c || s).verified && html`<${Badges} list=${['verified']} s=${17} />`}</h3>
       <small>${c && c.username ? '@' + c.username + ' · ' : ''}${fmtNum((c || s).count)} ${plural((c || s).count, c && c.type === 'channel' ? ['подписчик', 'подписчика', 'подписчиков'] : ['участник', 'участника', 'участников'])}${s ? ` · ${s.online} в сети${s.boosts ? ' · 🚀 ' + s.boosts : ''}` : ''}</small>

@@ -240,7 +240,7 @@ function pollView(p, uid) {
 function msgView(m, uid) {
   if (!m) return null;
   const v = { ...m };
-  delete v.hid; delete v.hist; delete v.clicks; delete v.src;
+  delete v.hid; delete v.hist; delete v.clicks; delete v.src; delete v.ytv; delete v.akey;
   if (m.views) v.views = m.views.length;
   if (m.poll) v.poll = pollView(m.poll, uid);
   if (m.once) { delete v.media; v.kind = m.type; v.type = 'once'; v.once = m.onceAt ? 'seen' : 'new'; }      // одноразовое: адрес файла не уходит никому, пока получатель не откроет
@@ -404,7 +404,7 @@ function chatView(chat, uid) {
 function emitChat(chat, uids) { for (const u of uids || membersOf(chat)) if (isOnline(u)) emit(u, 'chat', chatView(chat, u)); }
 
 // ───── сообщения
-const MSG_FIELDS = ['text', 'media', 'reply', 'quote', 'fwd', 'poll', 'thread', 'btn', 'silent', 'sticker', 'loc', 'contact', 'enc', 'title', 'as', 'via', 'hook', 'call', 'act', 'dice', 'album', 'fx', 'gift', 'tags', 'rq', 'sig', 'link', 'once', 'files', 'note', 'present'];
+const MSG_FIELDS = ['text', 'media', 'reply', 'quote', 'fwd', 'poll', 'thread', 'btn', 'silent', 'sticker', 'loc', 'contact', 'enc', 'title', 'as', 'via', 'hook', 'call', 'act', 'dice', 'album', 'fx', 'gift', 'tags', 'rq', 'sig', 'link', 'once', 'files', 'note', 'present', 'duel'];
 const expiring = [];
 for (const cid in db.msgs) for (const m of db.msgs[cid]) if (m.exp) expiring.push({ c: cid, i: m.id, at: m.exp });
 const hooks = { afterPost: [], userGone: [] };
@@ -535,4 +535,14 @@ function viewersOf(o, viewerId, key = 'seen') {
   for (const v of list) users[v.u] = pubUser(db.users[v.u], viewerId);
   return { list, users };
 }
-module.exports = { canGrant, TIERS, tierOf, setCosHook, setSelfHook, unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+// ───── Старшинство. То, что настроил старший по роли, младший изменить не может.
+// scope.locks[key] помнит, кто менял настройку последним; rankOf(uid) — его нынешний вес (разжалованный теряет замок сам собой).
+function senior(scope, rankOf, actor, key, what, peek) {
+  const L = scope.locks || {}, by = L[key];
+  if (by && by !== actor && rankOf(by) > rankOf(actor)) { const o = db.users[by]; need(false, `${what}: так решил(а) ${o ? [o.name, o.last].filter(Boolean).join(' ') : 'администратор'}, а он(а) старше вас по роли. Изменить это может только равный или старший.`); }
+  if (peek) return;
+  if (!scope.locks) scope.locks = L; delete L[key]; L[key] = actor; const ks = Object.keys(L); if (ks.length > 400) delete L[ks[0]];
+}
+const CHAT_RANK = { owner: 3, admin: 2, mod: 1, member: 0 };
+const chatRank = ch => uid => CHAT_RANK[((ch.members || {})[uid] || {}).role] || 0;
+module.exports = { senior, chatRank, CHAT_RANK, canGrant, TIERS, tierOf, setCosHook, setSelfHook, unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

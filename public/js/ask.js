@@ -35,6 +35,29 @@
     else { a.textContent = (name.match(/[^\s_@]/) || ['🍃'])[0].toUpperCase(); a.style.backgroundColor = COLORS[(d.color || 0) % 8]; }
     if (!d.open) show('closed');
   });
+  // «Мои вопросы»: у каждого вопроса свой случайный ключ, он лежит только в этом браузере. По ключу сервер отдаёт ответ,
+  // но не может узнать, кто спрашивал: ни имени, ни аккаунта к ключу не привязано.
+  var KEY = 'nudist.asked';
+  function asked() { try { var l = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } }
+  function keep(l) { try { localStorage.setItem(KEY, JSON.stringify(l.slice(0, 60))); } catch (e) { /* личный режим: ответ тогда не найти */ } }
+  function newKey() { var a = new Uint8Array(18), s = ''; if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(a); else for (var i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256); for (var j = 0; j < a.length; j++) s += ('0' + a[j].toString(16)).slice(-2); return s; }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+  function ago(ts) { var m = Math.max(0, Math.round((Date.now() - ts) / 60000)); return m < 1 ? 'только что' : m < 60 ? m + ' мин назад' : m < 1440 ? Math.round(m / 60) + ' ч назад' : Math.round(m / 1440) + ' дн. назад'; }
+  function loadMine() {
+    var l = asked(), box = $('mine'); if (!box) return; if (!l.length) { box.hidden = true; return; }
+    req('POST', '/api/ask/mine', { items: l.map(function (x) { return { key: x.key, to: x.to }; }) }, function (err, d) {
+      var list = (!err && d && d.list) || []; if (!list.length) { box.hidden = true; return; }
+      var wrap = $('mineList'); wrap.textContent = ''; var n = 0;
+      list.forEach(function (q) {
+        var it = el('div', 'mq' + (q.answer ? ' ok' : '')); it.appendChild(el('small', '', (q.name || '@' + q.to) + ' · ' + ago(q.ts)));
+        it.appendChild(el('b', '', q.q));
+        if (q.answer) { n++; it.appendChild(el('p', '', q.answer.text)); } else it.appendChild(el('i', '', 'Ответа пока нет'));
+        wrap.appendChild(it);
+      });
+      $('mineN').textContent = n ? 'ответов: ' + n : 'ответов пока нет'; box.hidden = false;
+    });
+  }
+  loadMine();
   var ta = $('text');
   function count() { $('cnt').textContent = ta.value.length + ' / 500'; }
   ta.addEventListener('input', function () { count(); $('err').textContent = ''; });
@@ -43,9 +66,11 @@
     var t = ta.value.replace(/^\s+|\s+$/g, '');
     if (t.length < 2) { $('err').textContent = 'Напишите хотя бы пару слов.'; return ta.focus(); }
     var b = $('send'); b.disabled = true; b.textContent = 'Отправляем…';
-    req('POST', '/api/ask', { to: who, text: t }, function (err) {
+    var key = newKey();
+    req('POST', '/api/ask', { to: who, text: t, key: key }, function (err) {
       b.disabled = false; b.textContent = 'Отправить анонимно';
       if (err) { $('err').textContent = err; return; }
+      var l = asked(); l.unshift({ key: key, to: who, ts: Date.now() }); keep(l); loadMine();
       ta.value = ''; count(); show('done');
     });
   });

@@ -113,7 +113,7 @@ function Quest({ e }) {
       <span class="yq-p">${t.done ? 'готово' : `${t.have}/${t.n}`}${t.prize && !t.done ? html`<small>${t.prize}</small>` : ''}</span></li>`)}</ul>
     <div class="ev-row"><span>${v.done ? html`<b>Событие пройдено.</b> Марка в альбоме.` : html`За все задания — марка в альбом и <b>${v.prize}</b>.`}</span>${v.skip > 0 && !v.done && html`<button class="btn sm ghost" disabled=${busy} onClick=${skip}>Пропустить · ${num(v.skip)} 🍃</button>`}</div>
     ${!v.on && !v.done && html`<p class="ev-note">Задания считаются, только пока событие идёт.</p>`}
-    ${v.race && html`<div><b>Гонка клубов</b>${v.race.length ? html`<ol class="snow-top">${v.race.map((r, i) => html`<li key=${r.id}><i>${i + 1}</i><b>${r.name}</b><span>${num(r.n)}</span></li>`)}</ol>` : html`<p class="ev-note">Считаются сообщения в клубах по субботам и воскресеньям, не больше 40 от человека в день. Первым трём клубам — 5, 3 и 1 буст.</p>`}</div>`}
+    ${v.race && html`<div><b>Гонка групп</b>${v.race.length ? html`<ol class="snow-top">${v.race.map((r, i) => html`<li key=${r.id}><i>${i + 1}</i><b>${r.name}</b><span>${num(r.n)}</span></li>`)}</ol>` : html`<p class="ev-note">Считаются сообщения в группах по субботам и воскресеньям, не больше 40 от человека в день. Первым трём группам — 5, 3 и 1 буст.</p>`}</div>`}
     ${v.top.length > 0 && html`<div><b>Рекорды события</b><ol class="snow-top">${v.top.map((r, i) => html`<li key=${r.user.id} class=${cx(r.user.id === S.me.id && 'me')}><i>${i + 1}</i><${Avatar} u=${r.user} src=${r.user.avatar} name=${userName(r.user)} color=${r.user.color} s=${28} /><b>${userName(r.user)}</b><span>${r.n}</span></li>`)}</ol></div>`}
   </div>`;
 }

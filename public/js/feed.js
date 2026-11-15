@@ -2,10 +2,9 @@
 // Вкладка «Для вас» — рекомендации, «Новое» — всё подряд по времени. Лента догружается сама при прокрутке
 // и сама обновляется раз в две с половиной минуты. Автор записи видит, кто её посмотрел.
 import { html, useState, useEffect, useRef, S, bump, rpc, toast, Icon, Avatar, Badges, cx, userName, fmtShort, fmtNum, confirmDlg, pickFile, upload, Empty, Spinner, Modal, openModal, closeModal, local, showMenu, copyText } from './lib.js';
-import { openChat } from './store.js';
+import { showChannel, myChannels, isChannel } from './store.js';
 import { openDock, ytFind, ytDock, oldShell } from './dock.js';
 
-const TABS = [['rec', 'Для вас'], ['all', 'Новое'], ['subs', 'Подписки'], ['user', 'Мои']];
 const REFRESH_MS = 150e3;      // лента сама обновляется раз в 2,5 минуты
 
 // Просмотры. Запись считается увиденной, если секунду провисела на экране хотя бы наполовину (или заняла пол-экрана).
@@ -71,21 +70,22 @@ function Comments({ post, users, onCount }) {
   </div>`;
 }
 
-function Post({ p, users, follows, onChange, onDel, onFollow }) {
+function Post({ p, users, follows, onChange, onDel, onFollow, onHide }) {
   const [open, setOpen] = useState(false), [full, setFull] = useState(false), ch = p.kind === 'channel', u = users[p.by], box = useRef();
-  useEffect(() => { const el = box.current; if (!watcher || !el || ch || p.by === S.me.id) return; watcher.observe(el); return () => watcher.unobserve(el); }, [p.id]);
+  useEffect(() => { const el = box.current; if (!watcher || !el || p.by === S.me.id) return; watcher.observe(el); return () => watcher.unobserve(el); }, [p.id]);
   const lines = (p.text || '').split('\n'), long = !full && ((p.text || '').length > 700 || lines.length > 14);      // длинное сворачиваем, чтобы лента листалась
   const shown = long ? lines.slice(0, 10).join('\n').slice(0, 500).trimEnd() + '…' : p.text;
   const like = async () => { const on = !p.liked; onChange({ ...p, liked: on, likes: p.likes + (on ? 1 : -1) }); try { const r = await rpc('feed.like', { id: p.id, on }); onChange({ ...p, ...r }); } catch (e) { onChange(p); toast(e.message, 'err'); } };
   const del = async () => { if (!await confirmDlg({ title: 'Удалить запись?', text: 'Вместе с лайками и комментариями. Вернуть не получится.', ok: 'Удалить', danger: true })) return; try { await rpc('feed.del', { id: p.id }); onDel(p); } catch (e) { toast(e.message, 'err'); } };
   const mine = p.by === S.me.id, fol = follows.includes(p.by);
   const yt = ch && !oldShell() ? ytFind(p.text) : null;      // ролик YouTube из канала играет прямо в ленте, в окне плеера
-  const toChannel = () => { if (S.chats[p.chat]) { S.ui.hub = null; openChat(p.chat); bump(); } else if (p.username) import('./panels.js').then(m => openModal(m.JoinPreview, { q: '@' + p.username })); else toast('Канал закрыт', 'err'); };
+  const toChannel = () => showChannel(p.chat, p.username), toAuthor = () => (ch ? toChannel() : import('./panels.js').then(m => m.showProfile(p.by)));
   return html`<article class="post" ref=${box} data-pid=${p.id}>
-    <header class="post-h"><${Avatar} u=${ch ? null : u} src=${ch ? p.avatar : u && u.avatar} name=${ch ? p.title : userName(u)} color=${ch ? p.color : u ? u.color : 0} s=${40} />
-      <div class="post-who"><b>${ch ? p.title : userName(u)} ${!ch && u && html`<${Badges} list=${u.badges} s=${14} />`}</b><small>${ch ? 'канал · ' : ''}${fmtShort(p.ts)}</small></div>
-      ${!ch && !mine && html`<button class=${cx('btn ghost post-fol', fol && 'on')} onClick=${() => onFollow(p.by, !fol)}><${Icon} n=${fol ? 'user-check' : 'user-plus'} s=${15} /> ${fol ? 'Вы подписаны' : 'Подписаться'}</button>`}
-      ${!ch && p.own && html`<button class="ib" title="Удалить запись" aria-label="Удалить запись" onClick=${del}><${Icon} n="trash-2" s=${16} /></button>`}</header>
+    <header class="post-h"><button class="post-ava" onClick=${toAuthor} title=${ch ? 'Открыть канал' : 'Открыть профиль'} aria-label=${ch ? 'Открыть канал ' + p.title : 'Открыть профиль'}><${Avatar} u=${ch ? null : u} src=${ch ? p.avatar : u && u.avatar} name=${ch ? p.title : userName(u)} color=${ch ? p.color : u ? u.color : 0} s=${40} /></button>
+      <div class="post-who" onClick=${toAuthor}><b>${ch ? p.title : userName(u)} ${!ch && u && html`<${Badges} list=${u.badges} s=${14} />`}</b><small>${ch ? 'канал · ' : ''}${fmtShort(p.ts)}</small></div>
+      ${!ch && !mine && html`<button class=${cx('btn ghost post-fol', fol && 'on')} onClick=${() => onFollow(p.by, !fol)}><${Icon} n=${fol ? 'user-check' : 'user-plus'} s=${15} /><span>${fol ? 'Вы подписаны' : 'Подписаться'}</span></button>`}
+      ${!ch && p.own && (mine || !onHide) && html`<button class="ib" title="Удалить запись" aria-label="Удалить запись" onClick=${del}><${Icon} n="trash-2" s=${16} /></button>`}
+      ${onHide && !mine && html`<button class="ib" title="Ещё" aria-label="Ещё" onClick=${e => showMenu(e, [{ icon: ch ? 'megaphone' : 'user', label: ch ? 'Открыть канал' : 'Открыть профиль', run: toAuthor }, { icon: 'eye-off', label: 'Не интересно', hint: ch ? 'скрыть канал' : 'скрыть автора', run: () => onHide(p) }, !ch && p.own && { icon: 'trash-2', label: 'Удалить запись', danger: true, run: del }].filter(Boolean), { anchor: e.currentTarget })}><${Icon} n="ellipsis" s=${18} /></button>`}</header>
     ${p.text && html`<p class="post-t">${yt ? shown.replace(/\n?https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/\S+\s*$/, '') : shown}</p>`}
     ${long && html`<button class="post-more" onClick=${() => setFull(true)}>Показать полностью</button>`}
     ${yt && html`<button class=${cx('ytc', yt.short && 'short')} onClick=${() => openDock(ytDock(yt, (p.text || '').split('\n')[0].replace(/^(?:▶️|🔴|⚡)\s*/, '').trim()))} title="Смотреть здесь, не уходя из «Нудиста»"><img src=${`https://i.ytimg.com/vi/${yt.id}/mqdefault.jpg`} alt="" loading="lazy" referrerpolicy="no-referrer" /><span class="ytc-play"><${Icon} n="play" s=${26} /></span><span class="ytc-l">Смотреть здесь</span></button>`}
@@ -115,10 +115,18 @@ export function sharePost(e, p) {
   ], { anchor: e.currentTarget });
 }
 
-export function Feed() {
-  const [tab, setTabS] = useState(() => (TABS.some(t => t[0] === local.get('feed.tab')) ? local.get('feed.tab') : 'rec')), [d, setD] = useState(null), [more, setMore] = useState(false), [fresh, setFresh] = useState([]);
+// Ряд каналов над лентой: кружки, как истории. Кольцо — есть непрочитанное. Нажатие открывает сам канал.
+export function ChannelRow({ extra = [] }) {
+  const mine = myChannels(), ids = new Set(mine.map(c => c.id)), more = extra.filter(x => !ids.has(x.chat));
+  if (!mine.length && !more.length) return null;
+  return html`<div class="chrow" aria-label="Каналы">
+    ${mine.map(c => html`<button class="story" key=${c.id} onClick=${() => showChannel(c.id)} title=${c.title}><span class=${cx('ring', !(c.unread > 0) && 'seen')}><${Avatar} src=${c.avatar} name=${c.title} color=${c.color} s=${46} />${c.unread > 0 && html`<b class="chrow-n">${c.unread > 99 ? '99+' : c.unread}</b>`}</span><small>${c.title}</small></button>`)}
+    ${more.map(x => html`<button class="story" key=${x.chat} onClick=${() => showChannel(x.chat, x.username)} title=${x.title + ' — вы не подписаны'}><span class="ring none"><${Avatar} src=${x.avatar} name=${x.title} color=${x.color} s=${46} /></span><small>${x.title}</small></button>`)}
+  </div>`;
+}
+export function Feed({ tab = 'feed' }) {
+  const [d, setD] = useState(null), [more, setMore] = useState(false), [fresh, setFresh] = useState([]);
   const root = useRef(), tail = useRef(), z = useRef({ next: 0, stamp: 0, busy: false, gen: 0 }), live = useRef({}); live.current = { d, more, tab, fresh };
-  const setTab = t => { local.set('feed.tab', t); setTabS(t); };
   const scroller = () => { let e = root.current; while (e && !/(auto|scroll)/.test(getComputedStyle(e).overflowY)) e = e.parentElement; return e; };
   const load = async reset => {
     const q = z.current; if (q.busy && !reset) return; q.busy = true; const gen = reset ? ++q.gen : q.gen;
@@ -160,14 +168,17 @@ export function Feed() {
   }, []);
   const applyFresh = () => { const f = live.current.fresh; setFresh([]); showFresh(f.map(x => x.it), Object.assign({}, ...f.map(x => x.users))); const sc = scroller(); if (sc) sc.scrollTo({ top: 0, behavior: 'smooth' }); };
   const change = p => setD(x => ({ ...x, items: x.items.map(q => q.id === p.id ? p : q) }));
-  const follow = async (user, on) => { try { const r = await rpc('feed.follow', { user, on }); setD(x => ({ ...x, follows: r.follows })); toast(on ? 'Подписались. Записи этого человека появятся во вкладке «Подписки».' : 'Отписались'); } catch (e) { toast(e.message, 'err'); } };
+  const follow = async (user, on) => { try { const r = await rpc('feed.follow', { user, on }); setD(x => ({ ...x, follows: r.follows })); toast(on ? 'Подписались. Записи этого человека будут в ленте выше остальных.' : 'Отписались'); } catch (e) { toast(e.message, 'err'); } };
+  const hide = async p => { const who = p.kind === 'channel' ? 'ch.' + p.chat : p.by; try { await rpc('feed.hide', { who }); setD(x => ({ ...x, items: x.items.filter(q => (q.kind === 'channel' ? 'ch.' + q.chat : q.by) !== who) })); toast(p.kind === 'channel' ? 'Этот канал больше не будет попадаться в ленте' : 'Записи этого человека больше не будут попадаться в ленте'); } catch (e) { toast(e.message, 'err'); } };
+  // каналы, которые попались в ленте, но на которые человек не подписан, — в тот же ряд, без кольца
+  const seenCh = []; if (d && tab === 'feed') for (const i of d.items) if (i.kind === 'channel' && !seenCh.some(x => x.chat === i.chat)) seenCh.push(i);
   return html`<div class="hub-pad feed" ref=${root}>
-    <div class="seg feed-tabs" role="tablist">${TABS.map(([k, name]) => html`<button role="tab" aria-selected=${tab === k} class=${cx(tab === k && 'on')} onClick=${() => setTab(k)}>${name}</button>`)}</div>
+    ${tab === 'feed' && html`<${ChannelRow} extra=${seenCh} />`}
     ${fresh.length > 0 && html`<button class="feed-fresh" onClick=${applyFresh}><${Icon} n="arrow-up" s=${15} /> Новые записи: ${fresh.length}</button>`}
     <${Composer} onPost=${p => setD(x => ({ ...x, items: [p].concat(x ? x.items : []), users: { ...(x ? x.users : {}), [S.me.id]: S.me } }))} />
     ${!d ? html`<${Spinner} />` : !d.items.length
-      ? html`<${Empty} icon="list" title=${tab === 'subs' ? 'Подписок пока нет' : tab === 'user' ? 'Вы ещё ничего не писали' : 'Лента пока пустая'} text=${tab === 'subs' ? 'Нажмите «Подписаться» у записи во вкладке «Для вас», и автор появится здесь.' : 'Напишите первую запись. Кто-то же должен начать.'} />`
-      : d.items.map(p => html`<${Post} key=${p.id} p=${p} users=${d.users} follows=${d.follows} onChange=${change} onDel=${x => setD(s => ({ ...s, items: s.items.filter(q => q.id !== x.id) }))} onFollow=${follow} />`)}
+      ? html`<${Empty} icon="list" title=${tab === 'user' ? 'Вы ещё ничего не писали' : 'Лента пока пустая'} text=${tab === 'user' ? 'Напишите первую запись в поле выше — она появится здесь и в ленте у остальных.' : 'Напишите первую запись. Кто-то же должен начать.'} />`
+      : d.items.map(p => html`<${Post} key=${p.id} p=${p} users=${d.users} follows=${d.follows} onChange=${change} onDel=${x => setD(s => ({ ...s, items: s.items.filter(q => q.id !== x.id) }))} onFollow=${follow} onHide=${tab === 'feed' ? hide : null} />`)}
     <div class="feed-tail" ref=${tail}>${d && more ? html`<${Spinner} />` : d && d.items.length > 8 ? html`<p class="hint center">Вы долистали до конца. Дальше только то, что напишете вы.</p>` : null}</div>
   </div>`;
 }

@@ -1,0 +1,84 @@
+/* «Нудист»: порядок в жестах и новый вид ленты, видео и каналов. Подключается последним. */
+
+/* ───── Ничего не утаскивается и не уезжает вбок.
+   Страница закреплена, отскока за край нет, картинки и ссылки не перетаскиваются, полосы прокрутки на телефоне не рисуются. */
+html, body { overscroll-behavior: none; }
+body { position: fixed; top: 0; right: 0; bottom: 0; left: 0; width: 100%; overflow: hidden; touch-action: manipulation; }
+img, a, svg, video, canvas, button, .ava { -webkit-user-drag: none; user-drag: none; }
+img, .ava, .story, .ci, .nav, .hub-tabs, .folders { -webkit-touch-callout: none; }
+.nav, .hub-tabs, .folders, .stories, .chrow, .side-h, .hub-h, .vid-sw, .clip-act, .make-list { -webkit-user-select: none; user-select: none; }
+.side-b, .hub-b, .msgs, .modal-b, .pick-list, .menu { overscroll-behavior: contain; }
+.folders, .stories, .chrow, .hub-tabs, .shop-tabs { overscroll-behavior-x: contain; touch-action: pan-x; }
+html .folders::-webkit-scrollbar, html .stories::-webkit-scrollbar, html .chrow::-webkit-scrollbar, html .hub-tabs::-webkit-scrollbar, html .clips::-webkit-scrollbar, html .vpager::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+.folders, .stories, .chrow, .hub-tabs, .clips, .vpager { scrollbar-width: none !important; }
+@media (hover: none), (pointer: coarse) {
+  * { scrollbar-width: none !important; }
+  html ::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+}
+
+/* ───── Вкладки ленты: три равные, подписи видны всегда */
+.hub-tabs.even { overflow: visible; } .hub-tabs.even button { flex: 1 1 0; justify-content: center; min-width: 0; } .hub-tabs.even button > span { display: inline !important; margin-left: 7px; overflow: hidden; text-overflow: ellipsis; }
+.hub-tabs .hub-dot { margin-left: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: #E81123; color: #fff; font: 700 11px/18px var(--font); text-align: center; }
+@media (max-width: 800px) { .hub-x { display: none; } .hub-h { padding: 0; } .hub-tabs button { flex: 1 1 0; justify-content: center; } .hub-tabs button > span { display: inline !important; margin-left: 6px; font-size: .92em; } }
+@media (max-width: 380px) { .hub-tabs:not(.even) button > svg { display: none; } .hub-tabs:not(.even) button > span { margin-left: 0; } }
+
+/* ───── Каналы: ряд кружков над лентой и в историях */
+.chrow { display: flex; gap: 4px; padding: 2px 0 6px; margin: -4px -4px 0; overflow-x: auto; flex: none; }
+.chrow .story .ring .ava, .hub .story .ring .ava { box-shadow: 0 0 0 3px var(--bg); }
+.chrow-n { position: absolute; right: -4px; top: -3px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 99px; background: var(--accent); color: var(--accent-ink, #fff); font: 700 11px/19px var(--font); text-align: center; box-shadow: 0 0 0 2px var(--panel); }
+.story .ring.sq, .story.chan .ring .ava { border-radius: 18px; } .story.chan .ring .ava img, .story.chan .ring .ava video { border-radius: 16px; }
+.story.chan .ring.seen { background: var(--press); }
+.post-ava { flex: none; border-radius: 50%; line-height: 0; } .post-ava:active { transform: scale(.94); } .post-who { cursor: pointer; min-width: 0; }
+
+/* ───── «Видео»: клипы и эфиры на чёрном, между ними — свайп вбок */
+.hub-video .hub-b { overflow: hidden; background: #000; }
+.vid { position: relative; flex: 1; min-height: 0; display: flex; background: #000; color: #fff; }
+.vpager { flex: 1; min-width: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior: contain; }
+.vpane { position: relative; flex: 0 0 100%; min-width: 0; height: 100%; display: flex; scroll-snap-align: start; scroll-snap-stop: always; }
+.vid-sw { position: absolute; z-index: 5; top: 10px; left: 50%; transform: translateX(-50%); display: flex; padding: 3px; border-radius: 99px; background: rgba(0, 0, 0, .45); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.vid-sw button { display: flex; align-items: center; padding: 6px 14px; border-radius: 99px; color: rgba(255, 255, 255, .72); font-weight: 600; font-size: 14px; } .vid-sw button.on { background: rgba(255, 255, 255, .92); color: #111; }
+.vid-sw b { margin-left: 6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: #E81123; color: #fff; font: 700 11px/18px var(--font); }
+.vid-add { position: absolute; z-index: 4; top: 10px; right: 10px; display: flex; align-items: center; height: 36px; padding: 0 12px 0 9px; border-radius: 99px; background: rgba(255, 255, 255, .16); color: #fff; font-weight: 600; font-size: 14px; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.vid-add span { margin-left: 5px; } .vid-add.live { background: #E81123; } .vid-add:active { transform: scale(.94); } .vid-add:disabled { opacity: .7; }
+.clips-wrap, .lives { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #000; color: #fff; }
+.lives .empty { margin: auto; color: #ccc; padding: 0 22px; } .lives .spin { margin: auto; }
+.clip.yt .clip-v { cursor: default; } .clip-v.wide { display: flex; align-items: center; }
+.clip-yt, .clip-poster { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; background: #000; object-fit: contain; }
+.clip-v.wide .clip-yt, .clip-v.wide .clip-poster { position: relative; height: auto; aspect-ratio: 16 / 9; }
+.clip-touch { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 1; cursor: pointer; }      /* прозрачный слой над плеером: по нему листают и ставят на паузу */
+.clip-info, .clip-pause { z-index: 2; }
+.clip-act button small { white-space: nowrap; }
+.live-slide { background: radial-gradient(120% 80% at 50% 20%, hsl(calc(var(--c, 0) * 45 + 150) 55% 26%), #0b0b0b 72%); }
+.live-slide-b { margin: auto; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 60px 24px 30px; max-width: 420px; }
+.live-slide-b > * + * { margin-top: 12px; } .live-slide-b h3 { margin-bottom: 0; font-size: 1.35em; line-height: 1.25; } .live-slide-b p { margin-bottom: 0; opacity: .78; }
+.live-slide-b .btn.big { min-height: 48px; padding: 0 28px; font-size: 1.05em; } .live-badges.in { position: static; } .live-more { opacity: .55; margin-top: 18px; }
+.live-slide-b .btn.ghost { color: #fff; background: rgba(255, 255, 255, .12); }
+
+/* ───── Кто прочитал и реакции */
+.who-tabs { display: flex; margin-bottom: 8px; overflow-x: auto; } .who-tabs button { flex: none; padding: 7px 12px; border-radius: 99px; font-weight: 600; color: var(--ink2); white-space: nowrap; } .who-tabs button.on { background: var(--press); color: var(--ink); } .who-tabs button + button { margin-left: 4px; }
+.who-list .ci { width: 100%; } .who-e { margin-left: auto; font-size: 1.3em; }
+
+/* ───── Анонимные вопросы: ответ и «Мои вопросы» */
+.askq { padding: 10px 12px; border-radius: 14px; background: var(--hover); } .askq + .askq { margin-top: 8px; } .askq > small { display: block; color: var(--ink2); margin-bottom: 4px; }
+.askq q { display: block; quotes: none; font-weight: 600; } .askq p { margin: 6px 0 0; padding-left: 10px; border-left: 3px solid var(--accent); white-space: pre-wrap; overflow-wrap: anywhere; } .askq .row { display: flex; margin-top: 8px; } .askq .row > * + * { margin-left: 8px; }
+.sv-ask { position: absolute; left: 7%; right: 7%; top: 16%; padding: 14px 16px; border-radius: 18px; background: rgba(255, 255, 255, .94); color: #14201a; text-align: left; box-shadow: 0 8px 30px rgba(0, 0, 0, .25); }
+.sv-ask small { display: block; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; opacity: .6; margin-bottom: 4px; } .sv-ask q { quotes: none; font-size: 17px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.sv-card.has-ask .sv-text, .sv-card.has-ask > p { margin-top: 34%; }
+.bub-ask { display: flex; flex-wrap: wrap; align-items: center; margin-top: 6px; } .bub-ask .btn { min-height: 34px; padding: 0 12px; } .bub-ask p { flex: 1 1 100%; margin: 4px 0 0; padding-left: 10px; border-left: 3px solid var(--accent); white-space: pre-wrap; }
+
+/* ───── Дуэль в сообщении */
+.duel-card { margin-top: 6px; padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 12%, transparent); } .duel-card b { display: block; } .duel-card small { display: block; color: var(--ink2); margin: 2px 0 8px; } .duel-card .btn { min-height: 36px; }
+.duel-card.done small { margin-bottom: 0; }
+
+/* ───── Запись в ленте: имя автора не сжимается до одной буквы */
+.post-fol { flex: none; } .post-fol span { margin-left: 6px; }
+@media (max-width: 480px) { .post-fol { min-width: 40px; padding: 0 10px; } .post-fol span { display: none; } .post-fol.on span { display: none; } }
+/* ───── Ролик канала в «Видео»: подпись всегда читается, даже поверх светлого кадра */
+.clip.yt .clip-info { background: linear-gradient(transparent, rgba(0, 0, 0, .88) 55%); } .clip-au { max-width: 100%; min-width: 0; } .clip-au b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .clip-au small { flex: none; white-space: nowrap; }
+
+/* ───── Игра и дуэль: панель под игрой */
+.miniapp .modal-b { padding: 0; display: flex; } .miniapp-col { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; } .miniapp-col iframe { flex: 1; min-height: 0; }
+.duel-bar { flex: none; display: flex; align-items: center; min-height: 44px; padding: 6px 12px; border-top: 1px solid var(--line); background: var(--panel); font-size: .92em; line-height: 1.25; }
+.duel-bar > span { flex: 1; min-width: 0; } .duel-bar .btn { flex: none; margin-left: 10px; min-height: 34px; white-space: nowrap; } .duel-bar.dim { min-height: 30px; padding: 4px 12px; color: var(--ink3); font-size: .82em; }
+.duel-bar.go { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); } .duel-bar.win { background: color-mix(in srgb, #2ecc71 20%, var(--panel)); } .duel-bar.lose { background: color-mix(in srgb, #E81123 14%, var(--panel)); }
+.rxs .rx-who { padding: 0 7px; opacity: .6; background: none; } .rxs .rx-who:hover { opacity: 1; }

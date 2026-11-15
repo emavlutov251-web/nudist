@@ -1,5 +1,5 @@
 // Рост и удержание: приглашения друзей, «огонёк» серии переписки, одноразовые фото и видео, установка как приложения.
-import { chatInfo, html, useState, useEffect, S, bump, rpc, on, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, copyText, local, Spinner, plural, fmtNum, Toggle, upload, download, fmtShort } from './lib.js';
+import { chatInfo, html, useState, useEffect, S, bump, rpc, on, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, copyText, local, Spinner, plural, fmtNum, Toggle, upload, download, fmtShort, promptDlg } from './lib.js';
 import { QR } from './panels.js';
 import { nativeApp, nativePush } from './store.js';
 
@@ -63,10 +63,19 @@ function storyCard(link) {
   x.fillStyle = 'rgba(255,255,255,.6)'; x.font = '500 38px ' + F; x.fillText('Нудист — мессенджер, которому нечего скрывать', W / 2, 1780);
   return new Promise(ok => c.toBlob(ok, 'image/png'));
 }
+// Вопросы, которые человек сам задал другим со страницы /q/…: ключи лежат в этом же браузере (страница и приложение — один сайт).
+const askedList = () => { try { const l = JSON.parse(localStorage.getItem('nudist.asked') || '[]'); return Array.isArray(l) ? l : []; } catch (e) { return []; } };
+/** Ответить на анонимный вопрос: ответ уходит спросившему и (если не снять галочку) в истории вместе с вопросом. */
+export async function answerAsk(q, after) {
+  const t = await promptDlg({ title: 'Ответ на вопрос', label: '«' + String(q.text).slice(0, 140) + '»', value: q.answer || '', area: true, max: 400, placeholder: 'Отвечайте честно. Или смешно.', ok: 'Ответить', hint: 'Ответ вместе с вопросом появится в ваших историях на 24 часа. Спросивший увидит его у себя в «Моих вопросах».' });
+  if (t === null || !String(t).trim()) return false;
+  try { const r = await rpc('ask.answer', { id: q.id, text: t }); toast(r.story ? 'Ответ опубликован в ваших историях' : 'Ответ отправлен'); if (after) after(); return true; } catch (e) { toast(e.message, 'err'); return false; }
+}
 export function AskLink({ id }) {
   const [d, setD] = useState(null), [busy, setBusy] = useState(false), me = S.me, link = askLink(), short = link.replace(/^https?:\/\//, '');
   const load = () => rpc('ask.info').then(setD).catch(e => toast(e.message, 'err'));
-  useEffect(() => { load(); }, []);
+  const [mine, setMine] = useState(null);
+  useEffect(() => { load(); const l = askedList(); if (l.length) rpc('ask.mine', { items: l.map(x => ({ key: x.key, to: x.to })) }).then(r => setMine(r.list)).catch(() => {}); }, []);
   const text = 'Задай мне анонимный вопрос — отвечу честно 🍃';
   const copy = () => { copyText(link); toast('Ссылка скопирована. Вставьте её в историю или в описание профиля.'); };
   const share = async () => {
@@ -97,7 +106,11 @@ export function AskLink({ id }) {
       <div class="inv-stat"><span><b>${d ? fmtNum(d.got) : '…'}</b><small>${d ? plural(d.got, ['вопрос получен', 'вопроса получено', 'вопросов получено']) : 'считаем'}</small></span><span><b>${d ? fmtNum(d.blocked) : '…'}</b><small>${d ? plural(d.blocked, ['отправитель заблокирован', 'отправителя заблокировано', 'отправителей заблокировано']) : 'считаем'}</small></span></div>
       ${d && html`<${Toggle} on=${d.open} onChange=${toggle} label="Принимать анонимные вопросы" hint="Выключите, если надоело. Ссылка останется той же." />`}
       ${!d ? html`<${Spinner} />` : d.recent.length > 0 && html`<h5 class="inv-h">Последние вопросы</h5>
-        <div class="ask-list">${d.recent.map(q => html`<div class=${cx('ask-q', q.blocked && 'off')} key=${q.id}><div><p>${q.text}</p><small>${fmtShort(q.ts)}${q.blocked ? ' · отправитель заблокирован' : ''}</small></div><button class="btn ghost sm" title=${q.blocked ? 'Разблокировать отправителя' : 'Заблокировать отправителя'} onClick=${() => block(q)}><${Icon} n=${q.blocked ? 'eye' : 'ban'} s=${15} /></button></div>`)}</div>`}
+        <div class="ask-list">${d.recent.map(q => html`<div class=${cx('askq', q.blocked && 'off')} key=${q.id}><small>${fmtShort(q.ts)}${q.blocked ? ' · отправитель заблокирован' : ''}</small><q>${q.text}</q>${q.answer && html`<p>${q.answer}</p>`}
+          <div class="row"><button class="btn sm" onClick=${() => answerAsk(q, load)}><${Icon} n=${q.answer ? 'pencil' : 'reply'} s=${15} /> ${q.answer ? 'Изменить ответ' : 'Ответить'}</button><button class="btn ghost sm" title=${q.blocked ? 'Разблокировать отправителя' : 'Заблокировать отправителя'} aria-label=${q.blocked ? 'Разблокировать отправителя' : 'Заблокировать отправителя'} onClick=${() => block(q)}><${Icon} n=${q.blocked ? 'eye' : 'ban'} s=${15} /></button></div></div>`)}</div>`}
+      ${mine && mine.length > 0 && html`<h5 class="inv-h">Мои вопросы другим</h5>
+        <div class="ask-list">${mine.map(q => html`<div class="askq" key=${q.key}><small>${q.name || '@' + q.to} · ${fmtShort(q.ts)}</small><q>${q.q}</q>${q.answer ? html`<p>${q.answer.text}</p>` : html`<small>Ответа пока нет</small>`}</div>`)}</div>
+        <p class="hint">Здесь вопросы, заданные с этого устройства. Ответ ещё и появляется в историях отвечавшего. Кто спросил, не видит никто.</p>`}
       <p class="hint">Мы не показываем вам, кто спросил, и сами этого не знаем: сервер хранит только обезличенную метку, чтобы работала кнопка блокировки. Ссылки из вопросов вырезаются.</p>
     </div><//>`;
 }
@@ -256,7 +269,7 @@ function AppPush({ id, app }) {
   const test = async () => { setBusy(true); try { await rpc('push.test', { app: true }); toast('Сверните приложение. Уведомление придёт через 10 секунд.'); } catch (e) { toast(e.message || 'Не получилось', 'err'); } finally { setBusy(false); } };
   return html`<${Modal} id=${id} title="Уведомления" icon="bell">
     <div class="ask">
-      <p>Когда «Нудист» свёрнут или закрыт, новые личные сообщения, сообщения в группах, подарки и звонки приходят в шторку телефона. Каналы и клубы присылают только упоминания, чаты с выключенным звуком молчат.</p>
+      <p>Когда «Нудист» свёрнут или закрыт, новые личные сообщения, сообщения в группах, подарки и звонки приходят в шторку телефона. Каналы и группы с комнатами присылают только упоминания, чаты с выключенным звуком молчат.</p>
       <${Toggle} label="Уведомления в шторке" hint="На этом телефоне" on=${enabled} onChange=${sw} />
       ${enabled && !st.allowed && html`<div class="note warn"><span>Телефон запрещает «Нудисту» показывать уведомления.</span><button class="btn sm" onClick=${() => app.askNotify()}>Разрешить</button></div>`}
       ${enabled && !st.battery && html`<div class="note"><span>Телефон экономит батарею и может усыплять приложение: уведомления будут опаздывать. Снимите ограничение.</span><button class="btn sm" onClick=${() => app.askBattery()}>Снять</button></div>`}
@@ -288,7 +301,7 @@ export function PushSetup({ id }) {
   const test = () => run(async () => { const r = await rpc('push.test'); toast(r.sent ? 'Отправили. Уведомление придёт через пару секунд.' : 'Служба доставки не приняла уведомление. Выключите и включите заново.', r.sent ? undefined : 'err'); });
   return html`<${Modal} id=${id} title="Уведомления" icon="bell">
     <div class="ask">
-      <p>Когда «Нудист» закрыт, новые личные сообщения, сообщения в группах, анонимные вопросы и звонки будут приходить уведомлениями. Каналы и клубы присылают только упоминания, чаты с выключенным звуком молчат.</p>
+      <p>Когда «Нудист» закрыт, новые личные сообщения, сообщения в группах, анонимные вопросы и звонки будут приходить уведомлениями. Каналы и группы с комнатами присылают только упоминания, чаты с выключенным звуком молчат.</p>
       ${st === 'none' && (oldApk ? html`<p><b>Нужна новая версия приложения.</b> Уведомления в шторке появились в версии 1.3. Скачайте её и установите поверх старой: переписка и вход сохранятся.</p><a class="btn" href="/nudist.apk" download="nudist.apk"><${Icon} n="download" s=${16} /> Скачать версию 1.3</a>` : html`<p><b>Здесь уведомления недоступны.</b> Этот браузер их не поддерживает. Откройте сайт в Chrome или Яндекс Браузере, нажмите в меню «Установить приложение» и включите уведомления там. На Android проще поставить приложение со страницы /start.</p>`)}
       ${st === 'denied' && html`<p><b>Браузер запретил уведомления для этого сайта.</b> Откройте настройки сайта (значок слева от адреса) и разрешите уведомления, потом вернитесь сюда.</p>`}
       ${st === 'off' && html`<button class="btn" disabled=${busy} onClick=${enable}><${Icon} n="bell-ring" s=${16} /> Включить уведомления</button>`}

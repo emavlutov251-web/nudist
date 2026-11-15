@@ -44,7 +44,7 @@ audio.onended = () => { const p = P(); if (!p) return; if (p.repeat) { audio.cur
 export async function playAudio(m, queue) {
   const p = P();
   if (p && p.id === m.id) { audio.paused ? audio.play() : audio.pause(); return; }
-  if (S.dock) S.dock = null;      // вставка с чужого сайта (Яндекс Музыка, телевизор) выключается: два звука сразу не нужны
+  if (S.dock) S.dock = null;      // вставка с чужого сайта (Яндекс Музыка, YouTube) выключается: два звука сразу не нужны
   S.player = { id: m.id, chat: m.chat, kind: m.type, title: m.type === 'voice' ? 'Голосовое · ' + userName(S.users[m.from]) : (m.media.name || 'Аудио'), dur: m.media.dur || 0, t: 0, on: false, rate: (p && p.kind === 'voice' && m.type === 'voice' && p.rate) || 1, repeat: p ? p.repeat : false, shuffle: p ? p.shuffle : false, queue: (queue || [m]).filter(x => x.type === m.type), m };
   try { audio.src = await mediaUrl(m.media); audio.playbackRate = S.player.rate; await audio.play(); } catch (e) { toast('Не удалось воспроизвести', 'err'); }
   bump();
@@ -122,7 +122,7 @@ export function StoryViewer() {
   const mine = s.user === S.me.id;
   const send = async (e, text) => { await call('story.react', { id: s.id, e, text }); toast(e ? 'Реакция отправлена' : 'Ответ отправлен в личку'); setReply(''); setPause(false); };
   return html`<div class="story-view" onMouseDown=${e => e.target === e.currentTarget && close()}>
-    <div class="sv-card" style=${s.kind === 'text' ? 'background:' + (STORY_BG[s.bg] || STORY_BG.leaf) : ''}>
+    <div class=${cx('sv-card', s.ask && 'has-ask')} style=${s.kind === 'text' ? 'background:' + (STORY_BG[s.bg] || STORY_BG.leaf) : ''}>
       <div class="sv-bars">${list.map((x, i) => html`<i><b style=${`width:${i < v.i ? 100 : i === v.i ? p * 100 : 0}%`}></b></i>`)}</div>
       <header><${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${36} /><div><b>${mine ? 'Моя история' : userName(u)}</b><small>${fmtShort(s.ts)}${mine ? ' · ' + ({ all: 'все', contacts: 'контакты', close: 'близкие', selected: 'выбранные', except: 'все, кроме…' }[s.aud] || '') : ''}</small></div>
         <button class="ib" onClick=${() => setPause(x => !x)} aria-label="Пауза"><${Icon} n=${pause ? 'play' : 'pause'} s=${18} /></button>
@@ -130,6 +130,7 @@ export function StoryViewer() {
         <button class="ib" onClick=${close} aria-label="Закрыть"><${Icon} n="x" /></button></header>
       <div class="sv-body" onMouseDown=${() => setPause(true)} onMouseUp=${e => { setPause(false); const r = e.currentTarget.getBoundingClientRect(); const f = (e.clientX - r.left) / r.width; if (f < 0.3) go(-1); else if (f > 0.7) go(1); }}>
         ${s.kind === 'photo' && html`<img src=${s.media.url} alt="" />`}${s.kind === 'video' && html`<video ref=${vid} src=${s.media.url} autoplay playsinline></video>`}
+        ${s.ask && html`<div class="sv-ask"><small>Анонимный вопрос</small><q>${s.ask.q}</q></div>`}
         ${s.text && html`<p class=${cx('sv-text', s.kind !== 'text' && 'cap')}>${s.text}</p>`}
         ${(s.items || []).map(i => html`<span class="sv-item" style=${`left:${i.x}%;top:${i.y}%;font-size:${i.s}px;color:${i.c || '#fff'}`}>${i.v}</span>`)}
       </div>

@@ -2,7 +2,7 @@
 import { svcText, html, useState, useEffect, useRef, useLayoutEffect, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, Badges, cx, showMenu, closeMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtTime, fmtDay, fmtFull, fmtShort, sameDay, userName, lastSeen, kindIcon, md, copyText, confirmDlg, promptDlg, addUsers, Empty, Spinner, plural, fmtNum, fmtDur, ttlLabel, isMuted, setSetting, debounce } from './lib.js';
 import { msgKey, loadHistory, openChat, closeChat, openUser, markRead, retryMsg, secretIssue, ensureKey } from './store.js';
 import { Sticker, sfx } from './fun.js';
-import { OnceMsg, Streak } from './growth.js';
+import { OnceMsg, Streak, answerAsk } from './growth.js';
 import { Photo, Gif, VideoMsg, RoundMsg, VoiceMsg, AudioMsg, FileMsg, LocMsg } from './media.js';
 import { showProfile, chatActions, openMiniApp, JoinPreview, shareLeaves, E2eeInfo } from './panels.js';
 import { Composer, EmojiPicker, ForwardModal } from './composer.js';
@@ -157,6 +157,7 @@ function msgMenu(e, m, chat, { thread, onJump }) {
     chat.type === 'channel' && chat.pub && !chat.server && !chat.price && !m.thread && m.type !== 'service' && { icon: 'share-2', label: 'Ссылка на пост', hint: 'откроется и без аккаунта', run: () => { copyText(location.origin + '/p/ch.' + chat.id + '.' + m.id + (S.me.username ? '?r=' + encodeURIComponent(S.me.username) : '')); toast('Ссылка на пост скопирована'); } },
     text && chat.type !== 'secret' && { icon: 'send', label: 'Поделиться в Telegram', run: () => { const link = (text.match(/https?:\/\/[^\s<>"]+/) || [])[0] || '', rest = (link ? text.replace(link, '') : text).replace(/\*\*|__|~~|`/g, '').trim().slice(0, 900); window.open('https://t.me/share/url?url=' + encodeURIComponent(link || rest) + (link && rest ? '&text=' + encodeURIComponent(rest) : ''), '_blank', 'noopener'); } },
     { icon: 'circle-check', label: 'Выбрать', run: () => { S.ui.sel = [m.id]; bump(); } },
+    chat.type !== 'secret' && chat.type !== 'saved' && m.type !== 'service' && { icon: 'check-check', label: m.rx && Object.keys(m.rx).length ? 'Кто прочитал и реакции' : 'Кто прочитал', run: () => openModal(WhoModal, { chat, m }) },
     '-',
     text && { icon: 'languages', label: 'Перевести', sub: [{ emoji: '🔤', label: 'На транслит', run: () => { m._tr = translit(text); bump(); } }, { emoji: '🐸', label: 'На олбанский', run: () => { m._tr = olban(text); bump(); } }, m._tr && { icon: 'x', label: 'Убрать перевод', run: () => { delete m._tr; bump(); } }] },
     m.edited && (mine || can.del) && chat.type !== 'secret' && { icon: 'history', label: 'История правок', run: () => openModal(EditHistory, { chat, m }) },
@@ -166,6 +167,20 @@ function msgMenu(e, m, chat, { thread, onJump }) {
     { icon: 'trash-2', label: 'Удалить', danger: true, run: () => deleteMsgs(chat, [m]) },
   ], { head });
 }
+// Кто прочитал сообщение и кто какую реакцию поставил. Реакции видят все; прочитавших — автор и администраторы чата (так решает сервер).
+function WhoModal({ id, chat, m, tab }) {
+  const [d, setD] = useState(null), [err, setErr] = useState(''), [t, setT] = useState(tab || '');
+  const load = () => { setErr(''); rpc('msg.who', { chat: chat.id, id: m.id }).then(r => { addUsers(r.users); setD(r); if (!t) setT(r.rx.length ? 'rx' : 'read'); }).catch(e => setErr(e.message || 'Не получилось загрузить')); };
+  useEffect(load, []);
+  const row = (uid, e) => { const u = S.users[uid] || { id: uid, name: 'Участник' }; return html`<button class="ci" key=${uid + (e || '')} onClick=${() => { closeModal(id); showProfile(uid); }}><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${38} /><span class="ci-m"><span class="ci-t"><b>${userName(u)}</b></span><span class="ci-p"><span>${u.username ? '@' + u.username : ''}</span></span></span>${e && html`<span class="who-e">${e}</span>`}</button>`; };
+  const rxN = d ? d.rx.reduce((a, x) => a + x.n, 0) : 0, cur = d && t.startsWith('e:') ? d.rx.find(x => 'e:' + x.e === t) : null;
+  return html`<${Modal} id=${id} title="Кто прочитал и реакции" icon="check-check" cls="small">
+    ${err ? html`<${Empty} icon="circle-alert" title="Не загрузилось" text=${err}><button class="btn" onClick=${load}>Повторить</button><//>` : !d ? html`<${Spinner} />` : html`
+      <div class="who-tabs"><button class=${cx(t === 'read' && 'on')} onClick=${() => setT('read')}>Прочитали${d.readN != null ? ' · ' + d.readN : ''}</button>${rxN > 0 && html`<button class=${cx(t === 'rx' && 'on')} onClick=${() => setT('rx')}>Реакции · ${rxN}</button>`}${d.rx.length > 1 && d.rx.map(x => html`<button class=${cx(t === 'e:' + x.e && 'on')} onClick=${() => setT('e:' + x.e)}>${x.e} ${x.n}</button>`)}</div>
+      <div class="pick-list tall who-list">${t === 'read' ? (d.read ? (d.read.length ? d.read.map(u => row(u)) : html`<p class="hint center">Пока никто не прочитал. Всему своё время.</p>`) : html`<p class="hint center">${d.readN != null ? `Прочитали: ${d.readN} из ${d.total}. ` : ''}Список по именам видят автор сообщения и администраторы чата${d.total > 500 ? ', и только в чатах до 500 человек' : ''}.</p>`)
+        : cur ? (cur.users ? cur.users.map(u => row(u, cur.e)) : html`<p class="hint center">Реакций «${cur.e}»: ${cur.n}</p>`)
+        : d.rx.length ? d.rx.map(x => (x.users ? x.users.map(u => row(u, x.e)) : html`<p class="hint center">${x.e} — ${x.n}</p>`)) : html`<p class="hint center">Реакций пока нет. Зажмите сообщение и поставьте первую.</p>`}</div>`}<//>`;
+}
 function EmojiModal({ id, onPick, chat }) { return html`<${Modal} id=${id} title="Реакция" cls="small nopad"><${EmojiPicker} only="emoji" chat=${chat} onEmoji=${e => { closeModal(id); onPick(e); }} /><//>`; }
 function EditHistory({ id, chat, m }) {
   const [d, setD] = useState(null);
@@ -173,6 +188,13 @@ function EditHistory({ id, chat, m }) {
   return html`<${Modal} id=${id} title="История правок" icon="history" cls="small">${!d ? html`<${Spinner} />` : html`${d.map(h => html`<div class="hist-i"><small>${fmtFull(h.ts)}</small><p>${h.text || html`<i>без текста</i>`}</p></div>`)}<div class="hist-i cur"><small>${fmtFull(m.edited)} · сейчас</small><p>${m.text}</p></div>`}<//>`;
 }
 
+// Вызов на дуэль в игре: соперник принимает прямо из сообщения, итог потом показывается здесь же.
+function DuelCard({ m }) {
+  const d = m.duel, mine = m.from === S.me.id, done = d.sb != null, go = e => { e.stopPropagation(); import('./hub.js').then(H => H.openDuel(d.id)); };
+  return html`<div class=${cx('duel-card', done && 'done')}><b>⚔️ ${d.name}</b>
+    ${done ? html`<small>${d.sa} : ${d.sb} ${d.e} · ${d.win ? ((d.win === 'a') === mine ? 'победа за вами 🏆' : 'победа за соперником') : 'ничья 🤝'}</small>`
+      : html`<small>${mine ? 'Соперник ещё не ответил' : 'У вас одна попытка'} · на кону только честь</small>${!mine && html`<button class="btn sm" onClick=${go}>Принять вызов</button>`}`}</div>`;
+}
 // Начало длинного текста: режем по границе абзаца, чтобы не рвать разметку посреди строки
 const clipText = t => { const cut = t.lastIndexOf('\n', 1100); return t.slice(0, cut > 500 ? cut : 1000).replace(/[\s.…,;:]+$/, '') + '…'; };
 const readMin = t => { const n = Math.max(1, Math.round(t.length / 1200)); return n + ' мин чтения'; };
@@ -217,7 +239,9 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
       ${m.link && !yt && html`<a class="lp" href=${m.link.url} target="_blank" rel="noopener noreferrer">${m.link.img && html`<img src=${m.link.img} alt="" loading="lazy" referrerpolicy="no-referrer" />`}<span><small>${m.link.site}</small><b>${m.link.title}</b>${m.link.desc && html`<i>${m.link.desc}</i>`}</span></a>`}
       ${m.btn && html`<${Buttons} m=${m} chat=${chat} />`}
       ${!flat && !bare && meta}${!flat && bare && html`<span class="meta float">${meta}</span>`}
-      ${rx.length > 0 && html`<div class="rxs">${rx.map(([e, us]) => html`<button class=${cx(us.includes(S.me.id) && 'my')} title=${us.slice(0, 12).map(x => userName(S.users[x])).join(', ')} onClick=${ev => { ev.stopPropagation(); react(chat, m, e); }}>${e}<b>${us.length}</b></button>`)}</div>`}
+      ${rx.length > 0 && html`<div class="rxs">${rx.map(([e, us]) => html`<button class=${cx(us.includes(S.me.id) && 'my')} title=${us.slice(0, 12).map(x => userName(S.users[x])).join(', ') + ' · зажмите, чтобы увидеть всех'} onClick=${ev => { ev.stopPropagation(); react(chat, m, e); }} onContextMenu=${ev => { ev.preventDefault(); ev.stopPropagation(); openModal(WhoModal, { chat, m, tab: rx.length > 1 ? 'e:' + e : 'rx' }); }}>${e}<b>${us.length}</b></button>`)}${chat.type !== 'secret' && html`<button class="rx-who" title="Кто поставил реакции" aria-label="Кто поставил реакции" onClick=${ev => { ev.stopPropagation(); openModal(WhoModal, { chat, m, tab: 'rx' }); }}><${Icon} n="users" s=${13} /></button>`}</div>`}
+      ${m.duel && html`<${DuelCard} m=${m} />`}
+      ${m.ask && m.from !== S.me.id && html`<div class="bub-ask">${m.answer && html`<p>${m.answer.text}</p>`}<button class="btn sm ghost" onClick=${ev => { ev.stopPropagation(); answerAsk({ id: m.id, text: String(m.text || '').replace(/^🍃 \*\*Анонимный вопрос\*\*\n\n/, ''), answer: m.answer && m.answer.text }); }}><${Icon} n=${m.answer ? 'pencil' : 'reply'} s=${14} /> ${m.answer ? 'Изменить ответ' : 'Ответить в историях'}</button></div>`}
       ${m.tips > 0 && html`<div class="tipchip" title=${`Чаевые автору: ${m.tipc || 1} раз`}>💰 ${m.tips} 🍃</div>`}
       ${canThread && html`<button class="thr" onClick=${e => { e.stopPropagation(); openChat(chat.id, { thread: m.id, keepServer: true }); }}><${Icon} n="message-square-text" s=${15} /> ${m.tcount ? `${m.tcount} ${chat.type === 'channel' ? plural(m.tcount, ['комментарий', 'комментария', 'комментариев']) : plural(m.tcount, ['ответ', 'ответа', 'ответов'])}` : 'Прокомментировать'}<${Icon} n="chevron-right" s=${15} /></button>`}
       ${m.failed && html`<button class="retry" onClick=${() => retryMsg(chat.id, m)}><${Icon} n="circle-alert" s=${14} /> Не отправлено: ${m.failed}. Повторить</button>`}
