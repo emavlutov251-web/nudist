@@ -38,7 +38,7 @@ export function InviteFriends({ id }) {
       </div>
     </div>
     ${!d ? html`<${Spinner} />` : d.top.length > 0 && html`<h5 class="inv-h">Доска почёта: кто раздел больше всех</h5>
-      <div class="inv-top">${d.top.map((t, i) => html`<div class=${cx('inv-row', t.user.id === me.id && 'me')}><i>${i + 1}</i><${Avatar} src=${t.user.avatar} name=${userName(t.user)} color=${t.user.color} s=${28} /><b>${userName(t.user)}</b><span>${fmtNum(t.n)}</span></div>`)}</div>`}
+      <div class="inv-top">${d.top.map((t, i) => html`<div class=${cx('inv-row', t.user.id === me.id && 'me')}><i>${i + 1}</i><${Avatar} u=${t.user} src=${t.user.avatar} name=${userName(t.user)} color=${t.user.color} s=${28} /><b>${userName(t.user)}</b><span>${fmtNum(t.n)}</span></div>`)}</div>`}
     ${d && d.by && html`<p class="hint">Вас сюда привёл(а) ${userName(d.by)}. Скажите спасибо.</p>`}<//>`;
 }
 export const openInvite = () => openModal(InviteFriends);
@@ -171,7 +171,7 @@ function PetModal({ id, chat: cid, text }) {
   const say = lost && !k ? 'Огонёк погас… Но его ещё можно вернуть!' : k && !k.hot ? (k.me ? 'Ждём ответа — и серия продлится!' : 'Напишите сегодня, а то я погасну!') : pet ? 'Чем больше вы общаетесь, тем больше я расту!' : 'Пишите каждый день — и огонёк не погаснет!';
   return html`<${Modal} id=${id} title="Огонёк" cls="pet-modal">
     <div class="pet-top"><div class="pet-days"><small>Дней серии</small><b>${k ? k.n : 0}</b></div>
-      ${!group && html`<div class="pet-duo"><${Avatar} src=${peer && peer.avatar} name=${userName(peer)} color=${peer ? peer.color : 0} s=${46} /><${Avatar} src=${S.me.avatar} name=${userName(S.me)} color=${S.me.color} s=${46} /></div>`}</div>
+      ${!group && html`<div class="pet-duo"><${Avatar} u=${peer} src=${peer && peer.avatar} name=${userName(peer)} color=${peer ? peer.color : 0} s=${46} /><${Avatar} u=${S.me} src=${S.me.avatar} name=${userName(S.me)} color=${S.me.color} s=${46} /></div>`}</div>
     <div class="pet-say">${say}</div>
     <div class="pet-stage"><${PetArt} lvl=${lvl} sad=${!k && !!chat.lost} /></div>
     ${pet && html`<div class="pet-name">${edit === null

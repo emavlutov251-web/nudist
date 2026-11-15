@@ -8,6 +8,8 @@ import { StoryEditor } from './media.js';
 import { openSettings } from './settings.js';
 import { openHub, openApps, openSupport } from './hub.js';
 import { Streak, openInvite, openAsk, openPush, installApp, isStandalone, StartCards } from './growth.js';
+import { Nm } from './lib.js';
+import { openShop } from './shop.js';
 
 // ═════ Рейка ═════
 export function Rail() {
@@ -76,7 +78,7 @@ function ChatItem({ chat }) {
   return html`<button class=${cx('ci', on && 'on', chat.pin && 'pinned')} data-chat=${chat.id} onClick=${() => openChat(chat.id)} onContextMenu=${e => showMenu(e, chatActions(chat, true))}>
     <${ChatAvatar} chat=${chat} s=${48} />
     <span class="ci-m">
-      <span class="ci-t">${i.secret && html`<${Icon} n="lock" s=${13} cls="lock" />`}<b>${i.title}</b>${i.verified && html`<${Badges} list=${['verified']} s=${14} />`}${i.user && html`<${Badges} list=${(i.user.badges || []).filter(b => b !== 'verified')} s=${13} />`}${isMuted(chat) && html`<${Icon} n="bell-off" s=${13} cls="muted-i" />`}<${Streak} chat=${chat} />
+      <span class="ci-t">${i.secret && html`<${Icon} n="lock" s=${13} cls="lock" />`}<b>${i.user ? html`<${Nm} u=${i.user} name=${i.title} />` : i.title}</b>${i.verified && html`<${Badges} list=${['verified']} s=${14} />`}${i.user && html`<${Badges} list=${(i.user.badges || []).filter(b => b !== 'verified')} s=${13} />`}${isMuted(chat) && html`<${Icon} n="bell-off" s=${13} cls="muted-i" />`}<${Streak} chat=${chat} />
         <time>${m ? fmtShort(m.ts) : ''}</time></span>
       <span class="ci-p">${typing ? html`<em class="typing">${typing}…</em>` : chat.draft && !on ? html`<span><i class="draft">Черновик:</i> ${chat.draft.slice(0, 80)}</span>` : html`<span>${m ? html`<${Ticks} chat=${chat} m=${m} />` : ''}${who && html`<i class="who">${who}</i>`}${m ? msgPreview(m, chat) : i.sub || (chat.type === 'secret' ? 'секретный чат' : 'Пока пусто')}</span>`}
         ${chat.mentions > 0 && html`<b class="cnt at">@</b>`}${chat.unread > 0 ? html`<b class=${cx('cnt', isMuted(chat) && 'mute')}>${fmtNum(chat.unread)}</b>` : chat.pin ? html`<${Icon} n="pin" s=${14} cls="pin-i" />` : ''}</span>
@@ -89,8 +91,8 @@ function StoriesRow() {
   const order = [...(mine.length ? [S.me.id] : []), ...others];
   const open = u => { S.storyView = { users: order, u, i: Math.max(0, by[u].findIndex(s => !s.seen)) }; bump(); };
   return html`<div class="stories" aria-label="Истории">
-    <button class="story" onClick=${() => mine.length ? open(S.me.id) : openModal(StoryEditor)}><span class=${cx('ring', mine.length ? 'seen' : 'none')}><${Avatar} src=${S.me.avatar} name=${userName(S.me)} color=${S.me.color} s=${46} /><i class="plus" onClick=${e => { e.stopPropagation(); openModal(StoryEditor); }}><${Icon} n="plus" s=${13} /></i></span><small>${mine.length ? 'Моя история' : 'Добавить'}</small></button>
-    ${others.map(u => html`<button class="story" onClick=${() => open(u)}><span class=${cx('ring', by[u].every(s => s.seen) && 'seen')}><${Avatar} src=${(S.users[u] || {}).avatar} name=${userName(S.users[u])} color=${(S.users[u] || {}).color} s=${46} /></span><small>${userName(S.users[u]).split(' ')[0]}</small></button>`)}
+    <button class="story" onClick=${() => mine.length ? open(S.me.id) : openModal(StoryEditor)}><span class=${cx('ring', mine.length ? 'seen' : 'none')}><${Avatar} u=${S.me} src=${S.me.avatar} name=${userName(S.me)} color=${S.me.color} s=${46} /><i class="plus" onClick=${e => { e.stopPropagation(); openModal(StoryEditor); }}><${Icon} n="plus" s=${13} /></i></span><small>${mine.length ? 'Моя история' : 'Добавить'}</small></button>
+    ${others.map(u => html`<button class="story" onClick=${() => open(u)}><span class=${cx('ring', by[u].every(s => s.seen) && 'seen')}><${Avatar} u=${S.users[u]} src=${(S.users[u] || {}).avatar} name=${userName(S.users[u])} color=${(S.users[u] || {}).color} s=${46} /></span><small>${userName(S.users[u]).split(' ')[0]}</small></button>`)}
   </div>`;
 }
 function SearchView({ q }) {
@@ -113,7 +115,7 @@ function SearchView({ q }) {
   return html`<div class="search-res">
     <div class="chips pad">${[['all', 'Всё'], ['chats', 'Чаты'], ['media', 'Медиа'], ['link', 'Ссылки'], ['file', 'Файлы'], ['voice', 'Голосовые'], ['audio', 'Музыка']].map(([v, l]) => html`<button class=${cx('chip', type === v && 'on')} onClick=${() => setType(v)}>${l}</button>`)}</div>
     ${localChats.length > 0 && html`<h4>Ваши чаты</h4>${localChats.map(c => html`<${ChatItem} chat=${c} />`)}`}
-    ${g && g.users.filter(u => !localUserIds.has(u.id)).length > 0 && html`<h4>Люди и боты</h4>${g.users.filter(u => !localUserIds.has(u.id)).map(u => html`<button class="ci" onClick=${() => { remember(); S.users[u.id] = u; openUser(u.id); }}><${Avatar} src=${u.avatar} name=${userName(u)} color=${u.color} s=${44} online=${u.online && !u.bot} /><span class="ci-m"><span class="ci-t"><b>${userName(u)}</b><${Badges} list=${u.badges} s=${14} /></span><span class="ci-p"><span>${u.username ? '@' + u.username + ' · ' : ''}${lastSeen(u)}</span></span></span></button>`)}`}
+    ${g && g.users.filter(u => !localUserIds.has(u.id)).length > 0 && html`<h4>Люди и боты</h4>${g.users.filter(u => !localUserIds.has(u.id)).map(u => html`<button class="ci" onClick=${() => { remember(); S.users[u.id] = u; openUser(u.id); }}><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${44} online=${u.online && !u.bot} /><span class="ci-m"><span class="ci-t"><b>${userName(u)}</b><${Badges} list=${u.badges} s=${14} /></span><span class="ci-p"><span>${u.username ? '@' + u.username + ' · ' : ''}${lastSeen(u)}</span></span></span></button>`)}`}
     ${g && g.chats.length > 0 && html`<h4>Публичные группы и каналы</h4>${g.chats.map(c => html`<button class="ci" onClick=${() => { remember(); openModal(JoinPreview, { chat: c }); }}><${Avatar} src=${c.avatar} name=${c.title} color=${c.color} s=${44} /><span class="ci-m"><span class="ci-t"><b>${c.title}</b>${c.verified && html`<${Badges} list=${['verified']} s=${14} />`}</span><span class="ci-p"><span>${c.type === 'channel' ? 'канал' : 'группа'} · ${fmtNum(c.count)} ${plural(c.count, ['участник', 'участника', 'участников'])}</span></span></span></button>`)}`}
     ${g && g.servers.length > 0 && html`<h4>Серверы</h4>${g.servers.map(s => html`<button class="ci" onClick=${() => openModal(JoinPreview, { server: s })}><${Avatar} src=${s.icon} name=${s.name} s=${44} square /><span class="ci-m"><span class="ci-t"><b>${s.name}</b></span><span class="ci-p"><span>сервер · ${fmtNum(s.count)} ${plural(s.count, ['участник', 'участника', 'участников'])}</span></span></span></button>`)}`}
     ${m && m.msgs.length > 0 && html`<h4>Сообщения</h4>${m.msgs.map(x => { const c = S.chats[x.chat]; if (!c) return null; const i = chatInfo(c); return html`<button class="ci" onClick=${() => { remember(); openChat(c.id, { jump: x.thread ? undefined : x.id, thread: x.thread }); }}><${ChatAvatar} chat=${c} s=${44} online=${false} /><span class="ci-m"><span class="ci-t"><b>${c.server ? '#' : ''}${i.title}</b><time>${fmtShort(x.ts)}</time></span><span class="ci-p"><span><i class="who">${x.from === S.me.id ? 'Вы' : userName(S.users[x.from]).split(' ')[0]}: </i>${msgPreview(x)}</span></span></span></button>`; })}`}
@@ -133,6 +135,7 @@ function HomeSidebar() {
   const menu = e => showMenu(e, [
     { icon: 'venetian-mask', label: 'Голая правда', hint: 'анонимные вопросы', run: openAsk },
     { icon: 'bell', label: 'Уведомления', hint: 'когда приложение закрыто', run: openPush },
+    { icon: 'store', label: 'Магазин и подписка', hint: 'рамки, темы, Plus', run: () => openShop() },
     { icon: 'user-plus', label: 'Позвать друзей', hint: '+100 🍃', run: openInvite },
     !isStandalone() && { icon: 'smartphone', label: 'Установить как приложение', run: installApp },
     '-',
@@ -181,19 +184,20 @@ function MeBar() {
   const accMenu = e => showMenu(e, [
     { icon: 'user', label: 'Мой профиль', run: () => showProfile(me.id) },
     { icon: 'smile', label: me.status ? 'Изменить статус' : 'Задать статус', run: () => openModal(StatusDlg) },
-    { icon: 'leaf', label: 'Листики и Премиум', hint: fmtNum(me.stars || 0) + ' 🍃', run: () => openModal(StarsModal) },
+    { icon: 'leaf', label: 'Листики', hint: fmtNum(me.stars || 0) + ' 🍃', run: () => openModal(StarsModal) },
+    { icon: 'store', label: 'Магазин и подписка', hint: me.tier ? ({ plus: 'Plus', pro: 'Pro', max: 'Max' })[me.tier] : '', run: () => openShop() },
     '-',
     ...accounts().filter(a => a.token !== S.token && a.name).map(a => ({ icon: 'circle-user', label: a.name, hint: a.username ? '@' + a.username : '', run: () => switchAccount(a.token) })),
     { icon: 'plus', label: 'Добавить аккаунт', run: addAccount },
     me.admin && { icon: 'shield', label: 'Админ-панель', run: openAdmin },
     '-',
     { icon: 'log-out', label: 'Выйти', danger: true, run: async () => { if (await confirmDlg({ title: 'Выйти из аккаунта?', text: 'Секретные чаты этого устройства после выхода прочитать не получится.', ok: 'Выйти', danger: true })) logout(); } },
-  ], { head: html`<div class="menu-head"><${Avatar} src=${me.avatar} name=${userName(me)} color=${me.color} s=${40} /><div><b>${userName(me)}</b><small>${me.username ? '@' + me.username : me.phone}</small></div></div>` });
+  ], { head: html`<div class="menu-head"><${Avatar} u=${me} src=${me.avatar} name=${userName(me)} color=${me.color} s=${40} /><div><b>${userName(me)}</b><small>${me.username ? '@' + me.username : me.phone}</small></div></div>` });
   return html`<div class="mebar">
     ${vc && html`<div class="vbar"><div class="vbar-i"><span class=${cx('sig', RTC.connected && 'ok')}><${Icon} n="signal" s=${16} /></span><div onClick=${() => openChat(vc.id)}><b>${RTC.connected ? 'Голос подключён' : 'Подключение…'}</b><small>${vc.server ? vc.title + ' · ' + (S.servers[vc.server] || {}).name : chatInfo(vc).title}</small></div></div>
       <button class="ib danger" title="Отключиться" onClick=${() => leaveVoice()}><${Icon} n="phone-off" s=${18} /></button></div>`}
     <div class="me-row">
-      <button class="me-u" onClick=${accMenu}><${Avatar} src=${me.avatar} name=${userName(me)} color=${me.color} s=${36} online /><span><b>${userName(me)}</b><small>${me.status ? (me.status.e || '') + ' ' + (me.status.t || '') : me.playing ? '🎮 ' + me.playing : 'в сети'}</small></span></button>
+      <button class="me-u" onClick=${accMenu}><${Avatar} u=${me} src=${me.avatar} name=${userName(me)} color=${me.color} s=${36} online /><span><b><${Nm} u=${me} /></b><small>${me.status ? (me.status.e || '') + ' ' + (me.status.t || '') : me.playing ? '🎮 ' + me.playing : 'в сети'}</small></span></button>
       ${vc ? html`<button class=${cx('ib', RTC.muted && 'off')} title=${RTC.muted ? 'Включить микрофон' : 'Выключить микрофон'} onClick=${toggleMute}><${Icon} n=${RTC.muted ? 'mic-off' : 'mic'} s=${18} /></button><button class=${cx('ib', RTC.deaf && 'off')} title=${RTC.deaf ? 'Включить звук' : 'Выключить звук'} onClick=${toggleDeaf}><${Icon} n=${RTC.deaf ? 'headphone-off' : 'headphones'} s=${18} /></button>` : html`<button class=${cx('ib', due && 'due')} title=${due ? 'Ежедневный бонус ждёт — заберите листики' : 'Листики'} onClick=${() => openModal(StarsModal)}><span class="stars-chip">${fmtNum(me.stars || 0)} 🍃</span>${due && html`<i class="due-dot"></i>`}</button>`}
       <button class="ib" title="Настройки" onClick=${() => openSettings()}><${Icon} n="settings" s=${18} /></button>
     </div></div>`;
@@ -226,7 +230,7 @@ function ServerSidebar({ s }) {
           const voice = c.kind === 'voice' || c.kind === 'stage', room = S.rooms[c.id];
           return html`<div key=${c.id}><button class=${cx('ch', S.ui.chat === c.id && 'on', c.unread > 0 && !isMuted(c) && 'unread', isMuted(c) && 'muted')} data-chat=${c.id} onClick=${() => { local.set('srv.' + s.id, voice ? local.get('srv.' + s.id) : c.id); openChat(c.id); if (voice && RTC.chat !== c.id) joinVoice(c.id); }} onContextMenu=${e => showMenu(e, chMenu(c))}>
             <${Icon} n=${kindIcon(c.kind)} s=${18} /><span>${c.title}</span>${c.allow && c.allow.length ? html`<${Icon} n="lock" s=${12} cls="lock" />` : ''}${c.mentions > 0 ? html`<b class="cnt at">@${c.mentions}</b>` : c.unread > 0 && !isMuted(c) && !voice ? html`<b class="cnt">${fmtNum(c.unread)}</b>` : ''}</button>
-            ${voice && room && room.peers.length > 0 && html`<div class="vpeers">${room.peers.map(pr => { const u = S.users[pr.user]; return html`<div class=${cx('vp', RTC.speaking[pr.id] && 'talk')} onClick=${() => showProfile(pr.user)}><${Avatar} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${22} /><span>${userName(u)}</span>${pr.hand && html`<i>✋</i>`}${pr.screen && html`<${Icon} n="monitor-up" s=${13} />`}${pr.cam && html`<${Icon} n="video" s=${13} />`}${pr.muted && html`<${Icon} n="mic-off" s=${13} />`}${pr.deaf && html`<${Icon} n="headphone-off" s=${13} />`}</div>`; })}</div>`}</div>`; })}
+            ${voice && room && room.peers.length > 0 && html`<div class="vpeers">${room.peers.map(pr => { const u = S.users[pr.user]; return html`<div class=${cx('vp', RTC.speaking[pr.id] && 'talk')} onClick=${() => showProfile(pr.user)}><${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${22} /><span>${userName(u)}</span>${pr.hand && html`<i>✋</i>`}${pr.screen && html`<${Icon} n="monitor-up" s=${13} />`}${pr.cam && html`<${Icon} n="video" s=${13} />`}${pr.muted && html`<${Icon} n="mic-off" s=${13} />`}${pr.deaf && html`<${Icon} n="headphone-off" s=${13} />`}</div>`; })}</div>`}</div>`; })}
       </div>`)}
       ${!chans.length && html`<${Empty} icon="hash" title="Каналов нет" text="Создайте первый канал через меню сервера." />`}
     </div>

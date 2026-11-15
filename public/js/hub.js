@@ -179,7 +179,7 @@ function Clips() {
       <div class="clip-v" onClick=${() => i === act && setPaused(!paused)}>
         <video src=${Math.abs(i - act) <= 1 ? k.url : undefined} loop playsinline disableRemotePlayback preload=${i === act ? 'auto' : 'metadata'}></video>
         ${i === act && paused && html`<span class="clip-pause"><${Icon} n="play" s=${44} /></span>`}
-        <div class="clip-info"><button class="clip-au" onClick=${e => { e.stopPropagation(); import('./panels.js').then(P => P.showProfile(k.by)); }}><${Avatar} src=${u.avatar} name=${userName(u)} color=${u.color} s=${34} /><b>${userName(u)}</b><small>${fmtShort(k.ts)}</small></button>${k.text && html`<p>${k.text}</p>`}</div>
+        <div class="clip-info"><button class="clip-au" onClick=${e => { e.stopPropagation(); import('./panels.js').then(P => P.showProfile(k.by)); }}><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${34} /><b>${userName(u)}</b><small>${fmtShort(k.ts)}</small></button>${k.text && html`<p>${k.text}</p>`}</div>
       </div>
       <div class="clip-act">
         <button class=${cx(k.liked && 'on')} onClick=${() => like(k)} title="Нравится"><${Icon} n="heart" s=${26} /><small>${fmtNum(k.likes)}</small></button>
@@ -197,7 +197,7 @@ function ClipComments({ id, clip }) {
   const send = async e => { e && e.preventDefault(); const t = text.trim(); if (!t) return; setText(''); try { const r = await rpc('clip.comment', { id: clip.id, text: t }); addUsers(r.users); setList(l => (l || []).concat(r.item)); clip.comments = r.comments; bump(); } catch (x) { err(x); setText(t); } };
   const del = c => rpc('clip.uncomment', { id: clip.id, cid: c.id }).then(r => { setList(l => l.filter(x => x !== c)); clip.comments = r.comments; bump(); }).catch(err);
   return html`<${Modal} id=${id} title=${'Комментарии' + (list ? ` · ${list.length}` : '')} icon="message-circle" footer=${html`<form class="cm-form" onSubmit=${send}><input value=${text} maxlength="500" placeholder="Скажите что-нибудь доброе" onInput=${e => setText(e.target.value)} autofocus /><button class="btn" disabled=${!text.trim()}><${Icon} n="send" s=${16} /></button></form>`}>
-    ${!list ? html`<${Spinner} />` : !list.length ? html`<${Empty} icon="message-circle" text="Комментариев нет. Тишина как на диком пляже." />` : html`<div class="cm-list">${list.map(c => { const u = who(c.by); return html`<div class="cm" key=${c.id}><${Avatar} src=${u.avatar} name=${userName(u)} color=${u.color} s=${32} /><div><b>${userName(u)}</b> <small>${fmtShort(c.ts)}</small><p>${c.text}</p></div>${(c.by === S.me.id || clip.own || isStaff()) && html`<button class="ib sm" title="Удалить" onClick=${() => del(c)}><${Icon} n="x" s=${15} /></button>`}</div>`; })}<span ref=${end}></span></div>`}<//>`;
+    ${!list ? html`<${Spinner} />` : !list.length ? html`<${Empty} icon="message-circle" text="Комментариев нет. Тишина как на диком пляже." />` : html`<div class="cm-list">${list.map(c => { const u = who(c.by); return html`<div class="cm" key=${c.id}><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${32} /><div><b>${userName(u)}</b> <small>${fmtShort(c.ts)}</small><p>${c.text}</p></div>${(c.by === S.me.id || clip.own || isStaff()) && html`<button class="ib sm" title="Удалить" onClick=${() => del(c)}><${Icon} n="x" s=${15} /></button>`}</div>`; })}<span ref=${end}></span></div>`}<//>`;
 }
 
 // ───────────────────────────── прямые эфиры
@@ -279,7 +279,7 @@ function LiveRoom() {
       </div>
     </div>
     <aside class="live-side">
-      <div class="live-head"><${Avatar} src=${u.avatar} name=${userName(u)} color=${u.color} s=${38} /><div><b>${l.title}</b><small>${userName(u)} · ${l.kind === 'screen' ? 'экран' : 'камера'}</small></div></div>
+      <div class="live-head"><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${38} /><div><b>${l.title}</b><small>${userName(u)} · ${l.kind === 'screen' ? 'экран' : 'камера'}</small></div></div>
       <div class="live-chat">${!LV.chat.length && html`<p class="hint center">Чат эфира. Первое сообщение — самое смелое.</p>`}${LV.chat.map(m => { const a = who(m.by); return html`<p key=${m.id}><b class=${cx(m.by === l.by && 'host')}>${userName(a)}</b> ${m.text}</p>`; })}<span ref=${end}></span></div>
       <form class="live-form" onSubmit=${send}><input value=${text} maxlength="300" placeholder="Написать в чат эфира" onInput=${e => setText(e.target.value)} /><button type="button" class="ib" title="Сердечко" onClick=${() => rpc('live.react', { id: l.id, e: '❤️' }).catch(() => {})}><${Icon} n="heart" /></button><button class="ib" disabled=${!text.trim()} title="Отправить"><${Icon} n="send" /></button></form>
     </aside></div>`;
@@ -292,7 +292,7 @@ function Live() {
     <div class="hub-bar"><h2 class="hub-t">Прямые эфиры</h2><span class="grow"></span><button class="btn" onClick=${() => openModal(StartLive)}><${Icon} n="radio" s=${16} /> Начать эфир</button></div>
     ${!list ? html`<${Spinner} />` : !list.length ? html`<${Empty} icon="radio" title="Сейчас никто не в эфире" text="Включите камеру или покажите экран — зрители увидят вас вживую и смогут писать в чат.">${html`<button class="btn" onClick=${() => openModal(StartLive)}><${Icon} n="radio" s=${16} /> Начать эфир</button>`}<//>` : html`
       <div class="live-grid">${list.map(l => { const u = who(l.by); return html`<button class="live-card" key=${l.id} onClick=${() => (l.by === S.me.id ? toast('Это ваш эфир с другого устройства') : joinLive(l))}>
-        <span class="live-thumb" style=${`--c:${u.color || 0}`}><${Avatar} src=${u.avatar} name=${userName(u)} color=${u.color} s=${72} /><b class="live-on">В ЭФИРЕ</b><em><${Icon} n="eye" s=${13} /> ${l.viewers}</em></span>
+        <span class="live-thumb" style=${`--c:${u.color || 0}`}><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${72} /><b class="live-on">В ЭФИРЕ</b><em><${Icon} n="eye" s=${13} /> ${l.viewers}</em></span>
         <span class="live-meta"><b>${l.title}</b><small>${userName(u)} · ${l.kind === 'screen' ? 'экран' : 'камера'} · с ${fmtShort(l.started)}</small></span>${isStaff() && l.by !== S.me.id && html`<span class="live-mod" role="button" tabindex="0" onClick=${async e => { e.stopPropagation(); if (await confirmDlg({ title: 'Остановить эфир?', text: `Эфир «${l.title}» прервётся у всех зрителей.`, ok: 'Остановить', danger: true })) rpc('live.stop', { id: l.id }).then(loadLives).catch(err); }}><${Icon} n="x" s=${14} /> Остановить как модератор</span>`}</button>`; })}</div>`}
   </div>`;
 }

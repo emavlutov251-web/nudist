@@ -19,7 +19,7 @@ function GiftShop({ id, to }) {
     closeModal(id); confetti(); sfx('fanfare'); toast(`${g.e} ${g.name} — подарок отправлен: ${userName(u)}`);
   };
   return html`<${Modal} id=${id} title="Подарок" icon="gift" cls="small" footer=${html`<button class="btn ghost" onClick=${() => closeModal(id)}>Отмена</button><button class="btn" disabled=${!g || busy || g.price > have} onClick=${send}><${Icon} n="gift" s=${16} /> ${g ? `Подарить · ${g.price} 🍃` : 'Выберите подарок'}</button>`}>
-    <div class="gift-to"><${Avatar} src=${u.avatar} name=${userName(u)} color=${u.color} s=${36} /><span>Подарок для <b>${userName(u)}</b></span><em>у вас ${fmtNum(have)} 🍃</em></div>
+    <div class="gift-to"><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${36} /><span>Подарок для <b>${userName(u)}</b></span><em>у вас ${fmtNum(have)} 🍃</em></div>
     ${!cat ? html`<${Spinner} />` : html`<div class="gift-grid" role="listbox" aria-label="Витрина подарков">${cat.gifts.map(x => html`<button role="option" aria-selected=${sel === x.id} class=${cx('gift-cell', sel === x.id && 'on', x.price > have && 'poor')} onClick=${() => setSel(x.id)} title=${x.name}><span class="gc-e">${x.e}</span><span class="gc-n">${x.name}</span><span class="gc-p">${x.price} 🍃</span></button>`)}</div>`}
     ${g && html`<label class="fld"><span>Открытка, если хочется</span><input maxlength="120" value=${text} placeholder="С днём рождения!" onInput=${e => setText(e.target.value)} onKeyDown=${e => e.key === 'Enter' && send()} /></label>
       <label class="check"><input type="checkbox" checked=${anon} onChange=${e => setAnon(e.target.checked)} /> Не показывать моё имя в профиле получателя</label>`}

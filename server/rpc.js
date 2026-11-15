@@ -36,7 +36,7 @@ H['me.update'] = (c, p) => {
   const oldAvatars = [u.avatar, ...(u.avatars || [])];
   if (p.avatar !== undefined) {
     need(!p.avatar || isUpload(p.avatar), 'Некорректный аватар');
-    if (p.avatar && /\.(mp4|webm|gif)$/.test(p.avatar)) need(C.isPremium(u), 'Анимированный аватар — привилегия «Нудист Голый Премиум»');
+    if (p.avatar && /\.(mp4|webm|gif)$/.test(p.avatar)) need(C.isPremium(u), 'Анимированный аватар — для подписчиков: тариф Plus и выше');
     u.avatar = p.avatar || undefined;
     if (p.avatar) { u.avatars = [p.avatar, ...(u.avatars || []).filter(a => a !== p.avatar)].slice(0, 12); }
   }
@@ -574,6 +574,7 @@ H['msg.send'] = (c, p) => {
   const chat = getChat(c, p.chat);
   checkSend(c, chat, p);
   const payload = buildPayload(c, chat, p);
+  const fx = hook.fx(user(c)); if (fx && payload.type !== 'service') payload.fx = fx;      // эффект сообщения из магазина
   if (p.at) {
     const at = int(p.at, 0, now() + 366 * 864e5); need(at > now() + 3000, 'Время отправки должно быть в будущем');
     need(db.scheduled.filter(x => x.from === c.uid).length < 100, 'Слишком много отложенных сообщений');
@@ -581,6 +582,7 @@ H['msg.send'] = (c, p) => {
     return { scheduled: item };
   }
   const m = postMessage(chat, c.uid, payload);
+  if (hook.sent) { try { hook.sent(c.uid, chat); } catch (e) { console.warn('[shop]', e.message); } }
   return { msg: msgView(m, c.uid), tmp: p.tmp };
 };
 // Одноразовое фото или видео: получатель открывает один раз, после этого файл стирается с сервера.
@@ -659,6 +661,7 @@ H['msg.react'] = (c, p) => {
     need(Object.keys(m.rx).length < 20 || m.rx[e], 'Слишком много разных реакций');
     while (mine.length >= max) { const k = mine.shift(); m.rx[k] = m.rx[k].filter(u => u !== c.uid); }
     (m.rx[e] = m.rx[e] || []).push(c.uid);
+    if (hook.reacted) { try { hook.reacted(c.uid, m); } catch (er) { console.warn('[shop]', er.message); } }
   }
   for (const k of Object.keys(m.rx)) if (!m.rx[k].length) delete m.rx[k];
   if (!Object.keys(m.rx).length) delete m.rx;
@@ -811,7 +814,9 @@ H['story.viewers'] = (c, p) => { const s = db.stories[p.id]; need(s && s.user ==
 H['story.del'] = (c, p) => { const s = db.stories[p.id]; need(s && s.user === c.uid, 'История не найдена'); C.releaseFiles(s); delete db.stories[s.id]; save(); C.emitAll('story.del', { id: s.id }); };
 
 // ══════════ ЛИСТИКИ (внутренняя валюта) И ПРЕМИУМ ══════════
-const PREMIUM_PRICE = 500, BOOST_PRICE = 200;
+const PREMIUM_PRICE = 1500, BOOST_PRICE = 200;
+// Точки, в которые встраивается магазин (server/shop.js): прибавки подписчикам, эффект сообщения, задания сезона.
+const hook = { dailyExtra: () => 0, tapPct: () => 0, fx: () => null, sent: null, reacted: null };
 // Сколько листиков и как быстро можно добыть. Числа меняются переменными окружения (см. README), применяются после перезапуска.
 const envInt = (k, d, min, max) => { const n = Number(process.env[k]); return process.env[k] !== undefined && Number.isFinite(n) && n >= min && n <= max ? Math.floor(n) : d; };
 const LEAF = {
@@ -834,14 +839,15 @@ function spend(u, n, why) { need(db.flags.stars, 'Листики временн�
 // Ежедневный бонус растёт, если заходить каждый день: 10, 15, 20 … 50 листиков. Пропущенный день начинает счёт заново.
 const dailyRun = u => (u.lastDaily === today() || u.lastDaily === today(now() - 864e5) ? u.dailyRun || 1 : 0);      // сколько дней подряд уже собрано
 const dailyFor = run => Math.min(LEAF.dailyMax, LEAF.dailyMin + LEAF.dailyStep * Math.max(0, run - 1));
-H['stars.daily'] = c => { const u = user(c); need(db.flags.stars, 'Листики отключены'); need(u.lastDaily !== today(), 'Сегодняшний бонус уже собран. Листья растут до завтра.'); const run = dailyRun(u) + 1, n = dailyFor(run); u.lastDaily = today(); u.dailyRun = run; u.stars = (u.stars || 0) + n; save(); selfUpdate(u); return { n, stars: u.stars, run, next: dailyFor(run + 1) }; };
+H['stars.daily'] = c => { const u = user(c); need(db.flags.stars, 'Листики отключены'); need(u.lastDaily !== today(), 'Сегодняшний бонус уже собран. Листья растут до завтра.'); const run = dailyRun(u) + 1, extra = hook.dailyExtra(u) || 0, n = dailyFor(run) + extra; u.lastDaily = today(); u.dailyRun = run; u.stars = (u.stars || 0) + n; save(); selfUpdate(u); return { n, extra, stars: u.stars, run, next: dailyFor(run + 1) + extra }; };
 H['stars.tap'] = (c, p) => {
   const u = user(c); need(db.flags.stars, 'Листики отключены');
-  if (u.tapDay !== today()) { u.tapDay = today(); u.taps = 0; }      // u.taps — тапы за сегодня, листик капает за каждые LEAF.per
+  if (u.tapDay !== today()) { u.tapDay = today(); u.taps = 0; u.tapBonus = 0; }      // u.taps — тапы за сегодня, листик капает за каждые LEAF.per
   const t = now(); let b = tapBucket.get(u.id); if (!b) { if (tapBucket.size > 100000) tapBucket.clear(); tapBucket.set(u.id, b = { t, left: TAP_BURST }); }
   b.left = Math.min(TAP_BURST, b.left + (t - b.t) / 1000 * TAP_RATE); b.t = t;
   const taps = Math.max(0, Math.min(int(p.n, 0, 300), Math.floor(b.left), LEAF.limit * LEAF.per - u.taps)); b.left -= taps;
-  const before = Math.floor(u.taps / LEAF.per); u.taps += taps; const n = Math.floor(u.taps / LEAF.per) - before;
+  const before = Math.floor(u.taps / LEAF.per); u.taps += taps; let n = Math.floor(u.taps / LEAF.per) - before;
+  const pct = hook.tapPct(u) || 0; if (pct) { const want = Math.floor(Math.floor(u.taps / LEAF.per) * pct / 100), add = Math.max(0, want - (u.tapBonus || 0)); u.tapBonus = (u.tapBonus || 0) + add; n += add; }      // прибавка подписчикам: +25, +50 или +100 % к листикам за тапы
   if (n) { u.stars = (u.stars || 0) + n; selfUpdate(u); } if (taps) save();
   return { n, taps, ...leafInfo(u) };
 };
@@ -879,4 +885,4 @@ H['stars.history'] = c => { const u = user(c), list = (u.leafLog || []).slice(0,
 H['premium.buy'] = c => { const u = user(c); spend(u, PREMIUM_PRICE, 'Листики копятся в мини-игре «Листопад», ежедневным бонусом и приглашениями друзей.'); u.premiumUntil = Math.max(u.premiumUntil || 0, now()) + 30 * 864e5; save(); selfUpdate(u); C.broadcastUser(u); return { until: u.premiumUntil }; };
 H['fun.buzz'] = (c, p) => { const ch = getChat(c, p.chat); need(ch.type === 'dm' || ch.type === 'group', 'Пинать можно только в личке и группах'); A.limit('buzz:' + c.uid + ch.id, 1, 15000); for (const u of membersOf(ch)) emit(u, 'buzz', { chat: ch.id, user: c.uid }); };
 
-module.exports = { H, getChat, getUser, uname, usersFor, ensureSaved, joinChat, chatPreview, serverPreview, resolveTarget, checkSend, buildPayload, hooksEdit, selfUpdate, spend, giveCheck, BOOST_PRICE, PREMIUM_PRICE, LEAF };
+module.exports = { H, getChat, getUser, uname, usersFor, ensureSaved, joinChat, chatPreview, serverPreview, resolveTarget, checkSend, buildPayload, hooksEdit, selfUpdate, spend, giveCheck, BOOST_PRICE, PREMIUM_PRICE, LEAF, hook };

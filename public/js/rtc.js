@@ -291,13 +291,13 @@ function peerMenu(e, chat, pr) {
     !me && mod && chat.kind === 'stage' && { icon: 'megaphone', label: pr.speak ? 'Вернуть в зал' : 'Выпустить на трибуну', run: () => act('speak') },
     !me && mod && others.length > 0 && { icon: 'arrow-right', label: 'Переместить', sub: others.map(c => ({ label: c.title, run: () => act('move', { to: c.id }) })) },
     !me && mod && { icon: 'phone-off', label: 'Отключить', danger: true, run: () => act('kick') },
-  ], { head: html`<div class="menu-head"><${Avatar} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${36} /><div><b>${userName(u)}</b><small>${me ? 'это вы' : pr.muted ? 'микрофон выключен' : 'в эфире'}</small></div></div>` });
+  ], { head: html`<div class="menu-head"><${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${36} /><div><b>${userName(u)}</b><small>${me ? 'это вы' : pr.muted ? 'микрофон выключен' : 'в эфире'}</small></div></div>` });
 }
 function Tile({ chat, pr, big }) {
   const u = S.users[pr.user], me = pr.id === RTC.me, p = RTC.peers[pr.id], stream = me ? RTC.localVideo : p && p.stream, hasVid = (pr.cam || pr.screen) && stream && stream.getVideoTracks().length > 0;
   const st = me ? '' : !p ? '' : p.pc.connectionState === 'connected' ? '' : p.relay ? 'через сервер' : p.pc.connectionState === 'failed' ? 'нет связи' : 'соединение…';
   return html`<div class=${cx('tile', RTC.speaking[pr.id] && !pr.muted && 'talk', big && 'big', hasVid && 'vid')} onClick=${() => { RTC.pin = RTC.pin === pr.id ? null : pr.id; bump(); }} onContextMenu=${e => peerMenu(e, chat, pr)}>
-    ${hasVid ? html`<${Vid} stream=${stream} mirror=${me && pr.cam && !RTC.vfx} contain=${pr.screen} />` : html`<${Avatar} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${big ? 120 : 72} />`}
+    ${hasVid ? html`<${Vid} stream=${stream} mirror=${me && pr.cam && !RTC.vfx} contain=${pr.screen} />` : html`<${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${big ? 120 : 72} />`}
     <span class="tile-n">${pr.muted && html`<${Icon} n="mic-off" s=${13} />`}${pr.deaf && html`<${Icon} n="headphone-off" s=${13} />`}${pr.screen && html`<${Icon} n="monitor-up" s=${13} />`}<b>${userName(u)}${me ? ' (вы)' : ''}</b>${st && html`<i>${st}</i>`}</span>
     ${pr.hand && html`<span class="tile-hand">✋</span>`}<button class="ib sm tile-m" aria-label="Действия" onClick=${e => { e.stopPropagation(); peerMenu(e, chat, pr); }}><${Icon} n="ellipsis" s=${16} /></button></div>`;
 }
@@ -323,7 +323,7 @@ function Stage({ chat }) {
   return html`<div class=${cx('stage', main && 'spot')}>
     ${main ? html`<div class="spot-main"><${Tile} chat=${chat} pr=${main} big /></div><div class="spot-strip">${peers.filter(p => p !== main).map(p => html`<${Tile} key=${p.id} chat=${chat} pr=${p} />`)}</div>`
       : html`<div class=${cx('grid', 'n' + Math.min(sp.length, 9))}>${sp.map(p => html`<${Tile} key=${p.id} chat=${chat} pr=${p} big=${sp.length === 1} />`)}${stage && !sp.length && html`<p class="hint">Трибуна пуста. Кто-нибудь, скажите что-нибудь.</p>`}</div>
-        ${ls.length > 0 && html`<div class="listeners"><h5>Слушатели — ${ls.length}</h5><div>${ls.map(p => { const u = S.users[p.user]; return html`<button class="lst" onClick=${e => peerMenu(e, chat, p)}><${Avatar} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${40} /><span>${userName(u)}</span>${p.hand && html`<i>✋</i>`}</button>`; })}</div></div>`}`}
+        ${ls.length > 0 && html`<div class="listeners"><h5>Слушатели — ${ls.length}</h5><div>${ls.map(p => { const u = S.users[p.user]; return html`<button class="lst" onClick=${e => peerMenu(e, chat, p)}><${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${40} /><span>${userName(u)}</span>${p.hand && html`<i>✋</i>`}</button>`; })}</div></div>`}`}
     <div class="fxs" aria-hidden="true">${RTC.fx.map(f => html`<span key=${f.id} style=${`left:${f.x}%`}>${f.e}<small>${userName(S.users[f.user])}</small></span>`)}</div></div>`;
 }
 /** Голосовой канал сервера: сцена над чатом канала. */
@@ -339,7 +339,7 @@ export function CallLayer() {
   const ch = RTC.chat && S.chats[RTC.chat], ring = RTC.ring, solo = ch && !ch.server && room().peers.length < 2;
   const accept = v => { const d = RTC.ring; RTC.ring = null; stopRing(); if (d) join(d.chat, { video: v }); };
   const decline = () => { const d = RTC.ring; RTC.ring = null; stopRing(); if (d) rpc('call.decline', { chat: d.chat }).catch(() => {}); bump(); };
-  return html`${ring && html`<div class="ringing" role="alertdialog" aria-label="Входящий звонок"><div class="ring-c"><div class="ring-a"><${Avatar} src=${ring.user.avatar} name=${userName(ring.user)} color=${ring.user.color} s=${112} /></div>
+  return html`${ring && html`<div class="ringing" role="alertdialog" aria-label="Входящий звонок"><div class="ring-c"><div class="ring-a"><${Avatar} u=${ring.user} src=${ring.user.avatar} name=${userName(ring.user)} color=${ring.user.color} s=${112} /></div>
       <h2>${userName(ring.user)}</h2><p>${ring.video ? 'Входящий видеозвонок' : 'Входящий звонок'}${ring.title ? ' · ' + ring.title : ''}</p><small>${ring.video ? 'Накиньте что-нибудь. Или включите фиговый листок в эффектах.' : 'Голосом можно всё, вас не видно.'}</small>
       <div class="ring-b"><button class="cb end" onClick=${decline} aria-label="Отклонить"><${Icon} n="phone-off" s=${26} /></button><button class="cb go" onClick=${() => accept(false)} aria-label="Ответить голосом"><${Icon} n="phone" s=${26} /></button>${ring.video && html`<button class="cb go" onClick=${() => accept(true)} aria-label="Ответить с видео"><${Icon} n="video" s=${26} /></button>`}</div></div></div>`}
     ${ch && !ch.server && (RTC.min ? html`<button class="call-pill" onClick=${() => { RTC.min = false; bump(); }}><${Icon} n="phone-call" s=${16} /><b>${chatInfo(ch).title}</b>${solo ? 'вызов…' : html`<${Timer} from=${room().started || RTC.since} />`}</button>`

@@ -152,7 +152,7 @@ H['admin.user.set'] = (c, p) => {
   const roleOnly = p.admin !== undefined && C.isOwner(db.users[c.uid]);   // владелец может менять роль и у равных по рангу
   const u = roleOnly ? db.users[p.id] : target(c, p.id, 'admin'); const ch = []; need(u && !u.deleted, 'Пользователь не найден');
   if (p.badges !== undefined) { u.badges = (Array.isArray(p.badges) ? p.badges : []).filter(b => ['verified', 'staff', 'developer'].includes(b)); ch.push('бейджи: ' + (u.badges.join(', ') || '—')); }
-  if (p.premiumDays !== undefined) { const d = int(p.premiumDays, 0, 3650); u.premiumUntil = d ? now() + d * 864e5 : undefined; ch.push(d ? 'премиум на ' + d + ' дн.' : 'премиум снят'); }
+  if (p.premiumDays !== undefined) { const d = int(p.premiumDays, 0, 3650); u.premiumUntil = d ? now() + d * 864e5 : undefined; if (!d) u.premiumTier = undefined; else if (C.TIERS[p.premiumTier]) u.premiumTier = p.premiumTier; ch.push(d ? 'подписка ' + (u.premiumTier || 'plus') + ' на ' + d + ' дн.' : 'подписка снята'); }
   if (p.stars !== undefined) { u.stars = int(p.stars, 0, 1e9); ch.push('листики = ' + u.stars); }
   if (p.listed !== undefined && u.bot) { u.listed = !!p.listed; ch.push(u.listed ? 'бот в каталоге' : 'бот убран из каталога'); }
   if (p.admin !== undefined) { const why = roleBlock(db.users[c.uid], u); need(!why, why); applyRole(c, u, p.admin || null); ch.push('роль: ' + (u.admin || 'нет')); }

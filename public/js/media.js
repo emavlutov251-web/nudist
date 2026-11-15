@@ -97,7 +97,7 @@ export function MediaViewer() {
   const up = e => { const d = drag.current; drag.current = null; if (d && d.sx !== undefined && Math.abs(e.clientX - d.sx) > 70) go(e.clientX < d.sx ? 1 : -1); };
   const from = S.users[m.from];
   return html`<div class="viewer" onMouseDown=${e => e.target === e.currentTarget && close()}>
-    <header><div class="vw-i">${from && html`<${Avatar} src=${from.avatar} name=${userName(from)} color=${from.color} s=${34} />`}<div><b>${from ? userName(from) : ''}</b><small>${m.ts ? fmtShort(m.ts) : ''}${v.items.length > 1 ? ` · ${v.i + 1} из ${v.items.length}` : ''}</small></div></div>
+    <header><div class="vw-i">${from && html`<${Avatar} u=${from} src=${from.avatar} name=${userName(from)} color=${from.color} s=${34} />`}<div><b>${from ? userName(from) : ''}</b><small>${m.ts ? fmtShort(m.ts) : ''}${v.items.length > 1 ? ` · ${v.i + 1} из ${v.items.length}` : ''}</small></div></div>
       ${m.type === 'photo' && html`<button class="ib" onClick=${() => setZ(s => ({ ...s, k: Math.min(6, s.k * 1.4) }))} title="Увеличить (+)"><${Icon} n="plus" /></button><button class="ib" onClick=${() => setZ({ k: 1, x: 0, y: 0 })} title="Сбросить масштаб"><${Icon} n="maximize" /></button>`}
       <button class="ib" onClick=${async () => { const x = await mediaUrl(m.media); const a = document.createElement('a'); a.href = m.media.ek ? x : m.media.url + '?n=' + encodeURIComponent(m.media.name || 'media'); a.download = m.media.name || 'media'; a.click(); }} title="Сохранить"><${Icon} n="download" /></button>
       <button class="ib" onClick=${close} title="Закрыть (Esc)"><${Icon} n="x" /></button></header>
@@ -124,7 +124,7 @@ export function StoryViewer() {
   return html`<div class="story-view" onMouseDown=${e => e.target === e.currentTarget && close()}>
     <div class="sv-card" style=${s.kind === 'text' ? 'background:' + (STORY_BG[s.bg] || STORY_BG.leaf) : ''}>
       <div class="sv-bars">${list.map((x, i) => html`<i><b style=${`width:${i < v.i ? 100 : i === v.i ? p * 100 : 0}%`}></b></i>`)}</div>
-      <header><${Avatar} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${36} /><div><b>${mine ? 'Моя история' : userName(u)}</b><small>${fmtShort(s.ts)}${mine ? ' · ' + ({ all: 'все', contacts: 'контакты', close: 'близкие', selected: 'выбранные', except: 'все, кроме…' }[s.aud] || '') : ''}</small></div>
+      <header><${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${36} /><div><b>${mine ? 'Моя история' : userName(u)}</b><small>${fmtShort(s.ts)}${mine ? ' · ' + ({ all: 'все', contacts: 'контакты', close: 'близкие', selected: 'выбранные', except: 'все, кроме…' }[s.aud] || '') : ''}</small></div>
         <button class="ib" onClick=${() => setPause(x => !x)} aria-label="Пауза"><${Icon} n=${pause ? 'play' : 'pause'} s=${18} /></button>
         ${mine && html`<button class="ib" title="Удалить историю" onClick=${async () => { setPause(true); if (await confirmDlg({ title: 'Удалить историю?', text: 'Она исчезнет у всех.', ok: 'Удалить', danger: true })) { await call('story.del', { id: s.id }); } setPause(false); }}><${Icon} n="trash-2" s=${18} /></button>`}
         <button class="ib" onClick=${close} aria-label="Закрыть"><${Icon} n="x" /></button></header>
@@ -141,7 +141,7 @@ export function StoryViewer() {
 function StoryViewers({ id, story, onClose }) {
   const [d, setD] = useState(null);
   useEffect(() => { rpc('story.viewers', { id: story.id }).then(r => { addUsers(r.users); setD(r.views); }).catch(e => toast(e.message, 'err')); }, []);
-  return html`<${Modal} id=${id} title="Кто смотрел" cls="small" onClose=${onClose}>${!d ? html`<${Spinner} />` : !d.length ? html`<${Empty} icon="eye-off" title="Пока никто" text="История лежит, сохнет на солнце." />` : d.map(v => { const u = S.users[v.u]; return html`<button class="ci" onClick=${() => { closeModal(id); S.storyView = null; openUser(v.u); }}><${Avatar} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${40} /><span class="ci-m"><span class="ci-t"><b>${userName(u)}</b><time>${v.e || ''}</time></span><span class="ci-p"><span>${fmtShort(v.ts)}</span></span></span></button>`; })}<//>`;
+  return html`<${Modal} id=${id} title="Кто смотрел" cls="small" onClose=${onClose}>${!d ? html`<${Spinner} />` : !d.length ? html`<${Empty} icon="eye-off" title="Пока никто" text="История лежит, сохнет на солнце." />` : d.map(v => { const u = S.users[v.u]; return html`<button class="ci" onClick=${() => { closeModal(id); S.storyView = null; openUser(v.u); }}><${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${40} /><span class="ci-m"><span class="ci-t"><b>${userName(u)}</b><time>${v.e || ''}</time></span><span class="ci-p"><span>${fmtShort(v.ts)}</span></span></span></button>`; })}<//>`;
 }
 export function StoryEditor({ id }) {
   const [st, setSt] = useState({ kind: 'text', text: '', bg: 'leaf', aud: 'all', list: [], file: null, url: null, items: [], color: '#ffffff' });

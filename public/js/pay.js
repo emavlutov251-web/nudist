@@ -18,7 +18,7 @@ function BuyDlg({ id, item, info }) {
   return html`<${Modal} id=${id} title="Покупка" icon="credit-card" footer=${html`<button class="btn ghost" onClick=${() => closeModal(id)}>Отмена</button><button class="btn" disabled=${busy} onClick=${go}>${busy ? 'Открываем оплату…' : `Оплатить ${rub(item.rub)}`}</button>`}>
     <div class="buy">
       <div class="buy-i"><b>${item.title}</b><span class="buy-p">${rub(item.rub)}</span></div>
-      <p>${item.kind === 'premium' ? `Премиум на ${item.days} дней. Разовый платёж: само ничего не продлевается и повторно не списывается.` : `${item.n} листиков зачислятся на ваш счёт. Листики тратятся только внутри «Нудиста» и обратно на рубли не меняются.`}</p>
+      <p>${item.kind === 'plan' ? `Подписка на ${item.days} дней. Разовый платёж: само ничего не продлевается и повторно не списывается.` : `${item.n} листиков зачислятся на ваш счёт. Листики тратятся только внутри «Нудиста» и обратно на рубли не меняются.`}</p>
       <label class="fld"><span>Почта для чека${info.receipt ? '' : ' (необязательно)'}</span><input type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value=${email} onInput=${e => setEmail(e.target.value)} /></label>
       <p class="hint">Оплата проходит на защищённой странице ЮKassa — данные карты мы не видим. Покупка зачисляется автоматически, обычно за минуту. Нажимая «Оплатить», вы принимаете <a href="/offer" target="_blank" rel="noopener">оферту</a>. Вопросы и возврат — <a href="/contacts" target="_blank" rel="noopener">контакты</a>.</p>
       ${!info.enabled && html`<p class="hint buy-off">Оплата картой пока подключается. Как только ЮKassa закончит проверку, кнопка заработает.</p>`}
@@ -34,13 +34,12 @@ export function PayBlock() {
   const [d, setD] = useState(cache);
   useEffect(() => { let live = true; payInfo().then(r => live && setD(r)).catch(() => {}); return () => { live = false; }; }, []);
   if (!d) return html`<div class="payb"><${Spinner} /></div>`;
-  const prem = d.items.filter(i => i.kind === 'premium'), leaves = d.items.filter(i => i.kind === 'leaves');
+  const prem = d.items.filter(i => i.kind === 'plan'), leaves = d.items.filter(i => i.kind === 'leaves');
   const Row = ({ list }) => html`<div class="payb-g">${list.map(i => html`<button class="payb-i" onClick=${() => openModal(BuyDlg, { item: i, info: d })}><b>${i.short}</b><span>${rub(i.rub)}</span></button>`)}</div>`;
   return html`<div class="payb"><h3><${Icon} n="credit-card" s=${17} /> Купить за рубли</h3>
-    <h5>Премиум</h5><${Row} list=${prem} /><h5>Листики</h5><${Row} list=${leaves} />
+    <h5>Подписка на 30 дней</h5><${Row} list=${prem} /><h5>Листики</h5><${Row} list=${leaves} />
     <p class="hint">Оплата через ЮKassa: карты, СБП. <a href="/pay" target="_blank" rel="noopener">Цены и условия</a> · <a href="/offer" target="_blank" rel="noopener">Оферта</a> · <a href="/contacts" target="_blank" rel="noopener">Реквизиты</a></p></div>`;
 }
-export const premPerks = () => (cache && cache.perks) || null;
 
 // Оплата подтверждена, пока приложение открыто
 on('pay.done', () => { local.set('pay.order', ''); toast('Оплата получена — покупка уже у вас. Спасибо!'); try { confetti(); sfx('fanfare'); } catch (e) { /* без фанфар */ } });

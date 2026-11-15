@@ -54,6 +54,7 @@ function invitedBy(u, ref) {
   const inv = db.users[C.byName.get(String(ref).replace(/^@/, '').toLowerCase())];
   if (!inv || inv.bot || inv.deleted || inv.banned || inv.id === u.id) return;
   u.ref = inv.id; inv.invited = (inv.invited || 0) + 1;
+  for (const h of hooks.onInvite) { try { h(inv, u); } catch (e) { console.warn('[invite]', e.message); } }
   const d = C.today(); if (inv.refDay !== d) { inv.refDay = d; inv.refToday = 0; }
   const paid = ++inv.refToday <= REF_DAILY;      // потолок на день, чтобы листики не печатали регистрацией пустышек
   if (paid) inv.stars = (inv.stars || 0) + REF_BONUS;
@@ -79,7 +80,7 @@ function createUser(f) {
   save();
   return u;
 }
-const hooks = { onRegister: [], onLogin: [] };
+const hooks = { onRegister: [], onLogin: [], onInvite: [] };
 function deviceName(ua = '') {
   const os = /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Windows/.test(ua) ? 'Windows' : /Mac OS/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : 'Неизвестная ОС';
   const br = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /YaBrowser/.test(ua) ? 'Яндекс Браузер' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Браузер';

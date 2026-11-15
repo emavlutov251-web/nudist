@@ -99,7 +99,16 @@ function touchDau(uid) { const d = day(), k = today(); if (dauKey !== k) { dauKe
 const byName = new Map(); // username(lower) -> userId
 for (const u of Object.values(db.users)) if (u.username) byName.set(u.username.toLowerCase(), u.id);
 const DEFAULT_PRIVACY = { phone: 'none', lastSeen: 'all', avatar: 'all', bio: 'all', calls: 'all', msgs: 'all', invites: 'all', stories: 'all' };
-const isPremium = u => !!u.premiumUntil && u.premiumUntil > now();
+// Подписка: тарифы plus < pro < max. Старый «Премиум» без тарифа считается тарифом plus. Пробный период (trialUntil) даёт pro поверх того, что есть.
+const TIERS = { plus: 1, pro: 2, max: 3 };
+const isPremium = u => !!u && ((u.premiumUntil || 0) > now() || (u.trialUntil || 0) > now());
+function tierOf(u) {
+  if (!u) return null;
+  let t = (u.premiumUntil || 0) > now() ? (TIERS[u.premiumTier] ? u.premiumTier : 'plus') : null;
+  if ((u.trialUntil || 0) > now() && (!t || TIERS[t] < TIERS.pro)) t = 'pro';
+  return t;
+}
+let cosHook = null, selfHook = null; const setCosHook = f => { cosHook = f; }, setSelfHook = f => { selfHook = f; };      // украшения из магазина (server/shop.js)
 function canSee(u, viewerId, key) {
   if (u.id === viewerId) return true;
   const p = (u.privacy || {})[key] || DEFAULT_PRIVACY[key];
@@ -107,7 +116,7 @@ function canSee(u, viewerId, key) {
 }
 function badges(u) {
   const b = [...(u.badges || [])];
-  if (isPremium(u)) b.push('premium');
+  const tier = tierOf(u); if (tier) b.push(tier === 'plus' ? 'premium' : tier);
   if (u.bot || ROBOTS.has(u.id)) b.push('bot');
   if (u.label && (u.label.t || u.label.e)) b.push({ t: u.label.t, e: u.label.e, c: u.label.c || 0 });      // особый статус от администрации — плашка рядом с именем
   return b;
@@ -123,6 +132,7 @@ function pubUser(u, vid) {
   if (u.profile) o.profile = u.profile;
   if (u.pubKey) o.pubKey = u.pubKey;
   if (u.playing) o.playing = u.playing;
+  if (cosHook && u.cos) { const cos = cosHook(u); if (cos) o.cos = cos; }
   if (u.private && u.id !== vid && !(u.contacts || []).includes(vid)) { delete o.bio; delete o.links; delete o.city; delete o.birthday; o.private = true; }
   return o;
 }
@@ -138,7 +148,7 @@ const canImport = u => !!u && (IMPORTERS.has(u.id) || isOwner(u));
 const ROBOTS = new Set(String(process.env.ROBOTS || '').split(',').map(s => s.trim()).filter(Boolean));
 const POLICY = '2026-11-15';      // редакция политики конфиденциальности (public/privacy.html); сменили текст — смените дату, и приложение спросит согласие заново
 function selfUser(u) {
-  return { ...pubUser(u, u.id), policy: (u.policy || {}).v, policyNeed: POLICY, phone: u.phone, email: u.email, stars: u.stars || 0, premiumUntil: u.premiumUntil, privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, owner: isOwner(u) || undefined, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, private: !!u.private, hideMeta: !!u.hideMeta, lastDaily: u.lastDaily, dailyRun: u.dailyRun || 0, muted: u.muted > now() ? u.muted : undefined, taps: u.tapDay === today() ? u.taps : 0 };
+  return { ...pubUser(u, u.id), policy: (u.policy || {}).v, policyNeed: POLICY, phone: u.phone, email: u.email, stars: u.stars || 0, premiumUntil: Math.max(u.premiumUntil || 0, u.trialUntil || 0) || undefined, tier: tierOf(u) || undefined, ...(selfHook ? selfHook(u) : null), privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, owner: isOwner(u) || undefined, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, private: !!u.private, hideMeta: !!u.hideMeta, lastDaily: u.lastDaily, dailyRun: u.dailyRun || 0, muted: u.muted > now() ? u.muted : undefined, taps: u.tapDay === today() ? u.taps : 0 };
 }
 // Кому рассылать «в сети / изменил профиль»: только тем, кто этого человека действительно видит — собеседникам, контактам
 // и участникам небольших общих чатов и серверов. Рассылка «всем подключённым» на каждое подключение — это N² и смерть при первом же наплыве.
@@ -520,4 +530,4 @@ function viewersOf(o, viewerId, key = 'seen') {
   for (const v of list) users[v.u] = pubUser(db.users[v.u], viewerId);
   return { list, users };
 }
-module.exports = { unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { TIERS, tierOf, setCosHook, setSelfHook, unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

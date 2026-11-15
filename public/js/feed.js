@@ -28,7 +28,7 @@ export function Viewers({ id, title, method, target, none }) {
   const open = u => { closeModal(id); import('./panels.js').then(P => P.showProfile(u)); };
   return html`<${Modal} id=${id} title=${title + (d && d.total ? ' · ' + fmtNum(d.total) : '')} icon="eye">
     ${!d ? html`<${Spinner} />` : !d.list.length ? html`<${Empty} icon="eye" text=${none || 'Пока никто не заглядывал. Всё впереди.'} />` : html`
-      <div class="vw-list">${d.list.map(v => { const u = d.users[v.u]; return html`<button class="vw" key=${v.u} onClick=${() => open(v.u)}><${Avatar} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${36} /><b>${userName(u)} ${u && html`<${Badges} list=${u.badges} s=${14} />`}</b><small>${fmtShort(v.ts)}</small></button>`; })}</div>
+      <div class="vw-list">${d.list.map(v => { const u = d.users[v.u]; return html`<button class="vw" key=${v.u} onClick=${() => open(v.u)}><${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${36} /><b>${userName(u)} ${u && html`<${Badges} list=${u.badges} s=${14} />`}</b><small>${fmtShort(v.ts)}</small></button>`; })}</div>
       <p class="hint center">${d.total > d.list.length ? `Показаны последние ${d.list.length} из ${fmtNum(d.total)}. ` : ''}Этот список видите только вы.</p>`}
   <//>`;
 }
@@ -46,7 +46,7 @@ function Composer({ onPost }) {
     try { const p = await rpc('feed.post', { text, media: pics }); setText(''); setPics([]); onPost(p); } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
   return html`<div class="post feed-new">
-    <div class="feed-new-r"><${Avatar} src=${S.me.avatar} name=${userName(S.me)} color=${S.me.color} s=${40} />
+    <div class="feed-new-r"><${Avatar} u=${S.me} src=${S.me.avatar} name=${userName(S.me)} color=${S.me.color} s=${40} />
       <textarea rows="2" maxlength="2000" placeholder="Что нового? Расскажите всем." value=${text} onInput=${e => setText(e.target.value)}></textarea></div>
     ${pics.length > 0 && html`<div class="feed-pre">${pics.map(u => html`<span key=${u}><img src=${u} alt="" /><button title="Убрать" aria-label="Убрать картинку" onClick=${() => setPics(p => p.filter(x => x !== u))}><${Icon} n="x" s=${13} /></button></span>`)}</div>`}
     <div class="feed-new-f"><button class="btn ghost" disabled=${busy || pics.length >= 4} onClick=${attach}><${Icon} n="image" s=${16} /> Картинка</button>
@@ -63,7 +63,7 @@ function Comments({ post, users, onCount }) {
   };
   const del = async k => { try { const r = await rpc('feed.uncomment', { id: post.id, cid: k.id }); setD(x => ({ ...x, list: x.list.filter(q => q.id !== k.id) })); onCount(r.comments); } catch (e) { toast(e.message, 'err'); } };
   return html`<div class="post-cm">
-    ${!d ? html`<${Spinner} />` : d.list.map(k => { const u = d.users[k.by] || users[k.by]; return html`<div class="post-c" key=${k.id}><${Avatar} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${28} />
+    ${!d ? html`<${Spinner} />` : d.list.map(k => { const u = d.users[k.by] || users[k.by]; return html`<div class="post-c" key=${k.id}><${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${28} />
       <div><b>${userName(u)}</b><small>${fmtShort(k.ts)}</small><p>${k.text}</p></div>
       ${(k.by === S.me.id || post.own) && html`<button class="ib" title="Удалить комментарий" aria-label="Удалить комментарий" onClick=${() => del(k)}><${Icon} n="trash-2" s=${14} /></button>`}</div>`; })}
     <div class="post-ci"><input maxlength="500" placeholder="Комментарий" value=${text} onInput=${e => setText(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter') send(); }} />
@@ -82,7 +82,7 @@ function Post({ p, users, follows, onChange, onDel, onFollow }) {
   const yt = ch && !oldShell() ? ytFind(p.text) : null;      // ролик YouTube из канала играет прямо в ленте, в окне плеера
   const toChannel = () => { if (S.chats[p.chat]) { S.ui.hub = null; openChat(p.chat); bump(); } else if (p.username) import('./panels.js').then(m => openModal(m.JoinPreview, { q: '@' + p.username })); else toast('Канал закрыт', 'err'); };
   return html`<article class="post" ref=${box} data-pid=${p.id}>
-    <header class="post-h"><${Avatar} src=${ch ? p.avatar : u && u.avatar} name=${ch ? p.title : userName(u)} color=${ch ? p.color : u ? u.color : 0} s=${40} />
+    <header class="post-h"><${Avatar} u=${ch ? null : u} src=${ch ? p.avatar : u && u.avatar} name=${ch ? p.title : userName(u)} color=${ch ? p.color : u ? u.color : 0} s=${40} />
       <div class="post-who"><b>${ch ? p.title : userName(u)} ${!ch && u && html`<${Badges} list=${u.badges} s=${14} />`}</b><small>${ch ? 'канал · ' : ''}${fmtShort(p.ts)}</small></div>
       ${!ch && !mine && html`<button class=${cx('btn ghost post-fol', fol && 'on')} onClick=${() => onFollow(p.by, !fol)}><${Icon} n=${fol ? 'user-check' : 'user-plus'} s=${15} /> ${fol ? 'Вы подписаны' : 'Подписаться'}</button>`}
       ${!ch && p.own && html`<button class="ib" title="Удалить запись" aria-label="Удалить запись" onClick=${del}><${Icon} n="trash-2" s=${16} /></button>`}</header>

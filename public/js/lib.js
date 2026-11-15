@@ -192,10 +192,12 @@ export function setSetting(patch, sync = true) {
   try { localStorage.setItem(LS('settings.' + (S.me ? S.me.id : '')), JSON.stringify(S.settings)); } catch (e) { /* переполнено */ }
   applyTheme(); if (sync) pushSettings(); bump();
 }
+export const SKINS = { sand: 'light', forest: 'dark', neon: 'dark', void: 'dark' };
 export function applyTheme() {
   const s = S.settings, r = document.documentElement;
   const sys = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  r.dataset.theme = s.theme === 'system' ? sys : s.theme;
+  const skin = SKINS[s.theme];      // тема из магазина: поверх обычной светлой или тёмной
+  r.dataset.theme = skin || (s.theme === 'system' ? sys : s.theme); if (skin) r.dataset.skin = s.theme; else delete r.dataset.skin;
   r.dataset.style = s.style === 'classic' ? 'classic' : 'fluent';
   // «Авто»: размытие — главная черта оформления, поэтому выключаем его только на совсем слабых устройствах (до 1 ГБ памяти или два ядра):
   // там оно тормозит прокрутку. Раньше порог был 4 ГБ, и на большинстве недорогих телефонов размытия не было вовсе.
@@ -253,19 +255,20 @@ export function Logo({ s = 40, mono }) {
   LEAF.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === 'X') rects.push(html`<rect x=${x} y=${y} width="1.02" height="1.02" fill=${mono ? 'currentColor' : LEAF_TONES[(x * 7 + y * 13 + x * y) % 5]} />`); }));
   return html`<svg class="logo" width=${s} height=${s} viewBox="0 0 13 13" shape-rendering="crispEdges" aria-label="Нудист">${rects}</svg>`;
 }
-export function Avatar({ src, name, color = 0, s = 44, online, saved, deleted, onClick, square, title }) {
+export function Avatar({ src, name, color = 0, s = 44, online, saved, deleted, onClick, square, title, u }) {
+  const fr = u && !saved && !deleted && u.cos && u.cos.f;      // рамка из магазина
   const ini = (name || '?').replace(/[^\p{L}\p{N} ]/gu, '').trim().split(/\s+/).slice(0, 2).map(w => [...w][0] || '').join('').toUpperCase() || '?';
   const vid = src && /\.(mp4|webm)$/.test(src);
-  return html`<span class=${cx('ava', square && 'sq', onClick && 'click')} style=${`width:${s}px;height:${s}px;font-size:${Math.round(s * 0.38)}px;${src ? '' : 'background:' + AV_COLORS[color % 8]}`} onClick=${onClick} title=${title}>
+  return html`<span class=${cx('ava', square && 'sq', onClick && 'click', fr && 'fr fr-' + fr)} style=${`width:${s}px;height:${s}px;font-size:${Math.round(s * 0.38)}px;${src ? '' : 'background:' + AV_COLORS[color % 8]}`} onClick=${onClick} title=${title}>
     ${saved ? html`<${Icon} n="bookmark" s=${Math.round(s * 0.5)} />` : deleted ? html`<${Icon} n="ghost" s=${Math.round(s * 0.5)} />` : vid ? html`<video src=${src} autoplay loop muted playsinline></video>` : src ? html`<img src=${src} alt="" loading="lazy" />` : ini}
     ${online && html`<i class="dot"></i>`}</span>`;
 }
 export function ChatAvatar({ chat, s = 44, online = true }) {
   const i = chatInfo(chat);
   if (chat && chat.server) return html`<span class="ava" style=${`width:${s}px;height:${s}px;background:var(--hover);color:var(--ink2)`}><${Icon} n=${kindIcon(chat.kind)} s=${Math.round(s * 0.5)} /></span>`;
-  return html`<${Avatar} src=${i.avatar} name=${i.title} color=${i.color} s=${s} saved=${i.saved} deleted=${i.user && i.user.deleted} online=${online && i.user && i.user.online && !i.user.bot} />`;
+  return html`<${Avatar} u=${i.user} src=${i.avatar} name=${i.title} color=${i.color} s=${s} saved=${i.saved} deleted=${i.user && i.user.deleted} online=${online && i.user && i.user.online && !i.user.bot} />`;
 }
-const BADGES = { verified: ['badge-check', 'Подтверждённый аккаунт', 'var(--sea)'], premium: ['leaf', 'Нудист Голый Премиум', 'var(--warn)'], bot: ['bot', 'Бот', 'var(--ink3)'], staff: ['shield', 'Команда «Нудиста»', 'var(--accent)'], developer: ['wrench', 'Разработчик', 'var(--ink2)'] };
+const BADGES = { verified: ['badge-check', 'Подтверждённый аккаунт', 'var(--sea)'], premium: ['leaf', 'Нудист Plus', 'var(--warn)'], pro: ['flame', 'Нудист Pro', '#F2622E'], max: ['crown', 'Нудист Max', '#E0A800'], bot: ['bot', 'Бот', 'var(--ink3)'], staff: ['shield', 'Команда «Нудиста»', 'var(--accent)'], developer: ['wrench', 'Разработчик', 'var(--ink2)'] };
 // Особый статус — плашка от администрации; сервер кладёт его в список значков объектом { t, e, c }
 export const LABEL_COLORS = ['Зелёный', 'Синий', 'Фиолетовый', 'Розовый', 'Красный', 'Оранжевый', 'Золотой', 'Графит'];
 export const userLabel = u => ((u && u.badges) || []).find(b => b && typeof b === 'object') || null;
@@ -276,6 +279,8 @@ export function Toggle({ on, onChange, label, hint, disabled }) {
 }
 export function Tabs({ tabs, value, onChange, cls }) { return html`<div class=${cx('tabs', cls)} role="tablist">${tabs.map(([v, l, n]) => html`<button role="tab" aria-selected=${value === v} class=${cx(value === v && 'on')} onClick=${() => onChange(v)}>${l}${n ? html`<b>${n}</b>` : ''}</button>`)}</div>`; }
 export function Empty({ icon = 'leaf', title, text, children }) { return html`<div class="empty"><div class="empty-i"><${Icon} n=${icon} s=${34} /></div>${title && html`<h3>${title}</h3>`}${text && html`<p>${text}</p>`}${children}</div>`; }
+// Имя человека; если надет цвет имени из магазина — с переливом.
+export function Nm({ u, name }) { const g = u && !u.deleted && u.cos && u.cos.g, n = name || userName(u); return g ? html`<span class="gname" style=${'--g:linear-gradient(90deg,' + g.join(',') + ')'}>${n}</span>` : n; }
 export function Spinner() { return html`<div class="spin"><${Logo} s=${28} /></div>`; }
 export function useAsync(fn, deps = []) {
   const [st, setSt] = useState({ loading: true });
