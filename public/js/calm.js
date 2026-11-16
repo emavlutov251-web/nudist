@@ -23,12 +23,13 @@ export function MoodAsk() {
     <button class="ib sm" title="Скрыть" aria-label="Скрыть" onClick=${e => showMenu(e, [{ icon: 'x', label: 'Скрыть на сегодня', run: () => { local.set('mood.skip', today()); bump(); } }, { icon: 'eye-off', label: 'Больше не спрашивать', hint: 'вернуть можно в «Выдохнуть»', run: () => setSetting({ moodAsk: false }) }], { anchor: e.currentTarget })}><${Icon} n="x" s=${15} /></button></div>`;
 }
 
+const clearMood = async () => { if (!(await confirmDlg({ title: 'Очистить дневник настроения?', text: 'Все отметки сотрутся навсегда. Вернуть их будет нельзя.', ok: 'Очистить', danger: true }))) return; try { const r = await rpc('mood.clear'); M.days = r.days || {}; bump(); toast('Дневник очищен'); } catch (e) { toast(e.message, 'err'); } };
 function MoodCal() {
   const days = M.days || {}, cells = [], now = new Date(), start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 34);
   for (let i = 0; i < 35; i++) { const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i), k = dayKey(d); cells.push({ k, n: d.getDate(), v: days[k], t: k === today() }); }
   const marked = Object.keys(days).length;
   return html`<div class="mood-cal">${cells.map(c => html`<span key=${c.k} class=${cx(c.t && 'now', c.v && 'has')} title=${c.k.split('-').reverse().join('.')}>${c.v ? EM[c.v] : c.n}</span>`)}</div>
-    <p class="hint">Последние пять недель. ${marked ? `Отмечено дней: ${marked}.` : 'Пока пусто — отметьте сегодняшний день.'} Дневник видите только вы: ни друзьям, ни администрации он не показывается.</p>`;
+    <p class="hint">Последние пять недель. ${marked ? `Отмечено дней: ${marked}.` : 'Пока пусто — отметьте сегодняшний день.'} Дневник видите только вы: ни друзьям, ни администрации он не показывается.${marked > 0 && html` <a role="button" tabindex="0" class="mood-clear" onClick=${clearMood}>Очистить дневник</a>`}</p>`;
 }
 
 function Calm({ id }) {
@@ -93,6 +94,10 @@ function CapsuleDlg({ id, chat }) {
   const iso = d => dayKey(d) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()), plus = (y, m, d) => { const x = new Date(); x.setFullYear(x.getFullYear() + y, x.getMonth() + m, x.getDate() + d); x.setHours(12, 0, 0, 0); return x; };
   const ny = () => { const x = new Date(); return new Date(x.getFullYear() + 1, 0, 1, 0, 5); };
   const [at, setAt] = useState(iso(plus(1, 0, 0)));
+  /* Мои капсулы: кому и когда откроются. Текст до срока не показывается никому, даже автору; капсулу можно отменить. */
+  const [mine, setMine] = useState(null), loadMine = () => rpc('capsule.list').then(setMine).catch(() => setMine({ list: [], max: 10 }));
+  useEffect(() => { loadMine(); }, []);
+  const cancel = async x => { if (!(await confirmDlg({ title: 'Отменить капсулу?', text: 'Запечатанное сообщение исчезнет из чата у обоих. Прочитать его уже не получится.', ok: 'Отменить капсулу', danger: true }))) return; try { await rpc('capsule.cancel', { chat: x.chat, id: x.id }); toast('Капсула отменена'); loadMine(); } catch (e) { toast(e.message, 'err'); } };
   const PRE = [['Через неделю', plus(0, 0, 7)], ['Через месяц', plus(0, 1, 0)], ['Через год', plus(1, 0, 0)], ['На Новый год', ny()]];
   const send = async () => {
     const t = new Date(at).getTime(); if (!text.trim()) return toast('Напишите, что будет внутри', 'err'); if (!(t > 0)) return toast('Выберите день', 'err');
@@ -105,7 +110,8 @@ function CapsuleDlg({ id, chat }) {
     <label class="fld"><span>Что внутри</span><textarea rows="5" maxlength="2000" value=${text} placeholder="Надеюсь, ты сейчас счастлив…" onInput=${e => setText(e.target.value)}></textarea></label>
     <div class="chips">${PRE.map(([n, d]) => html`<button key=${n} class=${cx('chip', iso(d) === at && 'on')} onClick=${() => setAt(iso(d))}>${n}</button>`)}</div>
     <label class="fld"><span>Когда откроется</span><input type="datetime-local" value=${at} onInput=${e => setAt(e.target.value)} /></label>
-    <${Toggle} label="Разрешить открыть раньше срока" hint="Адресат сможет распечатать капсулу досрочно за 300 🍃. Листики сгорают, вам они не приходят. Выключите — и капсула откроется только в назначенный день" on=${early} onChange=${setEarly} /><//>`;
+    <${Toggle} label="Разрешить открыть раньше срока" hint="Адресат сможет распечатать капсулу досрочно за 300 🍃. Листики сгорают, вам они не приходят. Выключите — и капсула откроется только в назначенный день" on=${early} onChange=${setEarly} />
+    ${mine && mine.list.length > 0 && html`<div class="cap-mine"><h5>Ваши капсулы · ${mine.list.length} из ${mine.max}</h5>${mine.list.slice().sort((a, b) => a.at - b.at).map(x => html`<div class="cap-row" key=${x.id}><span><b>${userName(S.users[x.to]) || 'Собеседник'}</b><small>откроется ${new Date(x.at).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</small></span><button class="btn sm ghost" onClick=${() => cancel(x)}>Отменить</button></div>`)}</div>`}<//>`;
 }
 export const openCapsule = chat => openModal(CapsuleDlg, { chat });
 /** Карточка под сообщением-капсулой: сколько осталось и отмена для автора. */

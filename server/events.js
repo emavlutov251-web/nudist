@@ -10,7 +10,10 @@ const Gifts = require('./gifts');
 const { db, save, need, str, id: newId } = C;
 const H = R.H;
 
-const SHIFT = process.env.EVENTS_NOW ? (Date.parse(process.env.EVENTS_NOW) || Date.now()) - Date.now() : 0;
+// На рабочем сервере (NODE_ENV=production) сдвиг часов не действует: это переменная только для проверок.
+const PROD = process.env.NODE_ENV === 'production';
+if (PROD && process.env.EVENTS_NOW) console.error('[events] EVENTS_NOW задана на рабочем сервере — не применяю: события идут по настоящему календарю');
+const SHIFT = process.env.EVENTS_NOW && !PROD ? (Date.parse(process.env.EVENTS_NOW) || Date.now()) - Date.now() : 0;
 const T = () => Date.now() + SHIFT;
 const MSK = 3 * 3600e3, DAY = 864e5;
 const at = (y, m, d, h = 0) => Date.UTC(y, m - 1, d, h) - MSK;      // московское время → метка

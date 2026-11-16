@@ -83,7 +83,7 @@ H['pack.popular'] = c => {
 };
 H['pack.list'] = c => ({ packs: mine(db.users[c.uid]).map(id => view(db.packs[id])) });
 H['pack.get'] = (c, p) => { const u = db.users[c.uid], k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); const o = ownerOf(k); return { pack: view(k), mine: mine(u).includes(k.id), state: stateOf(k, u), open: !!k.open, owner: o ? { id: o.id, name: nameOfUser(o) } : null, asks: k.by === u.id ? Object.keys(k.asks || {}).filter(id => db.users[id] && !db.users[id].deleted).map(id => ({ user: C.pubUser(db.users[id]), ts: k.asks[id] })) : undefined }; };
-H['pack.add'] = (c, p) => { const u = db.users[c.uid], k = db.packs[str(p.id, 40)]; need(k, 'Набор не найден'); need(free(k, u), 'Этот набор принёс другой человек. Сначала попросите у него разрешение.'); attach(u, k); return { pack: view(k) }; };
+// pack.add убран: набор добавляет pack.ask (если набор открыт или хозяин уже разрешил — сразу, иначе спрашивает хозяина).
 // Попросить набор у хозяина. Хозяину приходит сообщение от служебного бота с кнопками «Разрешить» и «Отказать»; запрос виден и в окне «Добавить стикеры».
 function ask(u, k) {
   if (free(k, u)) { attach(u, k); return { pack: view(k) }; }

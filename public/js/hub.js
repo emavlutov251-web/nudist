@@ -376,6 +376,16 @@ export async function openDuel(duelId) {
   try { const d = await rpc('duel.get', { id: duelId }); if (!d.url) return toast('Эта игра сейчас недоступна', 'err'); openModal(AppFrame, { app: { id: d.app, title: d.name, url: d.url }, chat: null, duel: d }); }
   catch (e) { toast(e.message, 'err'); }
 }
+// Таблица рекордов игры: первая десятка и своё место. У обычных игр — за неделю, у игр события — за событие.
+const BOARD = ['catch', 'run', 'pairs'];
+function Records({ id, app }) {
+  const [d, setD] = useState(null), [err, setErr] = useState('');
+  useEffect(() => { rpc('apps.top', { app: app.id, t: new URLSearchParams(String(app.url || '').split('?')[1] || '').get('t') || '' }).then(r => { for (const x of r.top) S.users[x.user.id] = { ...S.users[x.user.id], ...x.user }; setD(r); }, e => setErr(e.message)); }, []);
+  return html`<${Modal} id=${id} title=${'Рекорды · ' + app.title} icon="crown" cls="small" footer=${html`<button class="btn" onClick=${() => closeModal(id)}>Понятно</button>`}>
+    ${err ? html`<p class="err" role="alert">${err}</p>` : !d ? html`<${Spinner} />` : !d.top.length ? html`<p class="hint">Пока никто не сыграл. Первое место свободно.</p>` : html`
+      <div class="rec-list">${d.top.map((x, i) => html`<div class=${cx('rec-row', x.user.id === S.me.id && 'me')} key=${x.user.id}><i>${i + 1}</i><${Avatar} u=${x.user} src=${x.user.avatar} name=${userName(x.user)} color=${x.user.color} s=${30} /><b>${userName(x.user)}</b><em>${x.n}</em></div>`)}</div>
+      <p class="hint">${d.place ? `Ваше место: ${d.place} из ${d.n}, лучший результат — ${d.best}.` : `Вы ещё не в таблице. Играют: ${d.n}.`} Таблица обычной игры обновляется каждую неделю.</p>`}<//>`;
+}
 function AppFrame({ id, app, chat, duel }) {
   const fr = useRef(), [res, setRes] = useState(null), [dv, setDv] = useState(duel || null), [busy, setBusy] = useState(false), live = useRef({});
   live.current = { dv, busy };
@@ -422,7 +432,7 @@ function AppFrame({ id, app, chat, duel }) {
     : dv && !dv.done ? html`<div class="duel-bar"><span>⚔️ Вызов отправлен: <b>${dv.bn}</b> ещё не ответил(а). Ваш результат — ${n2(dv.sa, D[1])} ${D[0]}.</span></div>`
     : dv && res == null ? html`<div class=${cx('duel-bar', won > 0 ? 'win' : won < 0 ? 'lose' : '')}><span>${won > 0 ? '🏆 Победа!' : won < 0 ? '🥲 Поражение.' : '🤝 Ничья.'} ${mineB ? dv.sb : dv.sa} против ${mineB ? dv.sa : dv.sb} ${D[0]}</span>${mineB && html`<button class="btn sm" disabled=${busy} onClick=${() => challenge(dv.a, dv.sb)}>Реванш</button>`}</div>`
     : res != null ? html`<div class="duel-bar two"><span>Ваш результат: <b>${n2(res, D[1])}</b> ${D[0]}</span><button class="btn sm" onClick=${together}>🎮 С другом</button><button class="btn sm ghost" disabled=${busy} title="Друг сыграет позже и попробует побить ваш результат" onClick=${() => challenge(null, res)}>⚔️ Вызов</button></div>`
-    : html`<div class="duel-bar"><span>Вдвоём веселее</span><button class="btn sm" onClick=${together}>🎮 Играть с другом</button></div>`;
+    : html`<div class="duel-bar two"><span>Вдвоём веселее</span>${BOARD.includes(app.id) && html`<button class="btn sm ghost" title="Рекорды недели" aria-label="Рекорды недели" onClick=${() => openModal(Records, { app })}>🏆</button>`}<button class="btn sm" onClick=${together}>🎮 Играть с другом</button></div>`;
   return html`<${Modal} id=${id} title=${app.title} icon="app-window" cls="miniapp nopad"><div class="miniapp-col"><iframe ref=${fr} title=${app.title} src=${app.url} sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer"></iframe>${bar}</div><//>`;
 }
 // Каталог: и вкладка, и окно из «скрепки» в чате.

@@ -31,7 +31,9 @@ Cloud.setDbId(db.meta.dbId);
 // чтобы запись занимала не больше ~5% времени процесса и не тормозила переписку.
 let saveTimer = null, saving = false, dirty = false, saveCost = 0;
 const saveDelay = () => Math.min(60000, Math.max(500, Math.round(saveCost * 20)));
-function save() { dirty = true; if (!saveTimer) saveTimer = setTimeout(flush, saveDelay()); }
+let dirtySince = 0;      // с какого момента в памяти лежит несохранённое: видно в /api/health (db.unsavedMs)
+function save() { if (!dirty) dirtySince = Date.now(); dirty = true; if (!saveTimer) saveTimer = setTimeout(flush, saveDelay()); }
+const unsavedMs = () => (dirty ? Date.now() - dirtySince : 0);
 function flush() {
   saveTimer = null;
   if (saving) { saveTimer = setTimeout(flush, 200); return; }
@@ -553,4 +555,4 @@ function senior(scope, rankOf, actor, key, what, peek) {
 }
 const CHAT_RANK = { owner: 3, admin: 2, mod: 1, member: 0 };
 const chatRank = ch => uid => CHAT_RANK[((ch.members || {})[uid] || {}).role] || 0;
-module.exports = { pubRead, setNoHook, setShopHooks, collection, senior, chatRank, CHAT_RANK, canGrant, TIERS, tierOf, setCosHook, setSelfHook, unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { unsavedMs, pubRead, setNoHook, setShopHooks, collection, senior, chatRank, CHAT_RANK, canGrant, TIERS, tierOf, setCosHook, setSelfHook, unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

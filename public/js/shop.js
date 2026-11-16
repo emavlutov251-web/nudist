@@ -142,6 +142,7 @@ function ShopModal({ id, tab: tab0 }) {
       ${tab === 'leaves' && html`
         <div class="shop-packs">${d.packs.map(p => { const best = p.bonus > 0 && p.bonus === Math.max(...d.packs.map(x => x.bonus)); return html`<button class=${cx('shop-pack', best && 'best')} key=${p.id} onClick=${() => buyItem(p.id)}>${best && html`<em>выгоднее всего</em>`}<b>${num(p.stars)} 🍃</b><span>${p.rub} ₽</span>${p.bonus > 0 && html`<i title="Листиков за рубль больше, чем в самом маленьком наборе">+${p.bonus} %</i>`}</button>`; })}</div>
         <p class="hint">Оплата через ЮKassa: карты, СБП. Листики тратятся только внутри «Нудиста» и обратно на рубли не меняются. <a href="/pay" target="_blank" rel="noopener">Цены и условия</a> · <a href="/offer" target="_blank" rel="noopener">Оферта</a></p>
+        <${Orders} />
         <h4 class="shop-h">Бесплатно</h4>
         <ul class="shop-free"><li>Ежедневный бонус и «Листопад» — в окне «Листики».</li><li>Задания сезона — на соседней вкладке.</li><li>Позовите друга: 100 🍃 обоим и ${d.cashback.pct} % листиками с его покупок в магазине${d.cashback.got ? ` (уже вернулось ${num(d.cashback.got)} 🍃)` : ''}.</li></ul>`}
       ${tab === 'gifts' && html`<${GiftMarket} /><${TipTop} />`}
@@ -166,14 +167,25 @@ function ShopModal({ id, tab: tab0 }) {
 }
 // ───── чаевые
 export const openTip = (chat, m) => openModal(TipDlg, { chat, m });
+const TIP = { amounts: [10, 50, 100, 500, 1000], fee: 5, min: 10, max: 10000 };      /* fee — комиссия в процентах, как её отдаёт сервер */
 function TipDlg({ id, chat, m }) {
-  const [n, setN] = useState(50), [busy, setBusy] = useState(false), u = S.users[m.from] || {}, have = S.me.stars || 0, v = Math.floor(Number(n) || 0), fee = Math.ceil(v * 0.05);
+  /* Суммы, комиссию и пределы сообщает сервер (tip.info): поменяются там — здесь цифры не разойдутся. До ответа — прежние значения. */
+  const [T, setT] = useState(TIP); useEffect(() => { rpc('tip.info').then(r => { Object.assign(TIP, r); setT({ ...TIP }); }).catch(() => {}); }, []);
+  const [n, setN] = useState(50), [busy, setBusy] = useState(false), u = S.users[m.from] || {}, have = S.me.stars || 0, v = Math.floor(Number(n) || 0), fee = Math.ceil(v * T.fee / 100), pct = T.fee;
   const send = async () => { if (busy) return; setBusy(true); try { const r = await rpc('tip.send', { chat: chat.id, id: m.id, n: v }); toast(`Чаевые отправлены: ${userName(u)} получит ${num(r.got)} 🍃`); sfx('coin'); closeModal(id); } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); } };
-  return html`<${Modal} id=${id} title="Чаевые автору" icon="coins" cls="small" footer=${html`<button class="btn ghost" onClick=${() => closeModal(id)}>Отмена</button><button class="btn" disabled=${busy || v < 10 || v > have} onClick=${send}>Отправить ${num(v)} 🍃</button>`}>
+  return html`<${Modal} id=${id} title="Чаевые автору" icon="coins" cls="small" footer=${html`<button class="btn ghost" onClick=${() => closeModal(id)}>Отмена</button><button class="btn" disabled=${busy || v < T.min || v > T.max || v > have} onClick=${send}>Отправить ${num(v)} 🍃</button>`}>
     <div class="gift-to"><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${36} /><span>Поддержать: <b>${userName(u)}</b></span><em>у вас ${num(have)} 🍃</em></div>
-    <div class="tip-a">${[10, 50, 100, 500, 1000].map(x => html`<button class=${cx(v === x && 'on')} onClick=${() => setN(x)}>${num(x)}</button>`)}</div>
-    <label class="fld"><span>Своя сумма</span><input type="number" min="10" max="10000" value=${n} onInput=${e => setN(e.target.value)} /></label>
-    <p class=${cx('hint', v > have && 'err')}>${v > have ? `Не хватает ${num(v - have)} 🍃.` : v < 10 ? 'Чаевые — от 10 🍃.' : `Автор получит ${num(v - fee)} 🍃, комиссия 5 % — ${num(fee)} 🍃. На сообщении появится отметка 💰, в чат ничего не напишется.`}</p><//>`;
+    <div class="tip-a">${T.amounts.map(x => html`<button class=${cx(v === x && 'on')} onClick=${() => setN(x)}>${num(x)}</button>`)}</div>
+    <label class="fld"><span>Своя сумма</span><input type="number" min=${T.min} max=${T.max} value=${n} onInput=${e => setN(e.target.value)} /></label>
+    <p class=${cx('hint', v > have && 'err')}>${v > have ? `Не хватает ${num(v - have)} 🍃.` : v < T.min ? `Чаевые — от ${T.min} 🍃.` : v > T.max ? `Не больше ${num(T.max)} 🍃 за раз.` : `Автор получит ${num(v - fee)} 🍃, комиссия ${String(pct).replace('.', ',')} % — ${num(fee)} 🍃. На сообщении появится отметка 💰, в чат ничего не напишется.`}</p><//>`;
+}
+// История покупок за рубли: что оплачено, когда и номер заказа — чтобы спорный платёж не разбирать вслепую. Пока покупок нет, блока нет.
+function Orders() {
+  const [d, setD] = useState(null);
+  useEffect(() => { rpc('pay.orders').then(setD).catch(() => setD({ list: [] })); }, []);
+  if (!d || !d.list.length) return null;
+  const ST = { paid: 'оплачен', refunded: 'возвращён', canceled: 'отменён' };
+  return html`<h4 class="shop-h">История покупок</h4><div class="orders">${d.list.map(o => html`<div class="ord" key=${o.id}><span><b>${o.title || o.item}</b><small>заказ № ${o.id} · ${new Date(o.ts).toLocaleString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</small></span><em class=${cx(o.status !== 'paid' && 'dim')}>${num(o.rub)} ₽ · ${ST[o.status] || o.status}</em></div>`)}</div>`;
 }
 function TipTop() {
   const [d, setD] = useState(null);

@@ -1,4 +1,4 @@
-const fs=require('fs'),path=require('path');const dir='/home/user/nudist/public/js';
+const fs=require('fs'),path=require('path');const dir=path.join(__dirname,'..','public','js');
 const lucide=new Set(fs.readdirSync('node_modules/lucide-static/icons').map(f=>f.replace('.svg','')));
 const cur=fs.readFileSync(dir+'/icons.js','utf8');const have=Object.keys(JSON.parse(cur.slice(cur.indexOf('=')+1).replace(/;\s*$/,'')));
 const names=new Set(have);const extra=process.argv.slice(2);extra.forEach(n=>names.add(n));

@@ -8,7 +8,12 @@ BT="$SDK/build-tools/34.0.0"; JAR="$SDK/platforms/android-34/android.jar"
 # JDK 11 или 17: с JDK 21 падает d8 из build-tools 34 (NullPointerException на анонимных классах).
 if [ -n "${JDK_HOME:-}" ]; then export JAVA_HOME="$JDK_HOME" PATH="$JDK_HOME/bin:$PATH"; elif [ -d /usr/lib/jvm/jdk-11 ]; then export JAVA_HOME=/usr/lib/jvm/jdk-11 PATH="/usr/lib/jvm/jdk-11/bin:$PATH"; fi
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
-VERSION_CODE="${VERSION_CODE:-7}"; VERSION_NAME="${VERSION_NAME:-1.6}"
+# Номер версии один на всё: APP_VERSION в MainActivity.java (его же приложение сообщает серверу, с ним сверяется public/apk.json).
+# 16 → versionCode 16, versionName 1.6. Сборка 1.6, которая уже разошлась, вышла с versionCode 7 — любая следующая её перекроет.
+APPV="$(sed -n 's/.*APP_VERSION = \([0-9][0-9]*\);.*/\1/p' src/ru/nudist/app/MainActivity.java | head -1)"
+[ -n "$APPV" ] || { echo "Не нашёл APP_VERSION в MainActivity.java"; exit 1; }
+VERSION_CODE="${VERSION_CODE:-$APPV}"; VERSION_NAME="${VERSION_NAME:-${APPV%?}.${APPV#"${APPV%?}"}}"
+if [ -f ../public/apk.json ]; then J="$(sed -n 's/.*"code": *\([0-9][0-9]*\).*/\1/p' ../public/apk.json | head -1)"; [ "$J" = "$APPV" ] || echo "ВНИМАНИЕ: в public/apk.json версия ${J:-?}, а собирается $APPV — поправьте apk.json, иначе окно обновления покажется не тем."; fi
 # SERVER_URL=https://… вшивает адрес сервера: приложение открывает его сразу, без экрана настройки.
 SERVER_URL="${SERVER_URL:-}"
 # MIGRATE_FROM=https://старый-адрес[,ещё-один] — прежние адреса сервера: приложение, настроенное на них, само перейдёт на SERVER_URL и перенесёт вход.
@@ -16,10 +21,13 @@ MIGRATE_FROM="${MIGRATE_FROM:-}"
 case "$MIGRATE_FROM" in *[\<\>\&\"\']*) echo "В MIGRATE_FROM недопустимые символы"; exit 1;; esac
 case "$SERVER_URL" in *[\<\>\&\"\']*) echo "В SERVER_URL недопустимые символы"; exit 1;; esac
 cp -r res "$W/res"
+# Сборка с вшитым https-адресом не ходит по открытому http вообще; без вшитого адреса (свой сервер в домашней сети) http остаётся разрешён.
+cp AndroidManifest.xml "$W/AndroidManifest.xml"
+case "$SERVER_URL" in https://*) sed -i 's/android:usesCleartextTraffic="true"/android:usesCleartextTraffic="false"/' "$W/AndroidManifest.xml";; esac
 printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="default_server" translatable="false">%s</string>\n    <string name="migrate_from" translatable="false">%s</string>\n</resources>\n' "$SERVER_URL" "$MIGRATE_FROM" > "$W/res/values/server.xml"
 
 "$BT/aapt2" compile --dir "$W/res" -o "$W/res.zip"
-"$BT/aapt2" link -o "$W/app.apk" -I "$JAR" --manifest AndroidManifest.xml --java "$W/gen" \
+"$BT/aapt2" link -o "$W/app.apk" -I "$JAR" --manifest "$W/AndroidManifest.xml" --java "$W/gen" \
   --min-sdk-version 26 --target-sdk-version 34 --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" "$W/res.zip"
 mkdir -p "$W/classes" "$W/dex"
 javac -encoding UTF-8 -Xlint:-options -source 8 -target 8 -bootclasspath "$JAR" -d "$W/classes" $(find src "$W/gen" -name '*.java')
@@ -27,9 +35,11 @@ javac -encoding UTF-8 -Xlint:-options -source 8 -target 8 -bootclasspath "$JAR" 
 (cd "$W/dex" && zip -q -j "$W/app.apk" classes.dex)
 "$BT/zipalign" -f -p 4 "$W/app.apk" "$W/aligned.apk"
 # Ключ подписи: один и тот же для всех сборок, иначе обновление не встанет поверх старой версии.
-[ -f nudist.keystore ] || keytool -genkeypair -keystore nudist.keystore -storepass nudist-leaf -keypass nudist-leaf -alias nudist \
+# Пароль хранилища — только из переменной NUDIST_KEYSTORE_PASS (в репозитории его нет). Нет файла nudist.keystore — создаётся новый ключ с этим паролем.
+KS_PASS="${NUDIST_KEYSTORE_PASS:?Задайте пароль хранилища ключа: NUDIST_KEYSTORE_PASS=… ./build.sh}"
+[ -f nudist.keystore ] || keytool -genkeypair -keystore nudist.keystore -storepass "$KS_PASS" -keypass "$KS_PASS" -alias nudist \
   -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Nudist, O=Nudist, C=RU" >/dev/null 2>&1
-"$BT/apksigner" sign --ks nudist.keystore --ks-pass pass:nudist-leaf --key-pass pass:nudist-leaf --out nudist-android.apk "$W/aligned.apk"
+"$BT/apksigner" sign --ks nudist.keystore --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" --out nudist-android.apk "$W/aligned.apk"
 rm -f nudist-android.apk.idsig
 "$BT/apksigner" verify --verbose nudist-android.apk | head -5
 "$BT/aapt2" dump badging nudist-android.apk | grep -E "^package|sdkVersion|application-label:|uses-permission|launchable"

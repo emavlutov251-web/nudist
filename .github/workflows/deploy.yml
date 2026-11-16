@@ -7,8 +7,9 @@ on:
     paths:
       - 'server/**'
       - 'public/**'
-      - 'scripts/smoke.js'
-      - 'scripts/security-test.js'
+      - 'scripts/**'
+      - 'ENV.md'
+      - 'README.md'
       - 'deploy/**'
       - 'package.json'
       - 'Dockerfile'
@@ -37,10 +38,14 @@ jobs:
         run: |
           for f in server/*.js; do node --check "$f"; done
           for f in public/js/*.js; do cp "$f" /tmp/check.mjs && node --check /tmp/check.mjs || { echo "::error file=$f::синтаксическая ошибка"; exit 1; }; done
+      - name: Целостность проекта (библиотеки на месте, методы интерфейса есть на сервере, переменные описаны, версия Android)
+        run: node scripts/check-project.js
       - name: Главный путь (регистрация, вход, WebSocket, файлы)
         run: node scripts/smoke.js
       - name: Безопасность (чужие чаты, админка, файлы, вход, первый запуск)
         run: node scripts/security-test.js
+      - name: Механики (листики, магазин, энергия, капсулы, чаевые, рекорды, лобби, лента, сброс пароля)
+        run: node scripts/mechanics-test.js
       - name: Docker-образ собирается и запускается
         run: |
           docker build -t nudist:ci .

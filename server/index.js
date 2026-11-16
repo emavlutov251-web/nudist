@@ -95,6 +95,23 @@ function serveStatic(req, res, rel) {
     h['content-length'] = stt.size; res.writeHead(200, h); fs.createReadStream(file).pipe(res);
   });
 }
+// Главная страница: картинка для ссылок (og:image) должна быть с полным адресом сайта. Адрес берём из SITE_URL, а без него — из запроса,
+// чтобы при смене домена превью в соцсетях не продолжало показывать на старый адрес.
+const SITE_PUB = (process.env.SITE_URL || '').replace(/\/+$/, ''), indexCache = new Map();
+function serveIndex(req, res) {
+  const file = path.join(PUBLIC, 'index.html'); let st; try { st = fs.statSync(file); } catch (e) { return serveStatic(req, res, 'index.html'); }
+  const host = String(req.headers.host || '').replace(/[^\w.:-]/g, ''), origin = SITE_PUB || (host ? (/^(localhost|127\.|\d+\.\d+\.\d+\.\d+:)/.test(host) ? 'http' : 'https') + '://' + host : '');
+  const key = origin + '|' + st.mtimeMs; let c = indexCache.get(key);
+  if (!c) {
+    if (indexCache.size > 20) indexCache.clear();
+    const raw = Buffer.from(fs.readFileSync(file, 'utf8').replace(/(<meta property="og:image" content=")[^"]*(")/, (m, a, b) => a + origin + '/og.png' + b));
+    c = { raw, gz: zlib.gzipSync(raw, { level: 9 }), etag: `"${raw.length}-${Math.round(st.mtimeMs)}-${crypto.createHash('md5').update(origin).digest('hex').slice(0, 6)}"` }; indexCache.set(key, c);
+  }
+  const h = { 'content-type': MIME.html, etag: c.etag, 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff', 'content-security-policy': CSP, 'referrer-policy': 'no-referrer', vary: 'accept-encoding' };
+  if (req.headers['if-none-match'] === c.etag) { res.writeHead(304, h); return res.end(); }
+  const gz = /\bgzip\b/.test(req.headers['accept-encoding'] || ''), body = gz ? c.gz : c.raw; if (gz) h['content-encoding'] = 'gzip'; h['content-length'] = body.length;
+  res.writeHead(200, h); res.end(req.method === 'HEAD' ? undefined : body);
+}
 // ───── офлайн-кеш оболочки (service worker)
 // Браузер один раз скачивает все файлы интерфейса и дальше открывает приложение с диска, без единого запроса за кодом.
 // Версия — хеш содержимого: после выкладки новой версии браузер сам докачает её в фоне и предложит обновиться.
@@ -191,7 +208,7 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/u/')) return serveUpload(req, res, p.slice(3));
     if (p === '/api/upload' && req.method === 'POST') return handleUpload(req, res);
     if (p === '/api/notify' && req.method === 'GET') { const a = sessionOf(req); if (a) { try { A.limit('notify:' + a.u.id, 90, 60000); } catch (e) { return json(res, 429, { error: 'Слишком часто' }); } } return Push.poll(req, res, url, a, json); }      // лента уведомлений для приложения на Android
-    if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined, mirror: Cloud.mirrorStatus(), files: (u => u ? { mb: Math.round(u.bytes / 1048576), maxMb: Math.round(u.max / 1048576), count: u.files } : undefined)(Cloud.usage()) });
+    if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, db: { mb: Math.round((C.metrics.dbBytes || 0) / 104857.6) / 10, saveMs: C.metrics.saveMs || 0, unsavedMs: C.unsavedMs() }, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined, mirror: Cloud.mirrorStatus(), files: (u => u ? { mb: Math.round(u.bytes / 1048576), maxMb: Math.round(u.max / 1048576), count: u.files } : undefined)(Cloud.usage()) });
     if (p === '/api/version') return json(res, 200, { build: buildVer(), apk: Push.apkInfo(), cc: countryOf(req) });      // что сейчас выложено: интерфейс и сборка для Android
     if (p === '/api/config') return json(res, 200, { flags: A.pubFlags(), setup: A.setupNeeded() || undefined, tg: Tg.botName() || undefined, name: 'Нудист', version: '1.0.0' });
     if (p === '/api/clientlog' && req.method === 'POST') {      // телефон сообщает, почему приложение не запустилось
@@ -215,7 +232,7 @@ const server = http.createServer(async (req, res) => {
     if (hm && req.method === 'POST') { A.limit('hook:' + hm[1], 30, 10000); const m = G.runHook(hm[1], hm[2], await readJson(req)); return json(res, 200, { ok: true, id: m.id }); }
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'method not allowed' });
     if (p === '/sw.js') return serveSw(req, res);
-    if (p === '/' || p === '/index.html') return serveStatic(req, res, 'index.html');
+    if (p === '/' || p === '/index.html') return serveIndex(req, res);
     if (p === '/admin' || p === '/admin/') return serveStatic(req, res, 'admin.html');
     if (/^\/(start|download)\/?$/.test(p)) return serveStatic(req, res, 'start.html');
     if (/^\/(privacy|policy)\/?$/.test(p)) return serveStatic(req, res, 'privacy.html');      // политика конфиденциальности   // страница для новых людей: скачать APK

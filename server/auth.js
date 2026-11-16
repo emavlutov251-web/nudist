@@ -45,7 +45,6 @@ function limit(key, n, ms) {
   arr.push(t); buckets.set(key, arr);
 }
 setInterval(() => { const t = now() - 3600e3; for (const [k, arr] of buckets) if (!arr.length || arr[arr.length - 1] < t) buckets.delete(k); }, 600e3).unref();
-setInterval(() => { const t = now(); for (const [k, a] of buckets) if (!a.length || a[a.length - 1] < t - 3600e3) buckets.delete(k); }, 600e3).unref();
 
 // ───── пользователи и сессии
 const AVA_COLORS = 8;

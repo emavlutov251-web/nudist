@@ -966,7 +966,7 @@ H['stars.send'] = (c, p) => {
   return { stars: u.stars, chat: ch.id, msg: m.id };
 };
 H['stars.history'] = c => { const u = user(c), list = (u.leafLog || []).slice(0, SHARE.keep); return { list, users: usersFor(c, list.map(r => r.to || r.from)), max: SHARE.max }; };
-H['premium.buy'] = c => { const u = user(c); spend(u, PREMIUM_PRICE, 'Листики копятся в мини-игре «Листопад», ежедневным бонусом и приглашениями друзей.'); u.premiumUntil = Math.max(u.premiumUntil || 0, now()) + 30 * 864e5; save(); selfUpdate(u); C.broadcastUser(u); return { until: u.premiumUntil }; };
+// premium.buy живёт в server/shop.js (покупка тарифа Plus): здесь была старая копия с другими правилами.
 H['fun.buzz'] = (c, p) => { const ch = getChat(c, p.chat); need(ch.type === 'dm' || ch.type === 'group', 'Пинать можно только в личке и группах'); A.limit('buzz:' + c.uid + ch.id, 1, 15000); for (const u of membersOf(ch)) emit(u, 'buzz', { chat: ch.id, user: c.uid }); };
 
 module.exports = { storyPush, H, getChat, getUser, uname, usersFor, ensureSaved, joinChat, chatPreview, serverPreview, resolveTarget, checkSend, buildPayload, hooksEdit, selfUpdate, spend, giveCheck, leafLog, boostLevel, BOOST_PRICE, PREMIUM_PRICE, LEAF, hook };
