@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /start
+Allow: /privacy
+Allow: /pay
+Allow: /offer
+Allow: /contacts
+Disallow: /api/
+Disallow: /admin
+Disallow: /u/
+Disallow: /q/
+Disallow: /miniapps/

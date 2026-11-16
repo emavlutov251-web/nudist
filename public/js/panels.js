@@ -270,8 +270,10 @@ function ChatPicker({ id, title, chats, value, onDone }) {
 }
 
 // ═════ Действия над чатом (меню) ═════
+const LAT = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
+const latin = t => String(t).replace(/[а-яё]/gi, ch => { const l = LAT[ch.toLowerCase()]; return l === undefined ? ch : ch === ch.toLowerCase() ? l : l.charAt(0).toUpperCase() + l.slice(1); });
 async function exportChat(chat, fmt) {
-  const r = await call('chat.export', { id: chat.id }); if (!r) return; const title = chatInfo(chat).title, name = 'nudist-' + title.replace(/[^\p{L}\p{N}]+/gu, '_').slice(0, 40);
+  const r = await call('chat.export', { id: chat.id }); if (!r) return; const title = chatInfo(chat).title, name = 'nudist-' + (latin(title).replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'chat');      /* имя файла латиницей: не каждый браузер и не каждая файловая система сохранит кириллицу в имени */
   if (fmt === 'json') return download(name + '.json', JSON.stringify(r, null, 2), 'application/json');
   const rows = r.msgs.map(m => `<div class="m"><b>${esc(userName(r.users[m.from]))}</b> <time>${esc(new Date(m.ts).toLocaleString('ru-RU'))}</time><p>${m.enc ? '🔒 зашифровано' : esc(m.type === 'text' || m.type === 'service' ? m.text || '' : msgPreview(m))}</p>${m.media && !m.media.ek ? `<a href="${esc(location.origin + m.media.url)}">${esc(m.media.name || 'вложение')}</a>` : ''}</div>`).join('\n');
   download(name + '.html', `<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><style>body{font:15px/1.5 system-ui;max-width:760px;margin:40px auto;padding:0 16px;color:#10231a;background:#f6f1e7}.m{padding:8px 0;border-bottom:1px solid #e3dccb}time{color:#789;font-size:12px}p{margin:2px 0;white-space:pre-wrap}</style><h1>${esc(title)}</h1><p>Экспорт из «Нудиста» · ${esc(new Date().toLocaleString('ru-RU'))} · ${r.msgs.length} сообщений</p>${rows}`, 'text/html');
