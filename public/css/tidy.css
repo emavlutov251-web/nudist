@@ -216,3 +216,8 @@ button.col-i.gi { font: inherit; color: inherit; cursor: pointer; } button.col-i
 .lm-stage { position: relative; flex: 1; min-height: 0; display: flex; } .lm-stage iframe { flex: 1; min-height: 0; width: 100%; border: 0; }
 .lm-over { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px; text-align: center; color: #fff; background: rgba(8, 14, 22, .86); } .lm-over b { font-size: 4.2em; line-height: 1; font-variant-numeric: tabular-nums; } .lm-over span { font-weight: 600; } .lm-over p { margin: 6px 0 0; opacity: .8; font-size: .92em; } .lm-over.count { background: rgba(8, 14, 22, .7); }
 .lm-bar .btn { min-height: 30px; }
+
+/* ───── 73: вход через Telegram ───── */
+.tg-btn { display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; } a.btn.big.ghost.tg-btn { margin-top: 2px; }
+.modal .tg-steps { margin-bottom: 12px; } .modal .tg-btn + .hint { margin-top: 10px; }
+.tg-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; line-height: 1.4; } .tg-wait { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; } .tg-wait .spinner { width: 16px; height: 16px; }

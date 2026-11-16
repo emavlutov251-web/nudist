@@ -79,6 +79,61 @@ function ResetScreen() {
     </section></div>`;
 }
 
+// ═════ Вход через Telegram ═════
+// Три дороги: кнопка на экране входа (код → бот → возврат), одноразовая ссылка из бота (#tgl=…) и мини-приложение внутри Telegram
+// (Telegram сам кладёт подписанные данные в адрес: #tgWebAppData=…). Во всех случаях сервер отвечает одним из трёх: «вошли», «ждём»,
+// «нужно согласие и username» — поэтому экран один.
+const TGJOB = 'nudist.tgjob';
+const tgJob = j => { S.tgEnter = j; try { j && j.code ? sessionStorage.setItem(TGJOB, JSON.stringify({ code: j.code, url: j.url, at: j.at })) : sessionStorage.removeItem(TGJOB); } catch (e) { /* без памяти вкладки */ } bump(); };
+const tgSignal = () => { for (const ev of ['web_app_ready', 'web_app_expand']) { try { const m = JSON.stringify({ eventType: ev, eventData: '' }); if (window.TelegramWebviewProxy) window.TelegramWebviewProxy.postEvent(ev, ''); else if (window.external && 'notify' in window.external) window.external.notify(m); else if (window.parent !== window) window.parent.postMessage(m, 'https://web.telegram.org'); } catch (e) { /* не в Telegram */ } } };      /* просим Telegram развернуть окно во всю высоту */
+(() => {
+  const h = location.hash.slice(1), init = h.includes('tgWebAppData=') ? new URLSearchParams(h).get('tgWebAppData') : null, one = (/^tgl=([\w-]{20,60})$/.exec(h) || [])[1];
+  if (init || one) history.replaceState(history.state, '', location.pathname + location.search);
+  if (init) tgSignal();
+  if (local.get('token')) return;      /* уже вошли на этом устройстве — ничего не трогаем */
+  if (init) S.tgEnter = { path: 'tg/app', body: { initData: init } };
+  else if (one) S.tgEnter = { path: 'tg/link', body: { token: one } };
+  else { try { const j = JSON.parse(sessionStorage.getItem(TGJOB) || 'null'); if (j && Date.now() - j.at < 9 * 60e3) S.tgEnter = { path: 'tg/poll', body: { code: j.code }, ...j }; } catch (e) { /* нечего продолжать */ } }      /* вкладку выгрузило, пока человек был в Telegram, — продолжаем ждать */
+})();
+function TgEnter() {
+  const job = S.tgEnter, [st, setSt] = useState({ phase: job.code ? 'wait' : 'load' }), [f, setF] = useState({ username: '', name: '', totp: '' }), [agree, setAgree] = useState(false), [busy, setBusy] = useState(false), [policy, setPolicy] = useState(false), alive = useRef(true), timer = useRef(0);
+  const leave = () => tgJob(null);
+  const go = async (extra, quiet) => {
+    if (!quiet) setBusy(true);
+    try {
+      const r = await http(job.path, { ...job.body, ...extra, ref: pendingRef() || undefined }); if (!alive.current) return;
+      if (r.token) { clearRef(); S.adding = false; tgJob(null); login(r.token); return; }
+      if (r.wait) { setSt(s => (s.phase === 'wait' ? s : { phase: 'wait' })); timer.current = setTimeout(() => go({}, true), 2000); }
+      else if (r.need === 'agree') { setF(x => ({ ...x, username: x.username || r.username || '', name: x.name || r.name || '' })); setSt({ phase: 'agree', tg: r.tg }); }
+      else if (r.need === 'totp') setSt({ phase: 'totp' });
+    } catch (e) { if (alive.current) setSt(s => (s.phase === 'agree' || s.phase === 'totp' ? { ...s, err: e.message } : { phase: 'fail', err: e.message })); }
+    if (alive.current && !quiet) setBusy(false);
+  };
+  useEffect(() => { go({}, true); return () => { alive.current = false; clearTimeout(timer.current); }; }, []);
+  const submit = e => { e.preventDefault(); if (st.phase === 'agree') { if (!agree) return setSt(s => ({ ...s, err: 'Чтобы создать аккаунт, примите политику конфиденциальности' })); setSt(s => ({ ...s, err: '' })); go({ agree: true, username: f.username.trim(), name: f.name.trim() }); } else go({ totp: f.totp.trim() }); };
+  return html`<div class="auth">
+    <section class="auth-brand"><div class="auth-logo"><${Logo} s=${132} /></div><h1 class="wordmark">НУДИСТ</h1><p class="slogan">Из Telegram — в два касания.</p></section>
+    <section class="auth-form">
+      ${st.phase === 'load' ? html`<div class="card tg-card"><h2>Входим через Telegram…</h2><${Spinner} /></div>`
+      : st.phase === 'fail' ? html`<div class="card tg-card"><h2>Не получилось</h2><p class="err" role="alert">${st.err}</p><button type="button" class="btn big" onClick=${leave}>На экран входа</button></div>`
+      : st.phase === 'wait' ? html`<div class="card tg-card"><h2>Вход через Telegram</h2>
+          <ol class="tg-steps"><li>Откройте бота и нажмите <b>Start</b> («Запустить»).</li><li>Вернитесь сюда — вход выполнится сам.</li></ol>
+          <a class="btn big tg-btn" href=${job.url} target="_blank" rel="noopener"><${Icon} n="send" s=${18} /> Открыть Telegram</a>
+          <p class="hint tg-wait"><${Spinner} /> Ждём, пока вы нажмёте Start…</p>
+          <p class="auth-alt"><a onClick=${leave}>Отмена</a></p></div>`
+      : html`<form class="card tg-card" onSubmit=${submit}>
+          ${st.phase === 'agree' ? html`<h2>Почти готово</h2>
+            <p class="hint">Telegram подтвердил, что это вы${st.tg ? ` (@${st.tg})` : ''}. Выберите имя в «Нудисте». Пароль придумывать не нужно: входить будете через Telegram.</p>
+            <label class="fld"><span>Как вас зовут</span><input value=${f.name} onInput=${e => setF({ ...f, name: e.target.value })} maxlength="64" autocomplete="name" /></label>
+            <label class="fld"><span>Username</span><input value=${f.username} onInput=${e => setF({ ...f, username: e.target.value })} placeholder="latinica_bez_probelov" autocomplete="username" required /></label>
+            <label class="agree"><input type="checkbox" checked=${agree} onChange=${e => setAgree(e.target.checked)} /><span>Я принимаю <a role="button" tabindex="0" onClick=${e => { e.preventDefault(); setPolicy(true); }}>политику конфиденциальности</a></span></label>`
+          : html`<h2>Двухфакторная защита</h2><label class="fld"><span>Код из приложения-аутентификатора</span><input value=${f.totp} onInput=${e => setF({ ...f, totp: e.target.value })} inputmode="numeric" placeholder="6 цифр или код восстановления" required autofocus /></label>`}
+          ${st.err && html`<p class="err" role="alert">${st.err}</p>`}
+          <button class="btn big" disabled=${busy}>${busy ? 'Секунду…' : st.phase === 'agree' ? 'Создать аккаунт' : 'Войти'}</button>
+          <p class="auth-alt"><a onClick=${leave}>Отмена</a></p></form>`}
+    </section>${policy && html`<${PolicyView} onClose=${() => setPolicy(false)} />`}</div>`;
+}
+
 // ═════ Вход ═════
 const SLOGANS = ['Мессенджер, которому нечего скрывать.', 'Скрывать нечего. Но шифруем на совесть.', 'Голая правда и немного стикеров.', 'Одежда — по желанию. Двухфакторка — обязательно.'];
 function Auth() {
@@ -86,6 +141,13 @@ function Auth() {
   const [f, setF] = useState({ username: '', password: '', name: '', phone: '', code: '', totp: '', rec: '', setup: '' });
   const [cfg, setCfg] = useState(null);      /* что разрешает сервер: вход по номеру (только демо), первый запуск с кодом установки */
   useEffect(() => { fetch('/api/config').then(r => r.json()).then(setCfg).catch(() => {}); }, []);
+  /* Вход через Telegram: ссылку на бота готовим заранее, чтобы кнопка открывала Telegram с первого касания (браузеры не дают открыть окно после ожидания ответа). */
+  const [tg, setTg] = useState(null);
+  useEffect(() => { if (cfg && cfg.tg) http('tg/start').then(r => setTg({ ...r, at: Date.now() })).catch(() => setTg(null)); }, [cfg && cfg.tg]);
+  const tgGo = e => {
+    if (tg && Date.now() - tg.at < 8 * 60e3) return setTimeout(() => tgJob({ path: 'tg/poll', body: { code: tg.code }, code: tg.code, url: tg.url, at: tg.at }), 50);      /* ссылка свежая: Telegram открывается сам, а здесь — экран ожидания */
+    e.preventDefault(); http('tg/start').then(r => tgJob({ path: 'tg/poll', body: { code: r.code }, code: r.code, url: r.url, at: Date.now() })).catch(x => setErr(x.message));
+  };
   const [step, setStep] = useState(null); // totp | code | name | password
   const [demo, setDemo] = useState(null);
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
@@ -138,6 +200,7 @@ function Auth() {
           ${mode === 'register' && html`<label class="agree"><input type="checkbox" checked=${agree} onChange=${e => { setAgree(e.target.checked); if (e.target.checked) setErr(''); }} /><span>Я принимаю <a role="button" tabindex="0" onClick=${e => { e.preventDefault(); setPolicy(true); }} onKeyDown=${e => { if (e.key === 'Enter') { e.preventDefault(); setPolicy(true); } }}>политику конфиденциальности</a></span></label>`}
           ${err && html`<p class="err" role="alert">${err}</p>`}
           <button class="btn big" disabled=${busy}>${busy ? 'Секунду…' : mode === 'register' ? 'Раздеться и войти' : mode === 'recover' ? 'Сменить пароль и войти' : mode === 'phone' && !step ? 'Получить код' : 'Войти'}</button>
+          ${cfg && cfg.tg && (mode === 'login' || mode === 'register') && html`<a class="btn big ghost tg-btn" href=${tg ? tg.url : 'https://t.me/' + cfg.tg} target="_blank" rel="noopener" onClick=${tgGo}><${Icon} n="send" s=${18} /> ${mode === 'register' ? 'Через Telegram — без пароля' : 'Войти через Telegram'}</a>`}
           ${mode === 'login' && html`<p class="auth-alt">Впервые здесь? <a onClick=${() => sw('register')}>Создать аккаунт</a> · <a onClick=${() => sw('recover')}>Забыли пароль?</a></p>`}
           ${mode === 'register' && html`<p class="auth-alt">Уже есть аккаунт? <a onClick=${() => sw('login')}>Войти</a></p><p class="hint">${cfg && cfg.setup ? 'Сервер новый: первым регистрируется владелец, он же станет администратором. Остальные смогут зарегистрироваться после него.' : 'Номер телефона и почта не нужны.'}</p>`}
           ${mode === 'recover' && html`<p class="auth-alt"><a onClick=${() => sw('login')}>Вспомнил пароль</a></p><p class="hint">Код восстановления — один из тех, что вы сохранили в «Настройки → Аккаунт». <b>Нет кода?</b> Напишите администратору: он пришлёт одноразовую ссылку для сброса. <a href="/contacts" target="_blank" rel="noopener">Как связаться</a>. Сам пароль не знаем даже мы.</p>`}`}
@@ -187,6 +250,7 @@ function Modals() { return S.modals.map(m => html`<${m.c} key=${m.id} id=${m.id}
 function App() {
   useStore();
   if (S.reset) return html`<${ResetScreen} /><${Toasts} />`;
+  if (S.tgEnter && !S.token) return html`<${TgEnter} /><${Toasts} />`;
   if (!S.token) return html`<${Auth} /><${Toasts} />`;
   if (S.ready && S.me && S.me.policyNeed && S.me.policy !== S.me.policyNeed) return html`<${PolicyGate} /><${Toasts} />`;
   if (!S.ready) return html`<div class="splash"><${Logo} s=${88} /><p>${S.offline ? 'Связь потеряна. Переподключаемся…' : 'Снимаем лишнее…'}</p></div><${Toasts} />`;

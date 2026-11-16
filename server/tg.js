@@ -1,0 +1,149 @@
+'use strict';
+// Вход через Telegram: человеку из Telegram не нужно придумывать пароль — его узнаёт бот.
+// Дороги три, проверка одна:
+//   1) с сайта: «Войти через Telegram» → ссылка t.me/<бот>?start=login_<код> → человек жмёт Start → бот видит, кто это → сайт получает сеанс;
+//   2) из Telegram: /start у бота → кнопки «Открыть Нудист» (мини-приложение прямо в Telegram) и «Открыть в браузере» (одноразовая ссылка);
+//   3) мини-приложение: Telegram передаёт данные о человеке с подписью (initData), сервер сверяет её ключом бота.
+// Нужен ключ бота (TG_BOT_TOKEN или ключ, вставленный в окне импорта стикеров) и публичный https-адрес сайта (SITE_URL): на него
+// Telegram присылает сообщения боту (вебхук). От человека сохраняется только номер аккаунта в Telegram и его @username.
+// Выключить: TG_LOGIN=off.
+const crypto = require('crypto');
+const C = require('./core');
+const R = require('./rpc');
+const A = require('./auth');
+const { db, save, now, need, fail, str } = C;
+const H = R.H;
+
+const TG = (process.env.TG_API || 'https://api.telegram.org').replace(/\/+$/, '');
+const SITE = (process.env.SITE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, '');
+const HOOK = (process.env.TG_HOOK_URL || SITE).replace(/\/+$/, '');      // куда Telegram шлёт сообщения боту; отличается от адреса сайта, если до сайта Telegram не достаёт (мост на старом адресе)
+const ON = process.env.TG_LOGIN !== 'off';
+const token = () => process.env.TG_BOT_TOKEN || (db.meta && db.meta.tgBot) || '';
+const secretOf = t => crypto.createHash('sha256').update('tg-hook:' + t).digest('hex').slice(0, 48);      // его Telegram присылает в заголовке каждого сообщения боту
+const bot = { username: '', id: 0, token: '', hook: false };
+const ready = () => ON && !!bot.username && bot.token === token();
+const botName = () => (ready() ? bot.username : '');
+
+async function call(method, body) {
+  const r = await fetch(`${TG}/bot${token()}/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}), signal: AbortSignal.timeout(15000) });
+  const j = await r.json().catch(() => null); if (!j || !j.ok) throw new Error(method + ': ' + ((j && j.description) || r.status)); return j.result;
+}
+// При запуске и при смене ключа бота: узнать имя бота, попросить Telegram слать сообщения нам, поставить кнопку меню «Нудист».
+async function setup() {
+  const t = token(); if (!ON || !t) return;
+  try {
+    const me = await call('getMe'); Object.assign(bot, { username: me.username, id: me.id, token: t });
+    if (/^https:\/\//.test(SITE) && /^https:\/\//.test(HOOK)) {
+      await call('setWebhook', { url: HOOK + '/api/tg/hook', secret_token: secretOf(t), allowed_updates: ['message'] }); bot.hook = true;
+      await call('setChatMenuButton', { menu_button: { type: 'web_app', text: 'Нудист', web_app: { url: SITE + '/' } } }).catch(e => console.warn('[tg] кнопка меню:', e.message));
+      await call('setMyCommands', { commands: [{ command: 'start', description: 'Открыть «Нудист»' }] }).catch(() => {});
+      console.log(`[tg] вход через Telegram включён: @${bot.username}, сообщения боту идут на ${HOOK}/api/tg/hook`);
+    } else console.log(`[tg] бот @${bot.username} найден, но адрес сайта (SITE_URL) не https — вход через Telegram работать не будет`);
+  } catch (e) { console.warn('[tg] вход через Telegram не настроен:', e.message); }
+}
+setTimeout(setup, Number(process.env.TG_SETUP_MS) || 2500).unref();
+setInterval(() => { if (ON && token() && bot.token !== token()) setup(); }, 60e3).unref();      // ключ бота вставили позже или сменили
+
+// ───── кто это: одноразовые коды и ссылки (живут 10 минут, только в памяти)
+const TTL = 600e3, pend = new Map(), links = new Map();
+const tok = n => crypto.randomBytes(n).toString('base64url');
+setInterval(() => { const t = now(); for (const m of [pend, links]) for (const [k, v] of m) if (v.exp < t) m.delete(k); }, 60e3).unref();
+const tgUser = f => (f && Number.isSafeInteger(f.id) && f.id > 0 && !f.is_bot ? { id: f.id, name: str([f.first_name, f.last_name].filter(Boolean).join(' '), 64) || 'Нудист', username: /^[A-Za-z][A-Za-z0-9_]{2,31}$/.test(f.username || '') ? f.username : '' } : null);
+let index = null;      // номер в Telegram → id аккаунта
+const byTg = id => { if (!index) { index = new Map(); for (const u of Object.values(db.users)) if (u.tg && !u.deleted) index.set(u.tg.id, u.id); } const u = db.users[index.get(id)]; return u && !u.deleted && u.tg && u.tg.id === id ? u : null; };
+A.hooks.onRegister.push(() => { index = null; });
+
+// Данные мини-приложения: Telegram подписывает их ключом бота. Подпись не сошлась или данные старше суток — не верим.
+function checkInitData(raw) {
+  need(typeof raw === 'string' && raw.length > 20 && raw.length < 4096, 'Telegram не передал данные для входа');
+  const q = new URLSearchParams(raw), hash = q.get('hash') || ''; q.delete('hash');
+  const line = [...q.entries()].map(([k, v]) => k + '=' + v).sort().join('\n');
+  const key = crypto.createHmac('sha256', 'WebAppData').update(token()).digest(), mac = crypto.createHmac('sha256', key).update(line).digest('hex');
+  const a = Buffer.from(mac), b = Buffer.from(hash.toLowerCase());
+  need(a.length === b.length && crypto.timingSafeEqual(a, b), 'Подпись Telegram не сошлась. Откройте приложение из бота ещё раз.');
+  need(Math.abs(now() / 1000 - Number(q.get('auth_date'))) < 86400, 'Данные Telegram устарели. Откройте приложение из бота ещё раз.');
+  let f = null; try { f = JSON.parse(q.get('user') || 'null'); } catch (e) { /* не JSON */ }
+  const u = tgUser(f); need(u, 'Telegram не сообщил, кто вы'); return u;
+}
+const freeName = base => { let n = (base || '').slice(0, 28); if (!C.USERNAME_RE.test(n)) return ''; if (!C.usernameTaken(n)) return n; for (let i = 0; i < 30; i++) { const v = n.slice(0, 26) + '_' + (2 + Math.floor(Math.random() * 97)); if (!C.usernameTaken(v)) return v; } return ''; };
+
+// Человек из Telegram опознан: есть аккаунт — входим; нет — создаём (после согласия с политикой и выбора username).
+async function enter(t, b, meta) {
+  let u = byTg(t.id);
+  if (u) { const s2 = A.second(u, { code: b.totp }); if (s2) return s2; }      /* двухфакторную защиту Telegram не заменяет; код 2FA приходит в поле totp (code занят кодом входа) */
+  else {
+    need(db.flags.registration, 'Регистрация временно закрыта. Пляж переполнен.'); need(!A.setupNeeded(), 'Сервер ещё не настроен: первым регистрируется владелец, по username и коду установки.');
+    if (b.agree !== true) return { need: 'agree', name: t.name, username: freeName(t.username), tg: t.username };
+    A.limit('reg:' + meta.ip, 120, 3600e3);
+    const username = str(b.username, 32).replace(/^@/, ''), name = str(b.name, 64) || t.name;
+    need(C.USERNAME_RE.test(username), 'Username: латиница, цифры и _, от 3 до 32 символов, начинается с буквы'); need(!C.usernameTaken(username), 'Этот username уже занят. Выберите другой.');
+    need(!byTg(t.id), 'Этот Telegram уже привязан к аккаунту');
+    u = A.createUser({ username, name, ref: str(b.ref, 32) }); u.tg = { id: t.id, username: t.username, at: now() }; u.policy = { v: C.POLICY, ts: now() }; index = null; save();
+  }
+  if (t.username !== u.tg.username) { u.tg.username = t.username; save(); }
+  const s = A.createSession(u, meta); const row = db.sessions[A.sid(s.token)]; if (row) row.via = 'tg';      // вход подтверждён Telegram — такой сеанс может сразу задать пароль
+  return s;
+}
+
+Object.assign(A.api, {
+  'tg/start'(b, meta) {
+    need(ready() && bot.hook, 'Вход через Telegram сейчас недоступен'); A.limit('tgs:' + meta.ip, 30, 600e3);
+    const code = tok(16); pend.set(code, { exp: now() + TTL, tg: null });
+    return { code, bot: bot.username, url: `https://t.me/${bot.username}?start=login_${code}`, ttl: TTL };
+  },
+  async 'tg/poll'(b, meta) {
+    A.limit('tgp:' + meta.ip, 600, 600e3);
+    const p = pend.get(str(b.code, 40)); need(p && p.exp > now() && !p.uid, 'Время вышло. Нажмите «Войти через Telegram» ещё раз.');
+    if (!p.tg) return { wait: true };
+    const r = await enter(p.tg, b, meta); if (r.token) pend.delete(b.code); return r;
+  },
+  async 'tg/app'(b, meta) { need(ready(), 'Вход через Telegram сейчас недоступен'); A.limit('tga:' + meta.ip, 60, 600e3); return enter(checkInitData(b.initData), b, meta); },
+  async 'tg/link'(b, meta) {
+    A.limit('tgl:' + meta.ip, 60, 600e3);
+    const k = str(b.token, 60), l = links.get(k); need(l && l.exp > now(), 'Ссылка устарела. Напишите боту /start — он пришлёт новую.');
+    const r = await enter(l.tg, b, meta); if (r.token) links.delete(k); return r;
+  },
+});
+
+// ───── привязать Telegram к уже существующему аккаунту (и отвязать)
+H['me.tg.start'] = c => {
+  need(ready() && bot.hook, 'Вход через Telegram сейчас недоступен'); A.limit('tgs:' + c.uid, 20, 600e3);
+  const code = tok(16); pend.set(code, { exp: now() + TTL, tg: null, uid: c.uid });
+  return { code, bot: bot.username, url: `https://t.me/${bot.username}?start=login_${code}` };
+};
+H['me.tg.poll'] = (c, p) => {
+  const u = db.users[c.uid], q = pend.get(str(p.code, 40)); need(q && q.exp > now() && q.uid === c.uid, 'Время вышло. Начните привязку заново.');
+  if (!q.tg) return { wait: true };
+  const other = byTg(q.tg.id); need(!other || other.id === u.id, 'Этот Telegram уже привязан к другому аккаунту');
+  u.tg = { id: q.tg.id, username: q.tg.username, at: now() }; index = null; pend.delete(p.code); save(); R.selfUpdate(u);
+  return { ok: true, tg: u.tg.username || true };
+};
+H['me.tg.drop'] = c => {
+  const u = db.users[c.uid]; need(u.tg, 'Telegram не привязан'); need(u.username && u.pass, 'Сначала задайте пароль: без него и без Telegram в аккаунт будет не войти');
+  delete u.tg; index = null; save(); R.selfUpdate(u); return { ok: true };
+};
+
+// ───── сообщения боту (вебхук Telegram)
+const say = (chat, text, extra) => call('sendMessage', { chat_id: chat, text, ...extra }).catch(e => console.warn('[tg] ответ не ушёл:', e.message));
+function hook(secret, upd) {
+  const t = token(); if (!ON || !t) return 404;
+  const a = Buffer.from(String(secret || '')), b = Buffer.from(secretOf(t)); if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return 403;
+  const m = upd && upd.message; if (!m || !m.chat || m.chat.type !== 'private') return 200;
+  const who = tgUser(m.from); if (!who) return 200;
+  try { A.limit('tgm:' + who.id, 20, 60e3); } catch (e) { return 200; }
+  const text = String(m.text || ''), arg = (/^\/start(?:@\w+)?\s+(\S+)/.exec(text) || [])[1] || '';
+  if (arg.startsWith('login_')) {
+    const p = pend.get(arg.slice(6));
+    if (!p || p.exp < now()) say(m.chat.id, 'Эта ссылка для входа уже устарела. Вернитесь на сайт и нажмите «Войти через Telegram» ещё раз.');
+    else { p.tg = who; say(m.chat.id, p.uid ? '✅ Готово: Telegram привязан. Вернитесь в «Нудист».' : '✅ Готово! Вернитесь на сайт — вход выполнится сам.'); }
+    return 200;
+  }
+  const one = tok(18); links.set(one, { exp: now() + TTL, tg: who });
+  const known = byTg(who.id), rows = [];
+  if (/^https:\/\//.test(SITE)) rows.push([{ text: '🍃 Открыть «Нудист»', web_app: { url: SITE + '/' } }], [{ text: '🌐 Открыть в браузере', url: SITE + '/#tgl=' + one }]);
+  say(m.chat.id, (known ? `С возвращением, ${who.name}! ` : `Привет, ${who.name}! «Нудист» — мессенджер, которому нечего скрывать: чаты, группы, лента, игры с друзьями. `)
+    + 'Жмите кнопку — ' + (known ? 'и вы в своём аккаунте.' : 'аккаунт создастся за пару секунд, пароль придумывать не нужно.') + '\n\nКнопка «в браузере» работает 10 минут и один раз.', { reply_markup: { inline_keyboard: rows } });
+  return 200;
+}
+
+module.exports = { hook, botName, ready, setup, checkInitData };

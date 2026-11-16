@@ -85,10 +85,10 @@ const PASS_RESET_AGE = Math.max(0, Number(process.env.PASS_RESET_HOURS === undef
 H['me.password.reset'] = (c, p) => {
   const u = user(c), s = db.sessions[c.token]; need(s, 'Сеанс не найден, войдите заново');
   const free = s.at + PASS_RESET_AGE;
-  if (p.check) return { totp: !!u.totpOn, wait: !u.totpOn && free > now() ? free : 0 };
+  if (p.check) return { totp: !!u.totpOn, wait: !u.totpOn && free > now() && s.via !== 'tg' ? free : 0 };      /* вошёл через Telegram — личность подтверждена, ждать сутки не нужно */
   A.limit('pwreset:' + u.id, 5, 864e5);
   if (u.totpOn) need(A.totpOk(u.totp, p.code) || A.useRecovery(u, p.code), 'Нужен код из приложения-аутентификатора или код восстановления');
-  else need(free <= now(), 'С этого устройства вы вошли меньше суток назад. Сменить пароль без старого можно будет позже — или напишите в поддержку.');
+  else need(free <= now() || s.via === 'tg', 'С этого устройства вы вошли меньше суток назад. Сменить пароль без старого можно будет позже — или напишите в поддержку.');
   need(typeof p.new === 'string' && p.new.length >= 6 && p.new.length <= 200, 'Пароль — минимум 6 символов');
   u.pass = A.hashPass(p.new); delete u.reset; save(); selfUpdate(u);
   A.sysTell(u, `🔑 **Пароль изменён без старого пароля** — с устройства «${s.ua || 'неизвестное устройство'}». Если это были не вы: зайдите в «Настройки → Аккаунт → Пароль → Не помню пароль», задайте свой и завершите чужие сеансы в «Устройствах».`);

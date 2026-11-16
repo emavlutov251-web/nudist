@@ -4,6 +4,21 @@
    3. Если приложение не стартовало, показывает причину и кнопку «Повторить», а не вечную заставку. */
 (function () {
   'use strict';
+  /* Переезд с прежнего адреса: старая страница передаёт сюда ключ сеанса, настройки и ключи секретных чатов в части ссылки после «#».
+     Принимаем только от своего прежнего адреса (иначе чужой ссылкой можно было бы посадить человека в чужой аккаунт) и только если
+     здесь ещё никто не входил; сразу убираем это из адресной строки. Прежние адреса — в списке FROM. */
+  try {
+    var FROM = /^https:\/\/nudist\.onrender\.com$|^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/;
+    var mv = /^#move=([\w-]+)$/.exec(location.hash), ref = (document.referrer || '').replace(/^(https?:\/\/[^/]+).*$/, '$1');
+    if (mv && !FROM.test(ref)) { history.replaceState(null, '', location.pathname + location.search); mv = null; }
+    if (mv) {
+      var raw = mv[1].replace(/-/g, '+').replace(/_/g, '/'); while (raw.length % 4) raw += '=';
+      var pk = JSON.parse(decodeURIComponent(escape(atob(raw)))), keep = '';
+      if (pk && pk.v === 1 && pk.d && !localStorage.getItem('nudist.token')) for (var mk in pk.d) if (mk.indexOf('nudist.') === 0 && typeof pk.d[mk] === 'string' && pk.d[mk].length < 20000) localStorage.setItem(mk, pk.d[mk]);
+      if (pk && typeof pk.h === 'string' && /^#[\w=@.%-]{1,200}$/.test(pk.h)) keep = pk.h;
+      history.replaceState(null, '', location.pathname + location.search + keep);
+    }
+  } catch (e) { try { history.replaceState(null, '', location.pathname + location.search); } catch (x) { /* старый браузер */ } }
   var B = window.__boot = { t0: Date.now(), errors: [], started: false, legacy: [] };
   var ua = navigator.userAgent, m = /(?:Chrome|CriOS)\/(\d+)/.exec(ua);
   B.chrome = m ? +m[1] : 0;

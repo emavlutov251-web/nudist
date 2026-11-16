@@ -292,4 +292,4 @@ setInterval(() => { const t = now(); for (const [k, q] of qr) if (q.exp < t - 60
 
 setupInit();
 
-module.exports = { newReset, sysTell, RESET_TTL, pubFlags, phoneOn, setupNeeded, REF_BONUS, api, hashPass, checkPass, totp, totpOk, b32enc, newRecovery, useRecovery, createUser, createSession, killSession, sid, deleteUser, approveQr, limit, hooks, normPhone, findByPhone, phoneCodes };
+module.exports = { second, newReset, sysTell, RESET_TTL, pubFlags, phoneOn, setupNeeded, REF_BONUS, api, hashPass, checkPass, totp, totpOk, b32enc, newRecovery, useRecovery, createUser, createSession, killSession, sid, deleteUser, approveQr, limit, hooks, normPhone, findByPhone, phoneCodes };

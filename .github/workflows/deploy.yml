@@ -9,6 +9,7 @@ on:
       - 'public/**'
       - 'scripts/smoke.js'
       - 'scripts/security-test.js'
+      - 'deploy/**'
       - 'package.json'
       - 'Dockerfile'
       - '.dockerignore'
@@ -46,6 +47,22 @@ jobs:
           docker run -d --name nudist-ci -p 3000:3000 nudist:ci
           for i in $(seq 1 20); do curl -fsS --max-time 3 http://127.0.0.1:3000/api/health && exit 0; sleep 1; done
           docker logs nudist-ci; exit 1
+
+  release:
+    name: Выпуск на свой сервер
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Свой сервер (deploy/auto-update.sh) сам забирает ветку release раз в две минуты. Двигаем её только после успешных проверок.
+      - name: Сдвинуть ветку release на проверенный коммит
+        run: git push --force origin "$GITHUB_SHA:refs/heads/release"
 
   deploy:
     name: Выкладка на Render

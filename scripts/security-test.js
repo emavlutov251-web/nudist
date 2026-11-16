@@ -147,6 +147,11 @@ async function access() {
     const c2 = await S.conn((await S.post('/api/login', { username: 'sec_chuzhoi', password: 'Sec-test-sec_chuzhoi' })).j.token);
     await c2.rpc('me.logout', {}).catch(() => {}); await sleep(300);
     ck('после выхода ключ сессии больше не работает', !(await S.conn(c2.tok).then(() => true, () => false)));
+    // ── вход через Telegram: без настроенного бота ничего не принимается; подделать «я из Telegram» нельзя
+    ck('сообщение «от Telegram» без настроенного бота не принимается', (await S.post('/api/tg/hook', { message: { from: { id: 1 }, chat: { id: 1, type: 'private' }, text: '/start' } }, { 'x-telegram-bot-api-secret-token': 'x' })).status !== 200);
+    ck('вход «из мини-приложения» с выдуманными данными не проходит', !(await S.post('/api/tg/app', { initData: 'user=%7B%22id%22%3A1%7D&auth_date=' + Math.floor(Date.now() / 1000) + '&hash=' + '0'.repeat(64) })).j.token);
+    ck('одноразовая ссылка из бота не угадывается', !(await S.post('/api/tg/link', { token: 'x'.repeat(24) })).j.token && !(await S.post('/api/tg/poll', { code: 'x'.repeat(22) })).j.token);
+    ck('чужой ссылкой #move нельзя подложить сеанс: перенос принимается только с прежнего адреса', /FROM\.test\(ref\)/.test(fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'boot.js'), 'utf8')));
     // ── лобби игр: чужой не входит, не читает и не шлёт ходы
     const lob = await owner.rpc('lobby.new', { app: 'beer' });
     for (const [m, p] of [['lobby.join', { id: lob.id }], ['lobby.get', { id: lob.id }], ['lobby.set', { id: lob.id, app: 'run' }], ['lobby.ready', { id: lob.id }], ['lobby.msg', { id: lob.id, d: { t: 'mv' } }], ['lobby.invite', { id: lob.id, to: c.me.id }]]) ck('лобби: чужому отказано в ' + m, !(await c.err(m, p)).ok);

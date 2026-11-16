@@ -216,7 +216,7 @@ setInterval(() => { if (!S.ready) return; const n = totalUnread(); if (!S.ui.bos
 
 // ───── события сервера
 on('init', d => {
-  S.me = d.me; S.conn = d.conn; S.session = d.session; S.sys = d.sys; S.flags = d.flags; S.prices = d.prices; S.offline = false;
+  S.me = d.me; S.conn = d.conn; S.session = d.session; S.sys = d.sys; S.flags = d.flags; S.tgBot = d.tg || ''; S.prices = d.prices; S.offline = false;
   addUsers(d.users); S.users[d.me.id] = { ...d.me };
   S.chats = {}; for (const c of d.chats) upsertChat(c);
   S.servers = {}; for (const s of d.servers) S.servers[s.id] = s;

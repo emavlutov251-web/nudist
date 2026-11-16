@@ -63,6 +63,10 @@ function Account() {
   };
   const email = async () => { const v = await promptDlg({ title: 'Почта для восстановления', label: 'Email', type: 'email', value: me.email || '', hint: 'Писем мы не шлём. Почта нужна, если забудете пароль: напишите администратору с этого адреса — он сверит его и пришлёт ссылку для сброса. Оставьте пустым, чтобы отвязать.' }); if (v !== null && await call('me.update', { email: v })) toast(v ? 'Почта сохранена' : 'Почта отвязана'); };
   const pass = () => openModal(PassDlg);
+  const tgRow = async () => {
+    if (!me.tg) return openModal(TgLinkDlg);
+    if (await confirmDlg({ title: 'Отвязать Telegram?', text: 'Входить через Telegram в этот аккаунт больше не получится. Сам аккаунт и переписка останутся.', ok: 'Отвязать', danger: true }) && await call('me.tg.drop', {})) toast('Telegram отвязан');
+  };
   const codes = async () => {
     if (!me.hasPassword) return toast('Сначала задайте пароль', 'err');
     const v = await promptDlg(me.totp ? { title: 'Новые коды восстановления', label: 'Код из аутентификатора', placeholder: '000000', hint: 'Старые коды перестанут работать.', ok: 'Показать коды' } : { title: 'Коды восстановления', label: 'Текущий пароль', type: 'password', hint: me.recoveryLeft ? 'Покажем восемь новых кодов. Старые перестанут работать.' : 'Восемь одноразовых кодов. С любым из них можно сменить забытый пароль: «Забыли пароль?» на экране входа.', ok: 'Показать коды' }); if (!v) return;
@@ -77,7 +81,8 @@ function Account() {
       ${S.flags.phoneAuth ? html`<button class="li" onClick=${phone}><${Icon} n="smartphone" /><span><b>Телефон</b><small>${me.phone || 'не привязан'}</small></span><${Icon} n="chevron-right" s=${16} /></button>`
         : me.phone && html`<button class="li" onClick=${dropPhone}><${Icon} n="smartphone" /><span><b>Телефон</b><small>${me.phone} · входа по номеру нет, можно отвязать</small></span><${Icon} n="chevron-right" s=${16} /></button>`}
       <button class="li" onClick=${email}><${Icon} n="mail" /><span><b>Почта для восстановления</b><small>${me.email || 'не указана'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
-      <button class="li" onClick=${pass}><${Icon} n="key-round" /><span><b>Пароль</b><small>${me.hasPassword ? 'установлен' : 'не задан — без пароля не войти с другого устройства'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
+      <button class="li" onClick=${pass}><${Icon} n="key-round" /><span><b>Пароль</b><small>${me.hasPassword ? 'установлен' : me.tg ? 'не задан — вход через Telegram' : 'не задан — без пароля не войти с другого устройства'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
+      ${(S.tgBot || me.tg) && html`<button class="li" onClick=${tgRow}><${Icon} n="send" /><span><b>Telegram</b><small>${me.tg ? `привязан${me.tg === true ? '' : ': @' + me.tg} · можно входить без пароля` : 'не привязан — привяжите, чтобы входить без пароля'}</small></span><${Icon} n="chevron-right" s=${16} /></button>`}
       ${me.hasPassword && html`<button class="li" onClick=${codes}><${Icon} n="life-buoy" /><span><b>Коды восстановления</b><small>${me.recoveryLeft ? `осталось: ${me.recoveryLeft} · на случай, если забудете пароль` : 'нет — забытый пароль придётся сбрасывать через администратора'}</small></span><${Icon} n="chevron-right" s=${16} /></button>`}</div>
     <${Sel} label="Удалить аккаунт, если я не захожу" hint="Таймер самоуничтожения. Сбрасывается при каждом входе." value=${me.autodelete || 6} opts=${[[1, '1 месяц'], [3, '3 месяца'], [6, '6 месяцев'], [12, '1 год'], [24, '2 года']]} onChange=${v => call('me.autodelete', { months: +v })} />
     <h5>Аккаунты на этом устройстве</h5>
@@ -87,8 +92,18 @@ function Account() {
 }
 // Полоска над списком чатов для аккаунта без пароля. Вход по номеру отключён, так что без пароля человек останется без аккаунта,
 // как только выйдет или сменит телефон. Не окно и не блокировка: одна строка, её можно скрыть на неделю.
+// Привязать Telegram к аккаунту: открыть бота, нажать Start — и вернуться. Окно само заметит, что бот вас узнал.
+function TgLinkDlg({ id }) {
+  const [st, setSt] = useState(null), [err, setErr] = useState('');
+  useEffect(() => { let on = true, t = 0; rpc('me.tg.start', {}).then(r => { if (!on) return; setSt(r); const poll = async () => { try { const p = await rpc('me.tg.poll', { code: r.code }); if (!on) return; if (p.ok) { toast('Telegram привязан: теперь можно входить через него'); closeModal(id); return; } t = setTimeout(poll, 2000); } catch (e) { if (on) setErr(e.message); } }; t = setTimeout(poll, 2000); }, e => on && setErr(e.message)); return () => { on = false; clearTimeout(t); }; }, []);
+  return html`<${Modal} id=${id} title="Привязать Telegram" icon="send" cls="small">
+    ${err ? html`<p class="err" role="alert">${err}</p>` : !st ? html`<${Spinner} />` : html`
+      <ol class="tg-steps"><li>Откройте бота и нажмите <b>Start</b> («Запустить»).</li><li>Вернитесь сюда — окно закроется само.</li></ol>
+      <a class="btn big wide tg-btn" href=${st.url} target="_blank" rel="noopener"><${Icon} n="send" s=${18} /> Открыть Telegram</a>
+      <p class="hint">Мы сохраним только номер вашего аккаунта в Telegram и @username — чтобы узнавать вас при входе. Сообщения и контакты Telegram нам недоступны.</p>`}<//>`;
+}
 export function PassStrip() {
-  const me = S.me; if (!me || me.hasPassword || Date.now() - (local.get('pass.strip') || 0) < 7 * 864e5) return null;
+  const me = S.me; if (!me || me.hasPassword || me.tg || Date.now() - (local.get('pass.strip') || 0) < 7 * 864e5) return null;      /* привязан Telegram — войти можно и без пароля */
   return html`<div class="push-strip pass-strip" role="button" tabIndex="0" onClick=${() => openModal(PassDlg)}>
     <${Icon} n="key-round" s=${20} /><span><b>Задайте пароль</b><small>${me.username ? 'Вход по номеру отключён. Без пароля не войти с другого устройства.' : 'Вход по номеру отключён. Задайте username в профиле и пароль — иначе не войти с другого устройства.'}</small></span>
     <button class="ib sm" title="Скрыть на неделю" aria-label="Скрыть на неделю" onClick=${k => { k.stopPropagation(); local.set('pass.strip', Date.now()); bump(); }}><${Icon} n="x" s=${15} /></button>
