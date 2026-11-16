@@ -69,7 +69,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 16;      // 1.6: новый адрес сервера, перенос сеанса со старого адреса; телевизор убран
+    private static final int APP_VERSION = 17;      // 1.7: приложение не ходит по открытому http (только https), мелкие исправления
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
