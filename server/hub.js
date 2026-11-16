@@ -356,4 +356,4 @@ H['support.close'] = (c, p) => {
   staffPing(t);
 };
 
-module.exports = { dropConn, onSupport, lives, trackView, cleanLib, MUSIC_MAX, APPS };
+module.exports = { dropConn, onSupport, lives, trackView, cleanLib, MUSIC_MAX, APPS, DUELS };

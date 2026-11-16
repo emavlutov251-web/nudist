@@ -22,6 +22,7 @@ require('./year');
 require('./calm');
 require('./perks');
 require('./quiet');
+require('./lobby');
 require('./tgpacks');
 require('./tunes');
 require('./common');

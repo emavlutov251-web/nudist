@@ -1,4 +1,4 @@
-import { ready, share, toast, $, store, earn, result } from '/miniapps/kit.js';
+import { ready, share, toast, $, store, earn, result, live } from '/miniapps/kit.js';
 const N = 4, board = $('#board'); let g, score, over, best = store.get('2048.best', 0);
 const cells = []; for (let i = 0; i < N * N; i++) { const c = document.createElement('i'); c.appendChild(document.createElement('b')); board.appendChild(c); cells.push(c); }
 function spawn() { const free = []; g.forEach((v, i) => { if (!v) free.push(i); }); if (!free.length) return -1; const i = free[Math.floor(Math.random() * free.length)]; g[i] = Math.random() < .9 ? 2 : 4; return i; }
@@ -31,4 +31,5 @@ addEventListener('pointerup', e => { if (!t0) return; const dx = e.clientX - t0.
 $('#new').onclick = start;
 $('#share').onclick = () => share(`🔢 2048: мой счёт ${score}, старшая плитка ${Math.max(...g)}. Рекорд ${best}. Попробуй побить!`);
 window.__g = { move, state: () => ({ g: g.slice(), score, over }) };
+live(() => score);
 start(); ready();

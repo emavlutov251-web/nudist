@@ -147,6 +147,10 @@ async function access() {
     const c2 = await S.conn((await S.post('/api/login', { username: 'sec_chuzhoi', password: 'Sec-test-sec_chuzhoi' })).j.token);
     await c2.rpc('me.logout', {}).catch(() => {}); await sleep(300);
     ck('после выхода ключ сессии больше не работает', !(await S.conn(c2.tok).then(() => true, () => false)));
+    // ── лобби игр: чужой не входит, не читает и не шлёт ходы
+    const lob = await owner.rpc('lobby.new', { app: 'beer' });
+    for (const [m, p] of [['lobby.join', { id: lob.id }], ['lobby.get', { id: lob.id }], ['lobby.set', { id: lob.id, app: 'run' }], ['lobby.ready', { id: lob.id }], ['lobby.msg', { id: lob.id, d: { t: 'mv' } }], ['lobby.invite', { id: lob.id, to: c.me.id }]]) ck('лобби: чужому отказано в ' + m, !(await c.err(m, p)).ok);
+    await owner.rpc('lobby.leave', {});
     // ── сброс забытого пароля
     const pr = await b.err('me.password.reset', { new: 'Zahvat-parol-1' });
     ck('только что вошедший не может сменить пароль без старого (защита от входа обманом)', !pr.ok && /меньше суток/.test(pr.e || ''), JSON.stringify(pr));

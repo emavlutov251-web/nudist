@@ -1,5 +1,5 @@
 // «Комариный спецназ»: шутер с видом сверху. Волны насекомых, листья вместо пуль, бонусы с неба.
-import { ready, share, $, store, earn, result } from '/miniapps/kit.js';
+import { ready, share, $, store, earn, result, live } from '/miniapps/kit.js';
 import { leafy, item } from '/miniapps/art.js';
 import { stage, loop, text, rnd, pick, clamp, dist, sticks, drawStick, axis } from '/miniapps/game.js';
 const W = 360, H = 520, cv = $('#cv'), { ctx, pos } = stage(cv, W, H), [mv, aim] = sticks(cv, pos, [p => p.x < W / 2, p => p.x >= W / 2]);
@@ -47,4 +47,5 @@ function draw() {
 }
 $('#go').onclick = () => { reset(); $('#ov').hidden = true; };
 $('#share').onclick = () => share(`🦟 Комариный спецназ: дошёл до волны ${G.wave}, сбил ${G.score}. Рекорд: ${store.get('shooter.best', 0)}. Кто больше?`);
+live(() => (G ? G.wave : 0));
 ready(); loop(step);

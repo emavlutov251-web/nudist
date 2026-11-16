@@ -17,3 +17,6 @@ label { display: block; font-size: 13px; color: var(--ink2); } label > * { margi
 .tabs { display: flex; border-bottom: 1px solid var(--line); } .tabs button { flex: 1; background: none; padding: 9px 4px; border-bottom: 2px solid transparent; color: var(--ink2); } .tabs button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
 .big { font-size: 44px; font-weight: 700; line-height: 1.1; } .stat { flex: 1; background: var(--card); border: 1px solid var(--line); padding: 8px 12px; } .stat small { display: block; color: var(--ink2); font-size: 12px; } .stat b { font-size: 20px; }
 #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; } #toast.on { opacity: .94; }
+
+/* Партия из лобби: раундом управляет лобби, свои кнопки перезапуска игре не нужны. */
+[data-match] #go, [data-match] #new, [data-match] #again, [data-match] #share { display: none !important; }

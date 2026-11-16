@@ -2,11 +2,13 @@
 import { stage, loop, text, rnd, pick, clamp, keys } from '/miniapps/game.js';
 import { leafy, item, scene, burst, sparks } from '/miniapps/art.js';
 import { TH, panel, milestones } from '/miniapps/play.js';
+import { live } from '/miniapps/kit.js';
 const NAMES = { beach: 'Пляжный ловец', feb: 'Сердцеед', may: 'Пляжный волейбол', aug: 'Последний урожай', dec: 'Мандариновый дождь' };
 const W = 360, H = 560, GY = 470, cv = document.getElementById('cv'), { ctx, pos } = stage(cv, W, H);
 const title = NAMES[TH.key] || 'Ловец: ' + TH.name, UI = panel('catch', title, 'Ведите пальцем или жмите ← →. Ловите всё хорошее, от плохого уворачивайтесь. Золотой листик — пять очков.');
 const G = { on: false, t: 0, x: W / 2, tx: W / 2, dir: 1, run: 0, items: [], fx: [], score: 0, lives: 3, spawn: 0, mood: 'ok', moodT: 0, shake: 0 }; let mile = milestones([15, 40, 80]);
 cv.addEventListener('pointerdown', e => { G.tx = pos(e).x; }); cv.addEventListener('pointermove', e => { if (e.buttons || e.pointerType === 'touch') G.tx = pos(e).x; });
+live(() => G.score);
 UI.start(() => { Object.assign(G, { on: true, t: 0, items: [], fx: [], score: 0, lives: 3, spawn: 0.4, mood: 'ok' }); mile = milestones([15, 40, 80]); });
 function step(dt) {
   G.t += dt; G.moodT -= dt; if (G.moodT <= 0) G.mood = 'ok'; G.shake = Math.max(0, G.shake - dt);

@@ -40,4 +40,7 @@ H['energy.refill'] = c => {
   u.energy = { n: s.max, at: now() }; save(); R.selfUpdate(u);
   return { ok: true, stars: u.stars, ...view(u) };
 };
-module.exports = { view, ON, MAX, PRICE };
+// Для лобби: хватает ли энергии на раунд и списать её при старте (без ответа клиенту).
+const has = (u, app) => !!u && (endless(u) || !isGame(app) || state(u).n >= 1);
+function use(u, app) { if (!u || endless(u) || !isGame(app)) return; const s = state(u); if (s.n < 1) return; u.energy = { n: s.n - 1, at: s.n >= s.max ? now() : s.at }; save(); }
+module.exports = { view, has, use, ON, MAX, PRICE };

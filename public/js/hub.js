@@ -3,6 +3,7 @@ import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avata
 import { openChat, showChannel, sendPayload } from './store.js';
 import { playAudio, AudioBar } from './media.js';
 import { Cover, tagCover, spendEnergy, EnergyPill } from './perks.js';
+import { openLobby } from './lobby.js';
 import { openMiniApp } from './panels.js';
 import { Feed, Viewers } from './feed.js';
 import { openDock, ytDock, oldShell } from './dock.js';
@@ -413,13 +414,15 @@ function AppFrame({ id, app, chat, duel }) {
     };
     addEventListener('message', onMsg); return () => removeEventListener('message', onMsg);
   }, []);
+  /* «Играть с другом»: сразу, не дожидаясь конца партии. Закрываем одиночную игру и открываем лобби с этой же игрой. */
+  const together = () => { const c = S.chats[chat || S.ui.chat], peer = c && c.type === 'dm' ? c.peer : null; closeModal(id); openLobby(app.id, peer); };
   const mineB = dv && dv.mine === 'b', won = dv && dv.done && (dv.sb === dv.sa ? 0 : (dv.sb > dv.sa) === mineB ? 1 : -1);
   const bar = !D ? null
     : dv && !dv.done && mineB ? html`<div class="duel-bar go"><span>⚔️ <b>${dv.an}</b>: ${n2(dv.sa, D[1])} ${D[0]}. У вас одна попытка — первая партия идёт в зачёт.</span></div>`
     : dv && !dv.done ? html`<div class="duel-bar"><span>⚔️ Вызов отправлен: <b>${dv.bn}</b> ещё не ответил(а). Ваш результат — ${n2(dv.sa, D[1])} ${D[0]}.</span></div>`
     : dv && res == null ? html`<div class=${cx('duel-bar', won > 0 ? 'win' : won < 0 ? 'lose' : '')}><span>${won > 0 ? '🏆 Победа!' : won < 0 ? '🥲 Поражение.' : '🤝 Ничья.'} ${mineB ? dv.sb : dv.sa} против ${mineB ? dv.sa : dv.sb} ${D[0]}</span>${mineB && html`<button class="btn sm" disabled=${busy} onClick=${() => challenge(dv.a, dv.sb)}>Реванш</button>`}</div>`
-    : res != null ? html`<div class="duel-bar"><span>Ваш результат: <b>${n2(res, D[1])}</b> ${D[0]}</span><button class="btn sm" disabled=${busy} onClick=${() => challenge(null, res)}>⚔️ Вызвать на дуэль</button></div>`
-    : html`<div class="duel-bar dim"><span>⚔️ Доиграйте партию — и сможете вызвать друга на дуэль</span></div>`;
+    : res != null ? html`<div class="duel-bar two"><span>Ваш результат: <b>${n2(res, D[1])}</b> ${D[0]}</span><button class="btn sm" onClick=${together}>🎮 С другом</button><button class="btn sm ghost" disabled=${busy} title="Друг сыграет позже и попробует побить ваш результат" onClick=${() => challenge(null, res)}>⚔️ Вызов</button></div>`
+    : html`<div class="duel-bar"><span>Вдвоём веселее</span><button class="btn sm" onClick=${together}>🎮 Играть с другом</button></div>`;
   return html`<${Modal} id=${id} title=${app.title} icon="app-window" cls="miniapp nopad"><div class="miniapp-col"><iframe ref=${fr} title=${app.title} src=${app.url} sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer"></iframe>${bar}</div><//>`;
 }
 // Каталог: и вкладка, и окно из «скрепки» в чате.
@@ -432,6 +435,7 @@ export function AppsCatalog({ chat, onPick }) {
   const tile = a => html`<button class=${cx('app-tile', a.ev && 'ev')} key=${a.id} onClick=${() => run(a)}><span class="app-ic" style=${a.emoji ? `background:${TILE[a.id] || '#0078D7'}` : ''}>${a.art ? html`<${Leafy} />` : a.emoji || html`<${Avatar} src=${a.avatar} name=${a.title} color=${a.color} s=${52} square />`}</span><span class="app-m"><b>${a.title}</b><small>${a.about}</small></span></button>`;
   return html`<div class="apps">
     <div class="hub-bar"><h2 class="hub-t">Приложения</h2><${EnergyPill} /><label class="search"><${Icon} n="search" s=${16} /><input value=${q} placeholder="Игра или утилита" onInput=${e => setQ(e.target.value)} /></label></div>
+    ${!s && html`<button class="lobby-tile" onClick=${() => { const c = S.chats[chat || S.ui.chat], peer = c && c.type === 'dm' ? c.peer : null; if (onPick) onPick(); openLobby(null, peer); }}><span aria-hidden="true">🎮</span><span><b>Играть с другом</b><small>Лобби на двоих: зовёте друга, выбираете игру и стартуете одновременно</small></span><${Icon} n="chevron-right" s=${18} /></button>`}
     ${recent.length > 0 && html`<h5>Недавние</h5><div class="app-grid">${recent.map(tile)}</div>`}
     ${CATS.map(([k, name, ic]) => { const l = found.filter(a => a.cat === k); return l.length > 0 && html`<h5><${Icon} n=${ic} s=${14} /> ${name}</h5><div class="app-grid">${l.map(tile)}</div>`; })}
     ${!found.length && html`<${Empty} icon="layout-grid" text="Такого приложения нет. Пока." />`}
@@ -453,6 +457,7 @@ const FAQ = [
   ['Что такое «Выдохнуть»?', 'Меню ☰ → «Выдохнуть». Там минута спокойного дыхания, дневник настроения (его видите только вы), кнопка «написать близкому», телефоны доверия и «Режим дзен», который убирает все счётчики непрочитанного. Ничего из этого не стоит листиков.'],
   ['Как оставить капсулу времени?', 'В личном чате нажмите на скрепку → «Капсула времени», напишите текст и выберите день. До срока в чате лежит закрытая капсула. В назначенный день она откроется сама и бесплатно. Адресат может открыть её раньше за 300 🍃 — если автор не выключил это при создании. Автор может отменить капсулу, пока она запечатана.'],
   ['Что такое режим инкогнито?', '«Настройки → Приватность → Режим инкогнито». Никто не видит, что вы в сети и когда заходили, не уходят отметки «прочитано» и «печатает…», просмотры историй не записываются, в поиске вас находят только по точному @username. Имя и аватар в чатах остаются. Для регистрации не нужны ни телефон, ни почта.'],
+  ['Как сыграть с другом одновременно?', 'В «Хаб → Приложения» нажмите «Играть с другом» (или кнопку «Играть с другом» под любой игрой). Откроется лобби: выберите игру, нажмите «Позвать друга». Другу придёт приглашение в личный чат и полоска над списком чатов — он жмёт «Войти». Когда оба нажали «Готов», партия начинается у обоих сразу. «Пивная битва» — настоящий поединок за одним столом. В остальных играх у каждого своё поле, но старт общий и счёт соперника виден вживую. После раунда вы оба остаётесь в лобби: «Готов» — и новый раунд. Листиков за победу нет, раунд тратит единицу энергии, как обычный запуск игры.'],
   ['Я забыл пароль. Что делать?', 'Если вы ещё в приложении: «Настройки → Аккаунт → Пароль → Не помню пароль» — новый пароль задаётся без старого, если с этого устройства вы вошли больше суток назад (или по коду двухфакторной защиты). Если вышли отовсюду, путей два. Первый: код восстановления. Их выдают в «Настройки → Аккаунт → Коды восстановления» (и сразу после того, как вы задали пароль). На экране входа нажмите «Забыли пароль?», введите username, один код и новый пароль. Второй, если кодов нет: напишите администратору — он пришлёт одноразовую ссылку, по которой вы зададите новый пароль. Ссылка живёт сутки. Если вы ещё в приложении — пишите в поддержку прямо отсюда. Сам пароль не знает никто, даже администрация: его можно только заменить.'],
   ['Как удалить переписку без следа?', 'В списке чатов: меню личного чата → «Стереть без следа». Переписка исчезает у обоих — сообщения, фото, файлы — и с сервера тоже; записи об удалении не остаётся. В резервных копиях базы стёртое доживает до 35 дней, потом исчезает и там. Не стираются скриншоты, то, что человек успел сохранить или переслать, и жалобы, уже отправленные модераторам. Если вам угрожают — сначала пожалуйтесь на сообщение, потом стирайте.'],
   ['Что значит «Нет сил» и «Побыть рядом»?', 'Статус «Нет сил» ставится в «Выдохнуть» или в окне статуса. Тот, кто откроет чат с вами, увидит кнопку «Побыть рядом». По нажатию вам приходит тихая отметка «рядом» — без вопросов и советов, отвечать не нужно. Над списком чатов видно, кто был рядом за сутки.'],

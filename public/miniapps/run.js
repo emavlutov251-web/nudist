@@ -2,12 +2,14 @@
 import { stage, loop, text, rnd, pick } from '/miniapps/game.js';
 import { leafy, item, scene, burst, sparks } from '/miniapps/art.js';
 import { TH, panel, milestones } from '/miniapps/play.js';
+import { live } from '/miniapps/kit.js';
 const NAMES = { beach: 'Пляжная пробежка', jan: 'Зарядка на морозе', apr: 'Банановый забег', jul: 'Полоса выживания', sep: 'Не опоздай', oct: 'Ночь тыкв' };
 const W = 360, H = 520, GY = 410, X = 84, cv = document.getElementById('cv'), { ctx } = stage(cv, W, H);
 const title = NAMES[TH.key] || 'Прыгун: ' + TH.name, UI = panel('run', title, 'Нажимайте на экран или пробел, чтобы прыгнуть. В воздухе можно прыгнуть второй раз. Собирайте полезное, перепрыгивайте лишнее.');
 const G = { on: false, t: 0, y: 0, vy: 0, jumps: 0, run: 0, obs: [], bon: [], fx: [], score: 0, lives: 3, next: 1, inv: 0, mood: 'ok', moodT: 0, off: 0 }; let mile = milestones([15, 40, 80]);
 const jump = () => { if (!G.on || G.jumps >= 2) return; G.vy = G.jumps ? -470 : -560; G.jumps++; burst(G.fx, X, GY - G.y, 'rgba(255,255,255,.7)', 4); };
 cv.addEventListener('pointerdown', e => { e.preventDefault(); jump(); }); addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); jump(); } });
+live(() => G.score);
 UI.start(() => { Object.assign(G, { on: true, t: 0, y: 0, vy: 0, jumps: 0, obs: [], bon: [], fx: [], score: 0, lives: 3, next: 1.2, inv: 0, mood: 'ok' }); mile = milestones([15, 40, 80]); });
 function step(dt) {
   G.t += dt; G.moodT -= dt; if (G.moodT <= 0) G.mood = 'ok'; G.inv = Math.max(0, G.inv - dt);

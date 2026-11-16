@@ -412,7 +412,7 @@ function chatView(chat, uid) {
 function emitChat(chat, uids) { for (const u of uids || membersOf(chat)) if (isOnline(u)) emit(u, 'chat', chatView(chat, u)); }
 
 // ───── сообщения
-const MSG_FIELDS = ['near', 'text', 'media', 'reply', 'quote', 'fwd', 'poll', 'thread', 'btn', 'silent', 'sticker', 'loc', 'contact', 'enc', 'title', 'as', 'via', 'hook', 'call', 'act', 'dice', 'album', 'fx', 'gift', 'tags', 'rq', 'sig', 'link', 'once', 'files', 'note', 'present', 'duel', 'cap'];
+const MSG_FIELDS = ['near', 'text', 'media', 'reply', 'quote', 'fwd', 'poll', 'thread', 'btn', 'silent', 'sticker', 'loc', 'contact', 'enc', 'title', 'as', 'via', 'hook', 'call', 'act', 'dice', 'album', 'fx', 'gift', 'tags', 'rq', 'sig', 'link', 'once', 'files', 'note', 'present', 'duel', 'cap', 'lobby'];
 const expiring = [];
 for (const cid in db.msgs) for (const m of db.msgs[cid]) if (m.exp) expiring.push({ c: cid, i: m.id, at: m.exp });
 const hooks = { afterPost: [], userGone: [] };

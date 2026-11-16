@@ -1,5 +1,5 @@
 // «Банный рояль»: карточная битва на две дорожки против компьютера. Свои внизу, чужие сверху, пар — валюта.
-import { ready, share, $, earn, result } from '/miniapps/kit.js';
+import { ready, share, $, earn, result, live } from '/miniapps/kit.js';
 import { stage, loop, emo, text, rnd, pick, clamp, dist } from '/miniapps/game.js';
 const W = 360, H = 470, RIVER = 235, LANES = [80, 280], { ctx, pos } = stage($('#cv'), W, H);
 const CARDS = {
@@ -82,4 +82,5 @@ function drawHand() { const h = $('#hand'); h.textContent = ''; G.hand.forEach((
 $('#cv').addEventListener('pointerdown', e => { if (!G || G.over || !$('#ov').hidden) return; if (sel == null) return flash('Сначала выберите карту внизу'); const c = CARDS[G.hand[sel]]; if (G.steam[0] < c.cost) return flash('Не хватает пара: нужно ' + c.cost); play(sel, pos(e)); });
 $('#go').onclick = () => { reset(); $('#ov').hidden = true; }; $('#again').onclick = () => { reset(); $('#ov').hidden = true; };
 $('#share').onclick = () => share(G.result > 0 ? `♨️ Банный рояль: победа ${$('#mine').textContent}:${$('#his').textContent}. С лёгким паром!` : G.result < 0 ? `♨️ Банный рояль: меня выгнали из бани со счётом ${$('#mine').textContent}:${$('#his').textContent}. Кто отомстит?` : `♨️ Банный рояль: ничья ${$('#mine').textContent}:${$('#his').textContent}.`);
+live(() => (G ? G.towers.filter(t => t.side !== 0 && t.hp <= 0).length * 10 + G.towers.filter(t => t.side === 0 && t.hp > 0).length * 3 + (G.result > 0 ? 1 : 0) : 0));
 ready(); loop(step);
