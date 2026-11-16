@@ -171,6 +171,10 @@ CADDY
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || { echo "Caddyfile не прошёл проверку:"; caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; exit 1; }
 
 say "TURN для звонков (coturn)"
+# В облаке у машины обычно внутренний адрес, а внешний «приклеен» снаружи. Тогда coturn нужно знать оба,
+# иначе два человека, которым обоим понадобился ретранслятор, друг друга не услышат.
+LOCAL_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+EXT_IP="$IP"; [ -n "$LOCAL_IP" ] && [ "$LOCAL_IP" != "$IP" ] && EXT_IP="$IP/$LOCAL_IP"
 cat > /etc/turnserver.conf <<TURN
 # Создано deploy/install.sh. Пароли клиентам выдаёт сервер «Нудиста» на 12 часов (use-auth-secret).
 listening-port=3478
@@ -178,7 +182,7 @@ fingerprint
 use-auth-secret
 static-auth-secret=$SECRET
 realm=$DOMAIN
-external-ip=$IP
+external-ip=$EXT_IP
 min-port=49160
 max-port=49400
 total-quota=200

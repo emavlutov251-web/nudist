@@ -69,7 +69,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 15;      // 1.5: телевизор — встроенный браузер для сайтов каналов
+    private static final int APP_VERSION = 16;      // 1.6: новый адрес сервера, перенос сеанса со старого адреса; телевизор убран
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -83,6 +83,9 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private PermissionRequest pendingRequest;
     private boolean mainFrameFailed;
+    /** Переезд на новый адрес: пока true, ждём от страницы прежнего адреса её хранилище (см. migrate). */
+    private boolean moving;
+    private String moveServer, moveChat;
 
     /** Аудио, которым поделились с «Нудистом» из другой программы. Файл уже скопирован в кэш приложения. */
     private static final class Shared {
@@ -105,15 +108,17 @@ public class MainActivity extends Activity {
         setContentView(root);
         createWebView();
         String server = prefs.getString("server", null);
-        if (server == null) {
-            // Адрес, вшитый при сборке (SERVER_URL=… ./build.sh). Пустой — спросить у человека.
-            String builtIn = normalize(getString(R.string.default_server));
-            if (builtIn != null) {
-                server = builtIn;
-                prefs.edit().putString("server", server).apply();
-            }
+        // Адрес, вшитый при сборке (SERVER_URL=… ./build.sh). Пустой — спросить у человека.
+        String builtIn = normalize(getString(R.string.default_server));
+        // Сервер переехал: сборка знает прежние адреса (MIGRATE_FROM=… ./build.sh). Приложение, настроенное на один из них,
+        // само переходит на новый адрес и переносит туда вход в аккаунт — заново входить не нужно.
+        String old = server != null && builtIn != null && !server.equals(builtIn) && movedFrom(server) ? server : null;
+        if (old != null || (server == null && builtIn != null)) {
+            server = builtIn;
+            prefs.edit().putString("server", server).apply();
         }
-        if (server != null) open(server, chatFrom(getIntent()));
+        if (old != null) migrate(old, server, chatFrom(getIntent()));
+        else if (server != null) open(server, chatFrom(getIntent()));
         if (server == null || ACTION_CHANGE_SERVER.equals(getIntent().getAction())) showSetup(null);
         clearShareDir();      // остатки с прошлого раза
         if (state == null) takeShare(getIntent());
@@ -164,21 +169,18 @@ public class MainActivity extends Activity {
             return APP_VERSION;
         }
 
-        /** Телевизор: открыть страницу эфира канала во встроенном браузере. list — JSON-массив { n, name, url }, i — с какого канала начать. */
+        /** Переезд: страница с прежнего адреса отдаёт то, что приложение хранило в браузере (ключ сеанса, настройки, ключи секретных чатов). Принимается только в момент переезда. */
         @JavascriptInterface
-        public boolean tv(final String list, final int i) {
-            if (list == null || list.length() > 20000 || !list.contains("https://")) return false;
+        public void moved(final String json) {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    try {
-                        startActivity(new Intent(MainActivity.this, TvActivity.class).putExtra(TvActivity.X_LIST, list).putExtra(TvActivity.X_INDEX, i));
-                    } catch (Throwable e) {
-                        toast("Телевизор не включился");
-                    }
+                    if (!moving) return;
+                    moving = false;
+                    if (json != null && json.length() > 2 && json.length() < 400000) prefs.edit().putString("move", json).apply();
+                    open(moveServer, moveChat);
                 }
             });
-            return true;
         }
 
         /** Страница загрузилась и спрашивает: не ждут ли файлы, которыми поделились. Ответ придёт событием nudist-share. */
@@ -554,6 +556,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                if (!mainFrameFailed) applyMove(url);
                 if (!mainFrameFailed && panel != null && ("error".equals(panel.getTag()) || "loading".equals(panel.getTag()))) hidePanel();
             }
         });
@@ -791,6 +794,59 @@ public class MainActivity extends Activity {
     /** Открывает сервер и, пока страница грузится, показывает заставку: спящий сервер отвечает до минуты. */
     private void open(String server) {
         open(server, null);
+    }
+
+    /** Был ли этот адрес прежним адресом сервера (список вшит при сборке). */
+    private boolean movedFrom(String server) {
+        for (String raw : getString(R.string.migrate_from).split(",")) {
+            String a = normalize(raw.trim());
+            if (a != null && a.equalsIgnoreCase(server)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Переезд. Хранилище браузера привязано к адресу, поэтому сначала показываем пустую страницу «от имени» прежнего адреса
+     * (в сеть при этом ничего не уходит): она читает своё хранилище и отдаёт его через мост moved(). Потом открываем новый адрес
+     * и кладём туда прочитанное (applyMove). Не получилось прочитать — переносим хотя бы ключ сеанса, который приложение
+     * и так хранит для уведомлений.
+     */
+    private void migrate(String old, final String server, final String chat) {
+        moving = true;
+        moveServer = server;
+        moveChat = chat;
+        prefs.edit().putBoolean("moveTok", true).apply();
+        LinearLayout box = newPanel("loading");
+        box.addView(text("🍃 Нудист", 34, C_INK, true));
+        box.addView(text("Переезжаем на новый адрес…\nВход в аккаунт сохранится.", 16, C_DIM, false));
+        try {
+            web.loadDataWithBaseURL(old + "/", "<!doctype html><meta charset=\"utf-8\"><script>(function(){var d={},i,k,v;try{for(i=0;i<localStorage.length;i++){k=localStorage.key(i);if(k.indexOf('nudist.')!==0)continue;v=localStorage.getItem(k);if(v&&v.length<20000)d[k]=v}}catch(e){}try{NudistApp.moved(JSON.stringify(d))}catch(e){}})()</script>", "text/html", "utf-8", null);
+        } catch (Throwable e) { /* перенос не обязателен: ниже откроется новый адрес */ }
+        root.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!moving) return;      // страница уже ответила
+                moving = false;
+                open(server, chat);
+            }
+        }, 4000);
+    }
+
+    /** Новый адрес открылся: кладём в его хранилище то, что перенесли со старого, и перезагружаем страницу уже вошедшей. Один раз. */
+    private void applyMove(String url) {
+        final String server = prefs.getString("server", null);
+        if (server == null || url == null || !(url.equals(server) || url.startsWith(server + "/"))) return;
+        String data = prefs.getString("move", null);
+        boolean tok = prefs.getBoolean("moveTok", false);
+        if (data == null && !tok) return;
+        String token = tok ? prefs.getString(PushService.K_TOKEN, "") : "";
+        prefs.edit().remove("move").remove("moveTok").apply();
+        try {
+            web.evaluateJavascript("(function(){try{if(localStorage.getItem('nudist.token'))return;var d=JSON.parse(" + JSONObject.quote(data == null ? "{}" : data) + "),k;"
+                + "for(k in d)if(k.indexOf('nudist.')===0&&typeof d[k]==='string')localStorage.setItem(k,d[k]);"
+                + "var t=" + JSONObject.quote(token == null ? "" : token) + ";if(!localStorage.getItem('nudist.token')&&t)localStorage.setItem('nudist.token',JSON.stringify(t));"
+                + "if(localStorage.getItem('nudist.token'))location.reload()}catch(e){}})()", null);
+        } catch (Throwable e) { /* не вышло — человек просто войдёт заново */ }
     }
 
     private void open(String server, String chat) {

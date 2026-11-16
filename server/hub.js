@@ -272,7 +272,7 @@ H['duel.done'] = (c, p) => {
   const ch = db.chats[d.chat], a = db.users[d.a], b = db.users[d.b], win = n > d.sa ? 'b' : n < d.sa ? 'a' : '';
   if (ch) {
     const m0 = C.findMsg(ch.id, d.mid); if (m0 && m0.duel) { m0.duel = { ...m0.duel, sb: n, win }; C.updateMsg(ch, m0); }
-    try { C.postMessage(ch, d.b, { text: `⚔️ ${g.title || 'Дуэль: «' + g.name + '»'} — ${n} против ${d.sa} ${g.e}. ` + (win ? `Победа за ${(win === 'b' ? b : a).name} 🏆` : 'Ничья: расходимся друзьями 🤝'), reply: d.mid }); } catch (e) { /* собеседник закрылся — итог всё равно записан в вызове */ }
+    try { C.postMessage(ch, d.b, { text: `⚔️ ${g.title || 'Дуэль: «' + g.name + '»'} — ${n} против ${d.sa} ${g.e}. ` + (win ? `Победитель — ${(win === 'b' ? b : a).name} 🏆` : 'Ничья: расходимся друзьями 🤝'), reply: d.mid }); } catch (e) { /* собеседник закрылся — итог всё равно записан в вызове */ }
   }
   save();
   return duelView(d, c.uid);

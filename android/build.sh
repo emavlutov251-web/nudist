@@ -8,12 +8,15 @@ BT="$SDK/build-tools/34.0.0"; JAR="$SDK/platforms/android-34/android.jar"
 # JDK 11 или 17: с JDK 21 падает d8 из build-tools 34 (NullPointerException на анонимных классах).
 if [ -n "${JDK_HOME:-}" ]; then export JAVA_HOME="$JDK_HOME" PATH="$JDK_HOME/bin:$PATH"; elif [ -d /usr/lib/jvm/jdk-11 ]; then export JAVA_HOME=/usr/lib/jvm/jdk-11 PATH="/usr/lib/jvm/jdk-11/bin:$PATH"; fi
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
-VERSION_CODE="${VERSION_CODE:-6}"; VERSION_NAME="${VERSION_NAME:-1.5}"
+VERSION_CODE="${VERSION_CODE:-7}"; VERSION_NAME="${VERSION_NAME:-1.6}"
 # SERVER_URL=https://… вшивает адрес сервера: приложение открывает его сразу, без экрана настройки.
 SERVER_URL="${SERVER_URL:-}"
+# MIGRATE_FROM=https://старый-адрес[,ещё-один] — прежние адреса сервера: приложение, настроенное на них, само перейдёт на SERVER_URL и перенесёт вход.
+MIGRATE_FROM="${MIGRATE_FROM:-}"
+case "$MIGRATE_FROM" in *[\<\>\&\"\']*) echo "В MIGRATE_FROM недопустимые символы"; exit 1;; esac
 case "$SERVER_URL" in *[\<\>\&\"\']*) echo "В SERVER_URL недопустимые символы"; exit 1;; esac
 cp -r res "$W/res"
-printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="default_server" translatable="false">%s</string>\n</resources>\n' "$SERVER_URL" > "$W/res/values/server.xml"
+printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="default_server" translatable="false">%s</string>\n    <string name="migrate_from" translatable="false">%s</string>\n</resources>\n' "$SERVER_URL" "$MIGRATE_FROM" > "$W/res/values/server.xml"
 
 "$BT/aapt2" compile --dir "$W/res" -o "$W/res.zip"
 "$BT/aapt2" link -o "$W/app.apk" -I "$JAR" --manifest AndroidManifest.xml --java "$W/gen" \

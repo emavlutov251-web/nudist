@@ -124,7 +124,7 @@ export function Composer({ chat, thread }) {
     let m = v.match(/^@([a-zA-Z0-9_]*bot)\s+([\s\S]*)$/i);
     if (m && !edit) { setSug(s => ({ kind: 'inline', bot: m[1], items: s && s.kind === 'inline' ? s.items : [], i: 0 })); inlineQ(m[1], m[2]); return; }
     m = v.match(/^\/([a-zA-Zа-яёА-ЯЁ0-9_]*)$/);
-    if (m && !edit) { const q = m[1].toLowerCase(); const items = [...((peer && peer.bot && peer.cmds) || []).map(c => ({ c: c.c, d: c.d, bot: true })), ...SLASH].filter(x => x.c.startsWith(q)); setSug(items.length ? { kind: 'slash', items, i: 0 } : null); return; }
+    if (m && !edit) { const q = m[1].toLowerCase(); const items = [...((peer && peer.bot && peer.cmds) || []).map(c => ({ c: c.c, d: c.d, bot: true })), ...SLASH].filter(x => x.c.startsWith(q) && !(x.server && chat.type === 'secret'));      /* кубик, монетку и шар считает сервер, а в секретном чате он текста не видит — там их не предлагаем */ setSug(items.length ? { kind: 'slash', items, i: 0 } : null); return; }
     m = v.slice(0, pos).match(/(?:^|\s)@([a-zA-Z0-9_]{0,32})$/);
     if (m && (chat.type === 'group' || chat.server || (chat.type === 'channel' && thread))) {
       const q = m[1].toLowerCase(), all = await membersFor(chat);
