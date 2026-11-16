@@ -185,3 +185,11 @@ button.col-i.gi { font: inherit; color: inherit; cursor: pointer; } button.col-i
 
 /* ───── 70: экран сброса пароля ───── */
 .reset-card .codes { margin: 2px 0; } .reset-acts { display: flex; gap: 8px; } .reset-acts .btn { flex: 1; }
+
+/* ───── 71: «Сколько сообщений» и смена пароля без старого ───── */
+.mcount { display: flex; flex-direction: column; gap: 12px; } .mc-big { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0 2px; text-align: center; } .mc-big b { font-size: 2.6em; line-height: 1.1; font-variant-numeric: tabular-nums; } .mc-big small { color: var(--ink2); overflow-wrap: anywhere; }
+.mc-bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; } .mc-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px 0 0 99px; }
+.mc-rows { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; } .mc-rows > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; } .mc-rows > div + div { border-top: 1px solid var(--line); }
+.mc-rows > div > span { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .mc-rows b { flex: none; font-variant-numeric: tabular-nums; }
+.mc-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--line); border: 1px solid var(--ink2); } .mc-dot.me { background: var(--accent); border-color: var(--accent); }
+.pass-note { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 10%, var(--card)); line-height: 1.4; font-size: .92em; } .pass-note .ic { flex: none; margin-top: 2px; } .pass-back { margin: 12px 0 0; font-size: .9em; } .pass-note { margin-bottom: 12px; } .pass-note.wait { background: color-mix(in srgb, var(--warn) 14%, var(--card)); }

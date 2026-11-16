@@ -276,6 +276,24 @@ async function exportChat(chat, fmt) {
   const rows = r.msgs.map(m => `<div class="m"><b>${esc(userName(r.users[m.from]))}</b> <time>${esc(new Date(m.ts).toLocaleString('ru-RU'))}</time><p>${m.enc ? '🔒 зашифровано' : esc(m.type === 'text' || m.type === 'service' ? m.text || '' : msgPreview(m))}</p>${m.media && !m.media.ek ? `<a href="${esc(location.origin + m.media.url)}">${esc(m.media.name || 'вложение')}</a>` : ''}</div>`).join('\n');
   download(name + '.html', `<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><style>body{font:15px/1.5 system-ui;max-width:760px;margin:40px auto;padding:0 16px;color:#10231a;background:#f6f1e7}.m{padding:8px 0;border-bottom:1px solid #e3dccb}time{color:#789;font-size:12px}p{margin:2px 0;white-space:pre-wrap}</style><h1>${esc(title)}</h1><p>Экспорт из «Нудиста» · ${esc(new Date().toLocaleString('ru-RU'))} · ${r.msgs.length} сообщений</p>${rows}`, 'text/html');
 }
+// «Сколько сообщений» — из меню «три точки» личного чата: всего, от каждого, за сегодня и с какого дня идёт переписка.
+function MsgCount({ id, chat: cid }) {
+  const ch = S.chats[cid], [d, setD] = useState(null), [err, setErr] = useState('');
+  useEffect(() => { const t = new Date(); t.setHours(0, 0, 0, 0); rpc('chat.count', { id: cid, since: t.getTime() }).then(setD, e => setErr(e.message)); }, [cid]);
+  if (!ch) return null;
+  const who = chatInfo(ch).title, n = v => Number(v || 0).toLocaleString('ru-RU'), share = d && d.total ? Math.round(d.mine / d.total * 100) : 50;
+  return html`<${Modal} id=${id} title="Сколько сообщений" icon="chart-column" cls="small" footer=${html`<button class="btn" onClick=${() => closeModal(id)}>Понятно</button>`}>
+    ${err ? html`<p class="err" role="alert">${err}</p>` : !d ? html`<${Spinner} />` : html`<div class="mcount">
+      <div class="mc-big"><b>${n(d.total)}</b><small>${plural(d.total, ['сообщение', 'сообщения', 'сообщений'])} в чате с «${who}»</small></div>
+      ${d.total > 0 && html`<div class="mc-bar" role="img" aria-label=${`Вы — ${share}%, собеседник — ${100 - share}%`}><i style=${{ width: share + '%' }}></i></div>`}
+      <div class="mc-rows">
+        <div><span><i class="mc-dot me"></i>Вы</span><b>${n(d.mine)}</b></div>
+        <div><span><i class="mc-dot"></i>${who}</span><b>${n(d.theirs)}</b></div>
+        <div><span>Сегодня</span><b>${n(d.today)}</b></div>
+        ${d.first > 0 && html`<div><span>Первое сообщение</span><b>${new Date(d.first).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</b></div>`}
+      </div>
+      <p class="hint">${d.total ? 'Считаются сообщения, которые видны вам сейчас. Удалённые, очищенные, служебные строки и звонки не входят.' : 'Пока ни одного сообщения. Самое время написать первое.'}</p></div>`}<//>`;
+}
 export function chatActions(chat, inList) {
   const i = chatInfo(chat), u = i.user, muted = isMuted(chat), priv = chat.type === 'dm' || chat.type === 'secret', folders = S.settings.folders || [];
   const mute = t => call('chat.state', { id: chat.id, mute: t });
@@ -292,6 +310,7 @@ export function chatActions(chat, inList) {
     chat.unread > 0 && { icon: 'check-check', label: 'Пометить прочитанным', run: () => call('chat.read', { id: chat.id, seq: chat.seq || 0 }) },
     folders.length > 0 && { icon: 'folder', label: 'В папку', sub: folders.map(f => ({ emoji: f.icon, label: f.name, on: (f.chats || []).includes(chat.id), run: () => setSetting({ folders: folders.map(x => x.id === f.id ? { ...x, chats: (x.chats || []).includes(chat.id) ? x.chats.filter(c => c !== chat.id) : [...(x.chats || []), chat.id] } : x) }) })) },
     '-',
+    priv && { icon: 'chart-column', label: 'Сколько сообщений', run: () => openModal(MsgCount, { chat: chat.id }) },
     (priv || (chat.can && chat.can.info)) && { icon: 'timer', label: 'Автоудаление', hint: chat.ttl ? ttlLabel(chat.ttl) : 'выкл', sub: TTL_OPTS.map(([s, l]) => ({ label: l, on: (chat.ttl || 0) === s, run: () => call('chat.update', { id: chat.id, ttl: s }) })) },
     chat.type !== 'secret' && { icon: 'download', label: 'Экспорт истории', sub: [{ icon: 'braces', label: 'JSON', run: () => exportChat(chat, 'json') }, { icon: 'file-text', label: 'HTML', run: () => exportChat(chat, 'html') }] },
     u && !u.bot && { icon: 'user', label: 'Профиль', run: () => showProfile(u.id) },

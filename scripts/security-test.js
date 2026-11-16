@@ -5,7 +5,8 @@
 //   3) чужие сессии, пароли, почта наружу не уходят; служебные файлы сервера не отдаются;
 //   4) вход: неверный пароль, подбор, выход из сессии, WebSocket без ключа;
 //   5) рабочий сервер (NODE_ENV=production): первая регистрация только с кодом установки, вход по номеру выключен;
-//   6) сброс забытого пароля: ссылку выдаёт только главный админ, она одноразовая, в базе лежит только её хеш.
+//   6) сброс забытого пароля: ссылку выдаёт только главный админ, она одноразовая, в базе лежит только её хеш;
+//      без старого пароля его нельзя сменить из сеанса моложе суток.
 // Запуск: node scripts/security-test.js   (код выхода 0 — всё закрыто)
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
@@ -71,7 +72,7 @@ async function access() {
     for (const [chat, msg, what] of [[dm.id, m1.id, 'личный чат'], [grp.id, m2.id, 'закрытая группа']]) {
       const tries = [
         ['msg.history', { chat }], ['msg.search', { chat, q: 'тайна' }], ['msg.pinned', { chat }], ['msg.hist', { chat, id: msg }], ['msg.who', { chat, id: msg }],
-        ['chat.members', { id: chat }], ['chat.export', { id: chat }], ['chat.stats', { id: chat }], ['chat.audit', { id: chat }], ['chat.requests', { id: chat }],
+        ['chat.members', { id: chat }], ['chat.count', { id: chat }], ['chat.export', { id: chat }], ['chat.stats', { id: chat }], ['chat.audit', { id: chat }], ['chat.requests', { id: chat }],
         ['chat.state', { id: chat, mute: 1 }], ['chat.read', { id: chat, seq: 1 }], ['chat.typing', { id: chat }],
         ['msg.send', { chat, text: 'я тут' }], ['msg.edit', { chat, id: msg, text: 'взломано' }], ['msg.del', { chat, ids: [msg], all: true }], ['msg.react', { chat, id: msg, e: '👍' }],
         ['msg.pin', { chat, id: msg }], ['msg.forward', { from: chat, ids: [msg], to: [mine.id] }], ['msg.view', { chat, ids: [msg] }], ['msg.click', { chat, id: msg }], ['msg.once.open', { chat, id: msg }],
@@ -147,6 +148,8 @@ async function access() {
     await c2.rpc('me.logout', {}).catch(() => {}); await sleep(300);
     ck('после выхода ключ сессии больше не работает', !(await S.conn(c2.tok).then(() => true, () => false)));
     // ── сброс забытого пароля
+    const pr = await b.err('me.password.reset', { new: 'Zahvat-parol-1' });
+    ck('только что вошедший не может сменить пароль без старого (защита от входа обманом)', !pr.ok && /меньше суток/.test(pr.e || ''), JSON.stringify(pr));
     ck('обычный человек не может выдать ссылку для сброса пароля', !(await c.err('admin.user.reset', { id: a.me.id })).ok);
     const rl = await owner.rpc('admin.user.reset', { id: a.me.id });
     ck('главный админ выдаёт ссылку; почта владельца в ответе не раскрывается', /^[\w-]{30,}$/.test(rl.token || '') && !JSON.stringify(rl).includes(SECRET));

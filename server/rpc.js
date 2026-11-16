@@ -76,6 +76,24 @@ H['me.password'] = (c, p) => {
   u.pass = A.hashPass(p.new); delete u.reset; save(); selfUpdate(u);      /* висящая ссылка для сброса больше не нужна */
   return { ok: true };      /* без ответа окно «Сменить пароль» не понимало, что всё получилось, и не закрывалось */
 };
+// Сменить пароль, не помня старого, — из приложения, где человек уже вошёл. Старый пароль заменяет одно из двух:
+//   включена двухфакторная защита — код из приложения-аутентификатора (или код восстановления);
+//   не включена — «возраст» сеанса: с этого устройства вошли не меньше суток назад (PASS_RESET_HOURS). Так тот, кто только что
+//   попал в аккаунт обманом (выпросил вход по QR, подсмотрел ссылку), не сможет сразу сменить пароль и выгнать хозяина.
+// Остальные сеансы не закрываются: если пароль сменил чужой, у хозяина остаётся вход, чтобы всё вернуть. В аккаунт приходит сообщение.
+const PASS_RESET_AGE = Math.max(0, Number(process.env.PASS_RESET_HOURS === undefined ? 24 : process.env.PASS_RESET_HOURS) || 0) * 3600e3;
+H['me.password.reset'] = (c, p) => {
+  const u = user(c), s = db.sessions[c.token]; need(s, 'Сеанс не найден, войдите заново');
+  const free = s.at + PASS_RESET_AGE;
+  if (p.check) return { totp: !!u.totpOn, wait: !u.totpOn && free > now() ? free : 0 };
+  A.limit('pwreset:' + u.id, 5, 864e5);
+  if (u.totpOn) need(A.totpOk(u.totp, p.code) || A.useRecovery(u, p.code), 'Нужен код из приложения-аутентификатора или код восстановления');
+  else need(free <= now(), 'С этого устройства вы вошли меньше суток назад. Сменить пароль без старого можно будет позже — или напишите в поддержку.');
+  need(typeof p.new === 'string' && p.new.length >= 6 && p.new.length <= 200, 'Пароль — минимум 6 символов');
+  u.pass = A.hashPass(p.new); delete u.reset; save(); selfUpdate(u);
+  A.sysTell(u, `🔑 **Пароль изменён без старого пароля** — с устройства «${s.ua || 'неизвестное устройство'}». Если это были не вы: зайдите в «Настройки → Аккаунт → Пароль → Не помню пароль», задайте свой и завершите чужие сеансы в «Устройствах».`);
+  return { ok: true };
+};
 H['me.totp.setup'] = c => {
   const u = user(c); need(!u.totpOn, 'Двухфакторная защита уже включена');
   u.totp = A.b32enc(crypto.randomBytes(20)); save();
@@ -485,6 +503,18 @@ H['chat.stats'] = (c, p) => {
   const views = last.reduce((a, m) => a + (m.views || []).length, 0), rx = last.reduce((a, m) => a + Object.values(m.rx || {}).reduce((x, y) => x + y.length, 0) + (m.tcount || 0), 0);
   const days = []; for (let i = 13; i >= 0; i--) { const d = today(now() - i * 864e5); days.push({ d, joins: (ch.joins || {})[d] || 0, posts: arr.filter(m => today(m.ts) === d).length }); }
   return { members: C.size(ch.members), posts: arr.length, avgViews: last.length ? Math.round(views / last.length) : 0, er: views ? Math.round(rx / views * 1000) / 10 : 0, clicks: arr.reduce((a, m) => a + (m.clicks || 0), 0), days, top: [...last].sort((a, b) => (b.views || []).length - (a.views || []).length).slice(0, 5).map(m => ({ id: m.id, text: (m.text || m.type).slice(0, 80), views: (m.views || []).length, rx: Object.values(m.rx || {}).reduce((x, y) => x + y.length, 0), comments: m.tcount || 0 })) };
+};
+// Сколько сообщений в чате. Считается то, что человек видит сам: без очищенного и удалённого у себя, без служебных строк и записей о звонках.
+// since — начало сегодняшнего дня по часам человека, чтобы «сегодня» совпадало с его календарём.
+H['chat.count'] = (c, p) => {
+  const ch = getChat(c, p.id), s = st(ch, c.uid), since = int(p.since, 0, 1e15);
+  need(!ch.server && ch.type !== 'channel', 'Счётчик сообщений есть в личных чатах и группах');
+  let total = 0, mine = 0, today = 0, first = 0;
+  for (const m of db.msgs[ch.id] || []) {
+    if (m.seq <= (s.cleared || 0) || m.type === 'service' || m.type === 'call' || m.thread || (m.hid && m.hid.includes(c.uid))) continue;
+    total++; if (m.from === c.uid) mine++; if (since && m.ts >= since) today++; if (!first) first = m.ts;
+  }
+  return { total, mine, theirs: total - mine, today, first };
 };
 H['chat.export'] = (c, p) => {
   const ch = getChat(c, p.id), s = st(ch, c.uid);

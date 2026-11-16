@@ -102,11 +102,25 @@ function PassDlg({ id }) {
     toast('Пароль обновлён'); closeModal(id);
     if (noCodes) { const r = await rpc('me.recovery.new', { password: f.a }).catch(() => null); if (r) openModal(Codes, { codes: r.recovery }); }      /* кодов ещё нет — выдаём сразу, пока человек помнит пароль */
   };
-  const forgot = () => { S.modals = []; bump(); import('./hub.js').then(m => m.openSupport()); };      /* закрываем и настройки под этим окном, иначе чат поддержки откроется за ними */
-  return html`<${Modal} id=${id} title=${has ? 'Сменить пароль' : 'Задать пароль'} icon="key-round" cls="small" footer=${html`<button class="btn" disabled=${!ok} onClick=${save}>Сохранить</button>`}>
-    ${has && html`<label class="fld"><span>Текущий пароль</span><input type="password" autocomplete="current-password" value=${f.old} onInput=${e => setF({ ...f, old: e.target.value })} /><small class="dim">Не помните? <a role="button" tabindex="0" onClick=${forgot}>Напишите в поддержку</a> — пришлют одноразовую ссылку для сброса.</small></label>`}
-    <label class="fld"><span>Новый пароль</span><input type="password" autocomplete="new-password" value=${f.a} onInput=${e => setF({ ...f, a: e.target.value })} /><small class="dim">Минимум 6 символов. «qwerty» и «123456» знает даже наш уборщик.</small></label>
-    <label class="fld"><span>Ещё раз</span><input type="password" autocomplete="new-password" value=${f.b} onInput=${e => setF({ ...f, b: e.target.value })} />${f.b && f.a !== f.b && html`<small class="err">Пароли не совпадают</small>`}</label><//>`;
+  const support = () => { S.modals = []; bump(); import('./hub.js').then(m => m.openSupport()); };      /* закрываем и настройки под этим окном, иначе чат поддержки откроется за ними */
+  /* «Не помню пароль»: старый пароль заменяет код 2FA либо то, что с этого устройства вошли больше суток назад (решает сервер). */
+  const [fg, setFg] = useState(null);      /* null — обычная смена; { totp, wait } — без старого пароля */
+  const forgot = async () => { const r = await call('me.password.reset', { check: true }); if (r) setFg(r); };
+  const saveFg = async () => {
+    const noCodes = !S.me.totp && !S.me.recoveryLeft;
+    if (!(await call('me.password.reset', { new: f.a, code: f.code }))) return;
+    toast('Пароль обновлён'); closeModal(id);
+    if (noCodes) { const r = await rpc('me.recovery.new', { password: f.a }).catch(() => null); if (r) openModal(Codes, { codes: r.recovery }); }
+  };
+  const okFg = fg && !fg.wait && f.a.length >= 6 && f.a === f.b && (!fg.totp || (f.code || '').trim().length >= 6);
+  return html`<${Modal} id=${id} title=${fg ? 'Не помню пароль' : has ? 'Сменить пароль' : 'Задать пароль'} icon="key-round" cls="small" footer=${html`<button class="btn" disabled=${fg ? !okFg : !ok} onClick=${fg ? saveFg : save}>Сохранить</button>`}>
+    ${has && !fg && html`<label class="fld"><span>Текущий пароль</span><input type="password" autocomplete="current-password" value=${f.old} onInput=${e => setF({ ...f, old: e.target.value })} /><small class="dim"><a role="button" tabindex="0" class="pass-forgot" onClick=${forgot}>Не помню пароль</a></small></label>`}
+    ${fg && (fg.wait ? html`<div class="pass-note wait"><${Icon} n="timer" s=${18} /><div><b>Пока нельзя.</b> С этого устройства вы вошли меньше суток назад. Сменить пароль без старого можно будет ${fmtFull(fg.wait)}. Это защита: тот, кто попал в аккаунт обманом, не сможет сразу сменить пароль. Срочно? <a role="button" tabindex="0" onClick=${support}>Напишите в поддержку</a>.</div></div>`
+      : fg.totp ? html`<label class="fld"><span>Код из приложения-аутентификатора</span><input inputmode="numeric" autocomplete="one-time-code" placeholder="6 цифр или код восстановления" value=${f.code || ''} onInput=${e => setF({ ...f, code: e.target.value })} /><small class="dim">Вместо старого пароля.</small></label>`
+      : html`<div class="pass-note"><${Icon} n="shield-check" s=${18} /><div>Старый пароль не нужен: вы вошли с этого устройства больше суток назад. Другие ваши устройства останутся в аккаунте.</div></div>`)}
+    ${!(fg && fg.wait) && html`<label class="fld"><span>Новый пароль</span><input type="password" autocomplete="new-password" value=${f.a} onInput=${e => setF({ ...f, a: e.target.value })} /><small class="dim">Минимум 6 символов. «qwerty» и «123456» знает даже наш уборщик.</small></label>
+    <label class="fld"><span>Ещё раз</span><input type="password" autocomplete="new-password" value=${f.b} onInput=${e => setF({ ...f, b: e.target.value })} />${f.b && f.a !== f.b && html`<small class="err">Пароли не совпадают</small>`}</label>`}
+    ${fg && html`<p class="pass-back"><a role="button" tabindex="0" onClick=${() => setFg(null)}>Вспомнил пароль</a></p>`}<//>`;
 }
 
 // ───── приватность и 2FA
