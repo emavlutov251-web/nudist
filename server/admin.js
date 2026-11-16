@@ -84,6 +84,19 @@ H['admin.user.ban'] = (c, p) => {
   log(c, p.on ? 'user.ban' : 'user.unban', `${R.uname(u)} (@${u.username || u.id})${p.reason ? ': ' + str(p.reason, 200) : ''}`);
 };
 H['admin.user.mute'] = (c, p) => { const u = target(c, p.id); const h = int(p.hours, 0, 8760); need(u.id !== c.uid, 'Себя мутить не надо'); senior(c, 'mute.' + u.id, 'Мут'); u.muted = h ? now() + h * 3600e3 : undefined; log(c, h ? 'user.mute' : 'user.unmute', `${R.uname(u)}${h ? ' на ' + h + ' ч' : ''}`); R.selfUpdate(u); return { muted: u.muted || 0 }; };
+// Забытый пароль: главный админ выдаёт одноразовую ссылку. Сам пароль админ не видит и не задаёт — его придумает человек.
+// email — почта, с которой человек написал: сервер только отвечает, совпала ли она с почтой из профиля, саму почту не показывает.
+H['admin.user.reset'] = (c, p) => {
+  const u = target(c, p.id, 'superadmin'); need(u.id !== c.uid, 'Свой пароль меняют в настройках. Забыли — возьмите код восстановления или попросите другого главного админа.'); need(!u.bot, 'У бота нет пароля');
+  if (p.cancel) { const had = !!u.reset; delete u.reset; save(); if (had) log(c, 'user.reset.cancel', R.uname(u)); return { cancelled: had }; }
+  A.limit('areset:' + c.uid, 30, 3600e3);
+  const mail = str(p.email, 120).trim().toLowerCase(), em = !u.email ? 'none' : !mail ? 'unchecked' : mail === u.email.toLowerCase() ? 'match' : 'differ';
+  if (em === 'differ' && !p.force) return { email: em };      /* скорее всего пишет не владелец: ссылку без явного подтверждения не создаём */
+  const t = A.newReset(u, c.uid);
+  log(c, 'user.reset', R.uname(u) + (em === 'match' ? ' · почта совпала' : em === 'differ' ? ' · почта НЕ совпала' : ''));
+  A.sysTell(u, '🔑 **Администрация создала ссылку для сброса вашего пароля** — её попросил тот, кто назвался вами. Ссылка одноразовая и живёт сутки. Если это были не вы, напишите в поддержку: ссылку отменят.');
+  return { token: t, exp: u.reset.exp, username: u.username, name: R.uname(u), email: em, online: C.isOnline(u.id) };
+};
 H['admin.user.logout'] = (c, p) => { const u = target(c, p.id); need(u.id !== c.uid, 'Себя отсюда не разлогинивают: выход есть в настройках'); for (const t of Object.keys(db.sessions)) if (db.sessions[t].user === u.id) A.killSession(t); log(c, 'user.logout', R.uname(u)); };
 // Роли администраторов. Назначает главный админ; тех, кто равен ему по рангу, может менять только владелец сервиса.
 function roleBlock(me, u) {
@@ -130,14 +143,16 @@ for (const oid of C.OWNERS) {
 // Разовые работы по базе без входа в админку: MAINT="<метка>:<действие>,<действие>". Каждая метка выполняется один раз.
 //   unmute   — снять все муты: от администрации, в группах и каналах, на серверах;
 //   stars=N  — у каждого человека (не бота) становится ровно N листиков;
+//   resetlink=<id> — напечатать в журнал сервера одноразовую ссылку для сброса пароля (для владельца, которому больше некого попросить);
 //   staffstars=N — у всей администрации (любая роль в админке и владельцы), кроме тех, кому разрешено выдавать листики, становится ровно N листиков.
 (function maint() {
   const raw = String(process.env.MAINT || '').trim(); if (!raw) return;
   const i = raw.indexOf(':'), tag = raw.slice(0, i).trim(), acts = raw.slice(i + 1).split(',').map(s => s.trim()).filter(Boolean);
-  if (i < 1 || !acts.length || !acts.every(a => a === 'unmute' || /^(staff)?stars=\d{1,7}$/.test(a))) return console.error('[maint] не понял MAINT, ничего не делаю:', raw);
+  if (i < 1 || !acts.length || !acts.every(a => a === 'unmute' || /^(staff)?stars=\d{1,7}$/.test(a) || /^resetlink=[\w-]{6,24}$/.test(a))) return console.error('[maint] не понял MAINT, ничего не делаю:', raw);
   db.meta.maint = db.meta.maint || []; if (db.meta.maint.includes(tag)) return;
   const out = [];
   for (const a of acts) {
+    if (a.startsWith('resetlink=')) { const u = db.users[a.slice(10)]; if (!u || u.deleted || u.bot) { out.push('resetlink: аккаунт не найден'); continue; } const t = A.newReset(u, 'maint'); console.log(`[maint] ссылка для сброса пароля @${u.username || u.id} (сутки, один раз): ${(process.env.SITE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, '')}/#reset=${t}`); out.push('выдана ссылка для сброса: ' + R.uname(u)); continue; }
     if (a === 'unmute') {
       let n = 0;
       for (const u of Object.values(db.users)) if (u.muted) { delete u.muted; n++; }

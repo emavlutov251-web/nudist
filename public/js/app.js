@@ -1,5 +1,5 @@
 // Точка входа: экран входа, каркас приложения, глобальные клавиши и маршруты.
-import { html, render, useState, useEffect, useRef, S, bump, useStore, http, rpc, call, toast, Icon, Logo, Avatar, cx, closeMenu, closeModal, confirmDlg, local, openModal, userName, applyTheme, Spinner } from './lib.js';
+import { html, render, useState, useEffect, useRef, S, bump, useStore, http, rpc, call, toast, Icon, Logo, Avatar, cx, closeMenu, closeModal, confirmDlg, local, openModal, userName, applyTheme, Spinner, copyText, download } from './lib.js';
 import { SnowFx } from './events.js';
 import { boot, login, logout, openChat, closeChat, onReady, accounts, switchAccount, openUser } from './store.js';
 import { BossScreen, funKeys, DAILY_FACTS, sfx } from './fun.js';
@@ -48,6 +48,35 @@ function PolicyGate() {
     <button type="button" class="btn big wide" disabled=${busy} onClick=${accept}>${busy ? 'Секунду…' : 'Принимаю'}</button>
     <button type="button" class="link" onClick=${() => logout()}>Не согласен — выйти из аккаунта</button>
   </section>${full && html`<${PolicyView} onClose=${() => setFull(false)} />`}</div>`;
+}
+
+// ═════ Сброс пароля по ссылке от администрации: /#reset=КЛЮЧ ═════
+// Ключ сразу убираем из адресной строки, чтобы он не остался в истории браузера и на снимках экрана.
+const takeReset = () => { const m = /^#reset=([\w-]{20,80})$/.exec(location.hash); if (!m) return false; history.replaceState(history.state, '', location.pathname); S.reset = m[1]; return true; };
+takeReset(); addEventListener('hashchange', () => { if (takeReset()) bump(); });
+function ResetScreen() {
+  const tok = S.reset, [info, setInfo] = useState(null), [err, setErr] = useState(''), [f, setF] = useState({ a: '', b: '' }), [busy, setBusy] = useState(false), [res, setRes] = useState(null);
+  useEffect(() => { http('reset/info', { token: tok }).then(setInfo, e => setErr(e.message)); }, []);
+  const leave = () => { S.reset = null; bump(); };
+  const submit = async e => { e.preventDefault(); if (f.a !== f.b) return setErr('Пароли не совпадают'); setErr(''); setBusy(true); try { setRes(await http('reset', { token: tok, password: f.a })); } catch (x) { setErr(x.message); } setBusy(false); };
+  const enter = () => { const t = res.token; S.reset = null; S.adding = false; login(t); };
+  return html`<div class="auth">
+    <section class="auth-brand"><div class="auth-logo"><${Logo} s=${132} /></div><h1 class="wordmark">НУДИСТ</h1><p class="slogan">Новый пароль — и снова на пляж.</p></section>
+    <section class="auth-form">
+      ${res ? html`<div class="card reset-card"><h2>Пароль изменён</h2>
+          <p class="hint">Прежние сеансы завершены. Сохраните коды восстановления: с любым из них в следующий раз смените забытый пароль сами — «Забыли пароль?» на экране входа. Каждый код срабатывает один раз.</p>
+          <div class="codes mono">${res.recovery.map(c => html`<span>${c}</span>`)}</div>
+          <div class="reset-acts"><button type="button" class="btn ghost" onClick=${() => { copyText(res.recovery.join('\n')); toast('Коды скопированы'); }}>Скопировать</button><button type="button" class="btn ghost" onClick=${() => download('nudist-recovery-codes.txt', 'Коды восстановления «Нудист»' + (info && info.username ? ' для @' + info.username : '') + '\n\n' + res.recovery.join('\n') + '\n', 'text/plain')}>Скачать</button></div>
+          <button type="button" class="btn big" onClick=${enter}>Я сохранил — войти</button></div>`
+      : !info ? html`<div class="card reset-card"><h2>Сброс пароля</h2>${err ? html`<p class="err" role="alert">${err}</p><p class="hint">Ссылка работает один раз и живёт сутки. Попросите администратора прислать новую.</p><button type="button" class="btn big" onClick=${leave}>На экран входа</button>` : html`<${Spinner} />`}</div>`
+      : html`<form class="card reset-card" onSubmit=${submit}><h2>Новый пароль</h2>
+          <p class="hint">Аккаунт <b>${info.username ? '@' + info.username : info.name}</b>. После смены все прежние сеансы завершатся, двухфакторная защита выключится.</p>
+          <label class="fld"><span>Новый пароль</span><input type="password" value=${f.a} onInput=${e => setF({ ...f, a: e.target.value })} placeholder="минимум 6 символов" autocomplete="new-password" required minlength="6" autofocus /></label>
+          <label class="fld"><span>Ещё раз</span><input type="password" value=${f.b} onInput=${e => setF({ ...f, b: e.target.value })} autocomplete="new-password" required minlength="6" /></label>
+          ${err && html`<p class="err" role="alert">${err}</p>`}
+          <button class="btn big" disabled=${busy}>${busy ? 'Секунду…' : 'Сменить пароль'}</button>
+          <p class="auth-alt"><a onClick=${leave}>Не сейчас</a></p></form>`}
+    </section></div>`;
 }
 
 // ═════ Вход ═════
@@ -111,7 +140,7 @@ function Auth() {
           <button class="btn big" disabled=${busy}>${busy ? 'Секунду…' : mode === 'register' ? 'Раздеться и войти' : mode === 'recover' ? 'Сменить пароль и войти' : mode === 'phone' && !step ? 'Получить код' : 'Войти'}</button>
           ${mode === 'login' && html`<p class="auth-alt">Впервые здесь? <a onClick=${() => sw('register')}>Создать аккаунт</a> · <a onClick=${() => sw('recover')}>Забыли пароль?</a></p>`}
           ${mode === 'register' && html`<p class="auth-alt">Уже есть аккаунт? <a onClick=${() => sw('login')}>Войти</a></p><p class="hint">${cfg && cfg.setup ? 'Сервер новый: первым регистрируется владелец, он же станет администратором. Остальные смогут зарегистрироваться после него.' : 'Номер телефона и почта не нужны.'}</p>`}
-          ${mode === 'recover' && html`<p class="auth-alt"><a onClick=${() => sw('login')}>Вспомнил пароль</a></p><p class="hint">Коды восстановления выдаются при включении двухфакторной защиты. Без них пароль не сбросить — мы честно его не знаем.</p>`}`}
+          ${mode === 'recover' && html`<p class="auth-alt"><a onClick=${() => sw('login')}>Вспомнил пароль</a></p><p class="hint">Код восстановления — один из тех, что вы сохранили в «Настройки → Аккаунт». <b>Нет кода?</b> Напишите администратору: он пришлёт одноразовую ссылку для сброса. <a href="/contacts" target="_blank" rel="noopener">Как связаться</a>. Сам пароль не знаем даже мы.</p>`}`}
         <p class="auth-legal"><a href="/pay" target="_blank" rel="noopener">Цены и оплата</a> · <a href="/offer" target="_blank" rel="noopener">Оферта</a> · <a href="/contacts" target="_blank" rel="noopener">Контакты и реквизиты</a></p>
         ${S.adding && acc.length > 0 && html`<p class="auth-alt"><a onClick=${() => { S.adding = false; login(acc[0].token); }}>← Вернуться в аккаунт ${acc[0].name}</a></p>`}
       </form>
@@ -157,6 +186,7 @@ function Modals() { return S.modals.map(m => html`<${m.c} key=${m.id} id=${m.id}
 
 function App() {
   useStore();
+  if (S.reset) return html`<${ResetScreen} /><${Toasts} />`;
   if (!S.token) return html`<${Auth} /><${Toasts} />`;
   if (S.ready && S.me && S.me.policyNeed && S.me.policy !== S.me.policyNeed) return html`<${PolicyGate} /><${Toasts} />`;
   if (!S.ready) return html`<div class="splash"><${Logo} s=${88} /><p>${S.offline ? 'Связь потеряна. Переподключаемся…' : 'Снимаем лишнее…'}</p></div><${Toasts} />`;

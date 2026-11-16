@@ -73,7 +73,8 @@ H['me.password'] = (c, p) => {
   const u = user(c);
   if (u.pass) need(A.checkPass(p.old, u.pass), 'Старый пароль неверный');
   need(typeof p.new === 'string' && p.new.length >= 6 && p.new.length <= 200, 'Пароль — минимум 6 символов');
-  u.pass = A.hashPass(p.new); save(); selfUpdate(u);
+  u.pass = A.hashPass(p.new); delete u.reset; save(); selfUpdate(u);      /* висящая ссылка для сброса больше не нужна */
+  return { ok: true };      /* без ответа окно «Сменить пароль» не понимало, что всё получилось, и не закрывалось */
 };
 H['me.totp.setup'] = c => {
   const u = user(c); need(!u.totpOn, 'Двухфакторная защита уже включена');
@@ -91,6 +92,7 @@ H['me.totp.disable'] = (c, p) => {
   const u = user(c); need(u.totpOn, 'Двухфакторная защита не включена');
   need(A.totpOk(u.totp, p.code) || A.useRecovery(u, p.code), 'Неверный код');
   u.totpOn = false; delete u.totp; save(); selfUpdate(u);
+  return { ok: true };
 };
 H['me.recovery.new'] = (c, p) => {
   const u = user(c);
@@ -109,6 +111,7 @@ H['me.delete'] = (c, p) => {
   if (u.pass) need(A.checkPass(p.password, u.pass), 'Неверный пароль');
   else need(p.confirm === 'УДАЛИТЬ', 'Введите слово УДАЛИТЬ для подтверждения');
   A.deleteUser(u);
+  return { ok: true };
 };
 // Согласие с политикой конфиденциальности. Пока человек не принял действующую редакцию, приложение не пускает его дальше окна с текстом.
 H['me.policy'] = (c, p) => { const u = user(c); need(p.v === C.POLICY, 'Политика обновилась. Обновите страницу и прочитайте новую редакцию.'); u.policy = { v: C.POLICY, ts: now() }; save(); selfUpdate(u); return { v: C.POLICY }; };

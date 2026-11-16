@@ -4,7 +4,8 @@
 //   2) обычный пользователь не может вызвать ни один метод админки и поддержки;
 //   3) чужие сессии, пароли, почта наружу не уходят; служебные файлы сервера не отдаются;
 //   4) вход: неверный пароль, подбор, выход из сессии, WebSocket без ключа;
-//   5) рабочий сервер (NODE_ENV=production): первая регистрация только с кодом установки, вход по номеру выключен.
+//   5) рабочий сервер (NODE_ENV=production): первая регистрация только с кодом установки, вход по номеру выключен;
+//   6) сброс забытого пароля: ссылку выдаёт только главный админ, она одноразовая, в базе лежит только её хеш.
 // Запуск: node scripts/security-test.js   (код выхода 0 — всё закрыто)
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
@@ -145,6 +146,17 @@ async function access() {
     const c2 = await S.conn((await S.post('/api/login', { username: 'sec_chuzhoi', password: 'Sec-test-sec_chuzhoi' })).j.token);
     await c2.rpc('me.logout', {}).catch(() => {}); await sleep(300);
     ck('после выхода ключ сессии больше не работает', !(await S.conn(c2.tok).then(() => true, () => false)));
+    // ── сброс забытого пароля
+    ck('обычный человек не может выдать ссылку для сброса пароля', !(await c.err('admin.user.reset', { id: a.me.id })).ok);
+    const rl = await owner.rpc('admin.user.reset', { id: a.me.id });
+    ck('главный админ выдаёт ссылку; почта владельца в ответе не раскрывается', /^[\w-]{30,}$/.test(rl.token || '') && !JSON.stringify(rl).includes(SECRET));
+    await sleep(1500); const onDisk = fs.readFileSync(path.join(S.dir, 'db.json'), 'utf8');
+    ck('в базе хранится не ключ ссылки, а его хеш', onDisk.includes('"reset":{"h":') && !onDisk.includes(rl.token));
+    ck('чужой ключ не подходит', !(await S.post('/api/reset', { token: rl.token.slice(0, -2) + 'zz', password: 'Novyi-parol-9' })).j.token);
+    const rs = await S.post('/api/reset', { token: rl.token, password: 'Novyi-parol-9' }); await sleep(300);
+    ck('по ссылке пароль меняется, старые сеансы закрываются', !!rs.j.token && !(await a.err('me.sessions', {})).ok);
+    ck('ссылка одноразовая', !(await S.post('/api/reset', { token: rl.token, password: 'Novyi-parol-10' })).j.token);
+    ck('старый пароль после сброса не подходит', !(await S.post('/api/login', { username: 'sec_anna', password: 'Sec-test-sec_anna' })).j.token);
     let flood = false; const fl = await Promise.all(Array.from({ length: 140 }, () => c.err('stars.info', {}))); flood = fl.some(r => !r.ok && /много запросов/i.test(r.e));
     ck('поток запросов упирается в ограничение', flood);
     [owner, a, b, c].forEach(x => x.close());

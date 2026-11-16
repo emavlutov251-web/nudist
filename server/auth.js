@@ -69,6 +69,21 @@ function invitedBy(u, ref) {
     C.emit(inv.id, 'me', C.selfUser(inv)); C.emit(u.id, 'me', C.selfUser(u));
   }, 2500);
 }
+// ───── забытый пароль. Почты и SMS у сервера нет, поэтому путей два:
+//   1) код восстановления, который человек сохранил заранее (api.recover);
+//   2) одноразовая ссылка от главного админа: /#reset=<ключ>, живёт сутки, срабатывает один раз. В базе лежит только хеш ключа.
+const RESET_TTL = 24 * 3600e3, RESET_BAD = 'Ссылка для сброса недействительна или устарела. Попросите новую.';
+const resetHash = t => crypto.createHash('sha256').update(String(t)).digest('base64url');
+function newReset(u, by) { const t = token(24); u.reset = { h: resetHash(t), exp: now() + RESET_TTL, by, at: now() }; save(); return t; }
+function findReset(t) {
+  if (typeof t !== 'string' || t.length < 20 || t.length > 80) return null;
+  const h = resetHash(t), a = Buffer.from(h);
+  for (const k in db.users) { const u = db.users[k], r = u.reset; if (!r || u.deleted || u.bot) continue; if (r.exp < now()) { delete u.reset; continue; } const b = Buffer.from(r.h); if (a.length === b.length && crypto.timingSafeEqual(a, b)) return u; }
+  return null;
+}
+// Сообщение человеку от служебного аккаунта: о сбросе пароля он должен узнать, даже если ссылку выпросил кто-то другой.
+function sysTell(u, text) { try { const sys = db.meta.sys; if (sys && db.users[sys] && !u.bot) C.postMessage(C.openDm(sys, u.id), sys, { text }, { quiet: true }); } catch (e) { console.warn('[reset]', e.message); } }
+
 // ───── вход по номеру. Настоящего SMS-шлюза нет: код показывается на экране, владение номером он не подтверждает.
 // Поэтому на рабочем сервере вход по номеру выключен всегда; включить демо можно только явно, переменной SMS_DEMO=on (для разработки и показа).
 const SMS_DEMO = process.env.SMS_DEMO === 'on';
@@ -232,10 +247,29 @@ const api = {
     limit('rec:' + meta.ip, 6, 600e3);
     const u = db.users[C.byName.get(str(b.username, 32).replace(/^@/, '').toLowerCase())];
     need(u && useRecovery(u, b.code), 'Неверный username или код восстановления');
-    need(typeof b.password === 'string' && b.password.length >= 6, 'Новый пароль — минимум 6 символов');
-    u.pass = hashPass(b.password); u.totpOn = false; delete u.totp;
+    need(typeof b.password === 'string' && b.password.length >= 6 && b.password.length <= 200, 'Новый пароль — минимум 6 символов');
+    u.pass = hashPass(b.password); u.totpOn = false; delete u.totp; delete u.reset;
     for (const t of Object.keys(db.sessions)) if (db.sessions[t].user === u.id) killSession(t);
     return createSession(u, meta);
+  },
+  // Сброс пароля по одноразовой ссылке от администрации: посмотреть, чей это аккаунт, и задать новый пароль.
+  'reset/info'(b, meta) {
+    limit('rst:' + meta.ip, 30, 600e3);
+    const u = findReset(b.token); need(u, RESET_BAD);
+    return { username: u.username, name: u.name, exp: u.reset.exp };
+  },
+  async reset(b, meta) {
+    limit('rst:' + meta.ip, 30, 600e3);
+    need(findReset(b.token), RESET_BAD);
+    need(typeof b.password === 'string' && b.password.length >= 6 && b.password.length <= 200, 'Новый пароль — минимум 6 символов');
+    const hash = await hashPassAsync(b.password);
+    const u = findReset(b.token); need(u, RESET_BAD);      // пока считался хеш, ссылку могли использовать или отменить
+    u.pass = hash; u.totpOn = false; delete u.totp; delete u.reset;
+    u.recovery = newRecovery();      // сразу выдаём коды: в следующий раз человек справится без администрации
+    for (const t of Object.keys(db.sessions)) if (db.sessions[t].user === u.id) killSession(t);
+    const s = createSession(u, meta);
+    sysTell(u, '🔑 **Пароль изменён по одноразовой ссылке от администрации.**\nВсе прежние сеансы завершены, двухфакторная защита выключена — включите её заново в «Настройки → Приватность». Если ссылку просили не вы, сразу напишите в поддержку.');
+    return { ...s, recovery: u.recovery };
   },
   'qr/new'(b, meta) {
     limit('qr:' + meta.ip, 60, 600e3);
@@ -258,4 +292,4 @@ setInterval(() => { const t = now(); for (const [k, q] of qr) if (q.exp < t - 60
 
 setupInit();
 
-module.exports = { pubFlags, phoneOn, setupNeeded, REF_BONUS, api, hashPass, checkPass, totp, totpOk, b32enc, newRecovery, useRecovery, createUser, createSession, killSession, sid, deleteUser, approveQr, limit, hooks, normPhone, findByPhone, phoneCodes };
+module.exports = { newReset, sysTell, RESET_TTL, pubFlags, phoneOn, setupNeeded, REF_BONUS, api, hashPass, checkPass, totp, totpOk, b32enc, newRecovery, useRecovery, createUser, createSession, killSession, sid, deleteUser, approveQr, limit, hooks, normPhone, findByPhone, phoneCodes };

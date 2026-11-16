@@ -61,8 +61,13 @@ function Account() {
     const code = await promptDlg({ title: 'Код из SMS', label: 'Введите код', hint: r.demoCode ? `Демо-режим: SMS-шлюза нет, ваш код — ${r.demoCode}` : 'Мы отправили код на новый номер', placeholder: '000000' }); if (!code) return;
     if (await call('me.phone.verify', { phone: p, code })) toast('Номер обновлён');
   };
-  const email = async () => { const v = await promptDlg({ title: 'Почта для восстановления', label: 'Email', type: 'email', value: me.email || '', hint: 'Нужна, чтобы вернуть доступ, если забудете пароль. Оставьте пустым, чтобы отвязать.' }); if (v !== null && await call('me.update', { email: v })) toast(v ? 'Почта сохранена' : 'Почта отвязана'); };
+  const email = async () => { const v = await promptDlg({ title: 'Почта для восстановления', label: 'Email', type: 'email', value: me.email || '', hint: 'Писем мы не шлём. Почта нужна, если забудете пароль: напишите администратору с этого адреса — он сверит его и пришлёт ссылку для сброса. Оставьте пустым, чтобы отвязать.' }); if (v !== null && await call('me.update', { email: v })) toast(v ? 'Почта сохранена' : 'Почта отвязана'); };
   const pass = () => openModal(PassDlg);
+  const codes = async () => {
+    if (!me.hasPassword) return toast('Сначала задайте пароль', 'err');
+    const v = await promptDlg(me.totp ? { title: 'Новые коды восстановления', label: 'Код из аутентификатора', placeholder: '000000', hint: 'Старые коды перестанут работать.', ok: 'Показать коды' } : { title: 'Коды восстановления', label: 'Текущий пароль', type: 'password', hint: me.recoveryLeft ? 'Покажем восемь новых кодов. Старые перестанут работать.' : 'Восемь одноразовых кодов. С любым из них можно сменить забытый пароль: «Забыли пароль?» на экране входа.', ok: 'Показать коды' }); if (!v) return;
+    const r = await call('me.recovery.new', me.totp ? { code: v } : { password: v }); if (r) openModal(Codes, { codes: r.recovery });
+  };
   const del = async () => {
     const v = await promptDlg({ title: 'Удалить аккаунт навсегда?', label: me.hasPassword ? 'Введите пароль' : 'Напишите слово УДАЛИТЬ', type: me.hasPassword ? 'password' : 'text', hint: 'Профиль, сессии и личные данные исчезнут. Сообщения в общих чатах останутся с пометкой «Удалённый аккаунт».', ok: 'Удалить аккаунт' }); if (!v) return;
     if (await call('me.delete', me.hasPassword ? { password: v } : { confirm: v })) logout();
@@ -72,7 +77,8 @@ function Account() {
       ${S.flags.phoneAuth ? html`<button class="li" onClick=${phone}><${Icon} n="smartphone" /><span><b>Телефон</b><small>${me.phone || 'не привязан'}</small></span><${Icon} n="chevron-right" s=${16} /></button>`
         : me.phone && html`<button class="li" onClick=${dropPhone}><${Icon} n="smartphone" /><span><b>Телефон</b><small>${me.phone} · входа по номеру нет, можно отвязать</small></span><${Icon} n="chevron-right" s=${16} /></button>`}
       <button class="li" onClick=${email}><${Icon} n="mail" /><span><b>Почта для восстановления</b><small>${me.email || 'не указана'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
-      <button class="li" onClick=${pass}><${Icon} n="key-round" /><span><b>Пароль</b><small>${me.hasPassword ? 'установлен' : 'не задан — без пароля не войти с другого устройства'}</small></span><${Icon} n="chevron-right" s=${16} /></button></div>
+      <button class="li" onClick=${pass}><${Icon} n="key-round" /><span><b>Пароль</b><small>${me.hasPassword ? 'установлен' : 'не задан — без пароля не войти с другого устройства'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
+      ${me.hasPassword && html`<button class="li" onClick=${codes}><${Icon} n="life-buoy" /><span><b>Коды восстановления</b><small>${me.recoveryLeft ? `осталось: ${me.recoveryLeft} · на случай, если забудете пароль` : 'нет — забытый пароль придётся сбрасывать через администратора'}</small></span><${Icon} n="chevron-right" s=${16} /></button>`}</div>
     <${Sel} label="Удалить аккаунт, если я не захожу" hint="Таймер самоуничтожения. Сбрасывается при каждом входе." value=${me.autodelete || 6} opts=${[[1, '1 месяц'], [3, '3 месяца'], [6, '6 месяцев'], [12, '1 год'], [24, '2 года']]} onChange=${v => call('me.autodelete', { months: +v })} />
     <h5>Аккаунты на этом устройстве</h5>
     <div class="list">${acc.map(a => html`<button class="li" disabled=${a.token === S.token} onClick=${() => switchAccount(a.token)}><${Icon} n="circle-user" /><span><b>${a.name || 'Аккаунт'}</b><small>${a.token === S.token ? 'сейчас активен' : a.username ? '@' + a.username : 'переключиться'}</small></span></button>`)}
@@ -90,8 +96,15 @@ export function PassStrip() {
 }
 function PassDlg({ id }) {
   const [f, setF] = useState({ old: '', a: '', b: '' }), has = S.me.hasPassword, ok = f.a.length >= 6 && f.a === f.b && (!has || f.old);
-  return html`<${Modal} id=${id} title=${has ? 'Сменить пароль' : 'Задать пароль'} icon="key-round" cls="small" footer=${html`<button class="btn" disabled=${!ok} onClick=${async () => { if (await call('me.password', { old: f.old, new: f.a })) { toast('Пароль обновлён'); closeModal(id); } }}>Сохранить</button>`}>
-    ${has && html`<label class="fld"><span>Текущий пароль</span><input type="password" autocomplete="current-password" value=${f.old} onInput=${e => setF({ ...f, old: e.target.value })} /></label>`}
+  const save = async () => {
+    const noCodes = !S.me.totp && !S.me.recoveryLeft;
+    if (!(await call('me.password', { old: f.old, new: f.a }))) return;
+    toast('Пароль обновлён'); closeModal(id);
+    if (noCodes) { const r = await rpc('me.recovery.new', { password: f.a }).catch(() => null); if (r) openModal(Codes, { codes: r.recovery }); }      /* кодов ещё нет — выдаём сразу, пока человек помнит пароль */
+  };
+  const forgot = () => { S.modals = []; bump(); import('./hub.js').then(m => m.openSupport()); };      /* закрываем и настройки под этим окном, иначе чат поддержки откроется за ними */
+  return html`<${Modal} id=${id} title=${has ? 'Сменить пароль' : 'Задать пароль'} icon="key-round" cls="small" footer=${html`<button class="btn" disabled=${!ok} onClick=${save}>Сохранить</button>`}>
+    ${has && html`<label class="fld"><span>Текущий пароль</span><input type="password" autocomplete="current-password" value=${f.old} onInput=${e => setF({ ...f, old: e.target.value })} /><small class="dim">Не помните? <a role="button" tabindex="0" onClick=${forgot}>Напишите в поддержку</a> — пришлют одноразовую ссылку для сброса.</small></label>`}
     <label class="fld"><span>Новый пароль</span><input type="password" autocomplete="new-password" value=${f.a} onInput=${e => setF({ ...f, a: e.target.value })} /><small class="dim">Минимум 6 символов. «qwerty» и «123456» знает даже наш уборщик.</small></label>
     <label class="fld"><span>Ещё раз</span><input type="password" autocomplete="new-password" value=${f.b} onInput=${e => setF({ ...f, b: e.target.value })} />${f.b && f.a !== f.b && html`<small class="err">Пароли не совпадают</small>`}</label><//>`;
 }
@@ -118,15 +131,15 @@ function Privacy() {
     <h5>Фильтр слов</h5>
     <${TriggerWords} />
     <h5>Двухфакторная защита</h5>
-    <div class="list"><button class="li" onClick=${() => openModal(TotpDlg)}><${Icon} n="shield-check" /><span><b>Код из приложения (TOTP)</b><small>${me.totp ? `включена · резервных кодов: ${me.recoveryLeft}` : 'выключена — пароль плюс код из Google Authenticator, Aegis и т. п.'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
-      ${me.totp && html`<button class="li" onClick=${async () => { const code = await promptDlg({ title: 'Новые резервные коды', label: 'Код из аутентификатора', placeholder: '000000', hint: 'Старые коды перестанут работать.' }); if (!code) return; const r = await call('me.recovery.new', { code }); if (r) openModal(Codes, { codes: r.recovery }); }}><${Icon} n="life-buoy" /><span><b>Перевыпустить резервные коды</b><small>На случай потери телефона</small></span></button>`}</div>
+    <div class="list"><button class="li" onClick=${() => openModal(TotpDlg)}><${Icon} n="shield-check" /><span><b>Код из приложения (TOTP)</b><small>${me.totp ? `включена · кодов восстановления: ${me.recoveryLeft}` : 'выключена — пароль плюс код из Google Authenticator, Aegis и т. п.'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
+      ${me.totp && html`<button class="li" onClick=${async () => { const code = await promptDlg({ title: 'Новые коды восстановления', label: 'Код из аутентификатора', placeholder: '000000', hint: 'Старые коды перестанут работать.' }); if (!code) return; const r = await call('me.recovery.new', { code }); if (r) openModal(Codes, { codes: r.recovery }); }}><${Icon} n="life-buoy" /><span><b>Перевыпустить коды восстановления</b><small>На случай потери телефона</small></span></button>`}</div>
     <h5>Шифрование</h5><p class="hint">Секретные чаты шифруются в браузере: ECDH P-256 → AES-256-GCM, ключ не покидает устройство. Сверить ключи с собеседником можно в панели секретного чата — по эмодзи или коду. Обычные чаты хранятся на сервере, чтобы работала синхронизация между устройствами.</p>
     <h5>Чёрный список · ${blocked.length}</h5>
     ${!blocked.length ? html`<p class="hint">Пусто. Вы со всеми в ладах — редкость для интернета.</p>` : blocked.map(u => html`<div class="row-item"><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${34} /><div class="ri-m"><b>${userName(u)}</b><span>${u.username ? '@' + u.username : ''}</span></div><button class="btn sm ghost" onClick=${() => call('me.block', { id: u.id, on: false })}>Разблокировать</button></div>`)}</div>`;
 }
 function Codes({ id, codes }) {
-  return html`<${Modal} id=${id} title="Резервные коды" icon="life-buoy" cls="small" footer=${html`<button class="btn ghost" onClick=${() => { copyText(codes.join('\n')); toast('Коды скопированы'); }}>Скопировать</button><button class="btn ghost" onClick=${() => download('nudist-recovery-codes.txt', 'Резервные коды «Нудист»\n\n' + codes.join('\n') + '\n', 'text/plain')}>Скачать</button><button class="btn" onClick=${() => closeModal(id)}>Я сохранил</button>`}>
-    <p class="hint">Каждый код сработает один раз вместо кода из приложения. Храните их там, где не найдут посторонние. И да, не в «Избранном».</p><div class="codes mono">${codes.map(c => html`<span>${c}</span>`)}</div><//>`;
+  return html`<${Modal} id=${id} title="Коды восстановления" icon="life-buoy" cls="small" footer=${html`<button class="btn ghost" onClick=${() => { copyText(codes.join('\n')); toast('Коды скопированы'); }}>Скопировать</button><button class="btn ghost" onClick=${() => download('nudist-recovery-codes.txt', 'Коды восстановления «Нудист»' + (S.me && S.me.username ? ' для @' + S.me.username : '') + '\n\n' + codes.join('\n') + '\n', 'text/plain')}>Скачать</button><button class="btn" onClick=${() => closeModal(id)}>Я сохранил</button>`}>
+    <p class="hint">Сохраните их сейчас — второй раз не покажем. Каждый код сработает один раз: чтобы сменить забытый пароль («Забыли пароль?» на экране входа) или вместо кода из приложения-аутентификатора. Храните там, где не найдут посторонние. И да, не в «Избранном».</p><div class="codes mono">${codes.map(c => html`<span>${c}</span>`)}</div><//>`;
 }
 function TotpDlg({ id }) {
   const on = S.me.totp, [st, setSt] = useState(null), [code, setCode] = useState('');

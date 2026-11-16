@@ -182,3 +182,6 @@ button.col-i.gi { font: inherit; color: inherit; cursor: pointer; } button.col-i
 
 /* ───── 69: честная строка «Защита» в информации о чате ───── */
 .enc-row p { display: flex; align-items: center; gap: 6px; } .enc-row p .ic { flex: none; color: var(--ink2); }
+
+/* ───── 70: экран сброса пароля ───── */
+.reset-card .codes { margin: 2px 0; } .reset-acts { display: flex; gap: 8px; } .reset-acts .btn { flex: 1; }
