@@ -55,13 +55,6 @@ function Profile() {
 // ───── аккаунт
 function Account() {
   const me = S.me, acc = accounts();
-  const dropPhone = async () => { if (await confirmDlg({ title: 'Отвязать номер?', text: `Номер ${me.phone} исчезнет из профиля. Войти по номеру всё равно нельзя: SMS не подключены, вход — по username и паролю.`, ok: 'Отвязать' }) && await call('me.phone.drop', {})) toast('Номер отвязан'); };
-  const phone = async () => {
-    const p = await promptDlg({ title: me.phone ? 'Сменить номер' : 'Привязать номер', label: 'Новый номер телефона', placeholder: '+7 900 000-00-00', type: 'tel' }); if (!p) return;
-    const r = await call('me.phone.start', { phone: p }); if (!r) return;
-    const code = await promptDlg({ title: 'Код из SMS', label: 'Введите код', hint: r.demoCode ? `Демо-режим: SMS-шлюза нет, ваш код — ${r.demoCode}` : 'Мы отправили код на новый номер', placeholder: '000000' }); if (!code) return;
-    if (await call('me.phone.verify', { phone: p, code })) toast('Номер обновлён');
-  };
   const email = async () => { const v = await promptDlg({ title: 'Почта для восстановления', label: 'Email', type: 'email', value: me.email || '', hint: 'Писем мы не шлём. Почта нужна, если забудете пароль: напишите администратору с этого адреса — он сверит его и пришлёт ссылку для сброса. Оставьте пустым, чтобы отвязать.' }); if (v !== null && await call('me.update', { email: v })) toast(v ? 'Почта сохранена' : 'Почта отвязана'); };
   const pass = () => openModal(PassDlg);
   const tgRow = async () => {
@@ -79,8 +72,6 @@ function Account() {
   };
   return html`<div class="form">
     <div class="list">
-      ${S.flags.phoneAuth ? html`<button class="li" onClick=${phone}><${Icon} n="smartphone" /><span><b>Телефон</b><small>${me.phone || 'не привязан'}</small></span><${Icon} n="chevron-right" s=${16} /></button>`
-        : me.phone && html`<button class="li" onClick=${dropPhone}><${Icon} n="smartphone" /><span><b>Телефон</b><small>${me.phone} · входа по номеру нет, можно отвязать</small></span><${Icon} n="chevron-right" s=${16} /></button>`}
       <button class="li" onClick=${email}><${Icon} n="mail" /><span><b>Почта для восстановления</b><small>${me.email || 'не указана'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
       <button class="li" onClick=${pass}><${Icon} n="key-round" /><span><b>Пароль</b><small>${me.hasPassword ? 'установлен' : me.tg ? 'не задан — вход через Telegram' : 'не задан — без пароля не войти с другого устройства'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
       ${(S.tgBot || me.tg) && html`<button class="li" onClick=${tgRow}><${Icon} n="send" /><span><b>Telegram</b><small>${me.tg ? `привязан${me.tg === true ? '' : ': @' + me.tg} · можно входить без пароля` : 'не привязан — привяжите, чтобы входить без пароля'}</small></span><${Icon} n="chevron-right" s=${16} /></button>`}

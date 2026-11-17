@@ -140,8 +140,8 @@ async function access() {
     ck('несуществующий аккаунт: тот же ответ, что и при неверном пароле', (await S.post('/api/login', { username: 'sec_nobody', password: 'не тот' })).j.error === (await S.post('/api/login', { username: 'sec_anna', password: 'не тот' })).j.error);
     let limited = false; for (let i = 0; i < 14 && !limited; i++) { const r = await S.post('/api/login', { username: 'sec_boris', password: 'подбор' + i }); limited = /много|часто|позже|подожд/i.test(r.j.error || '') || r.status === 429; }
     ck('подбор пароля упирается в ограничение', limited);
-    ck('вход по номеру выключен: код не выдаётся', !(await S.post('/api/phone/start', { phone: '+79990001122' })).j.demoCode && cfg.flags.phoneAuth === false);
-    ck('привязать номер без SMS нельзя', !(await a.err('me.phone.start', { phone: '+79990001122' })).ok);
+    ck('телефонной авторизации больше нет: метод не существует', !(await S.post('/api/phone/start', { phone: '+79990001122' })).j.token && cfg.flags.phoneAuth === undefined);
+    ck('телефонной привязки больше нет: метод не существует', !(await a.err('me.phone.start', { phone: '+79990001122' })).ok);
     const none = await S.conn('').then(() => true, () => false), junk = await S.conn('x'.repeat(40)).then(() => true, () => false);
     ck('WebSocket без ключа и с чужим ключом не подключается', !none && !junk);
     const c2 = await S.conn((await S.post('/api/login', { username: 'sec_chuzhoi', password: 'Sec-test-sec_chuzhoi' })).j.token);
@@ -180,12 +180,12 @@ async function production() {
   const S = await server({ NODE_ENV: 'production' });
   try {
     const cfg = await (await fetch(S.base + '/api/config')).json();
-    ck('новый рабочий сервер сообщает, что ждёт владельца', cfg.setup === true && cfg.flags.phoneAuth === false);
+    ck('новый рабочий сервер сообщает, что ждёт владельца', cfg.setup === true && cfg.flags.phoneAuth === undefined);
     const file = path.join(S.dir, 'setup-code.txt'), code = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim() : '';
     ck('код установки создан, лежит в папке данных и напечатан в журнале', code.length >= 12 && S.log.includes(code));
     ck('без кода первая регистрация не проходит', !(await S.reg('sec_thief')).token);
     ck('с неверным кодом — тоже', !(await S.reg('sec_thief', { setup: 'x'.repeat(code.length) })).token);
-    ck('вход по номеру на рабочем сервере закрыт', !(await S.post('/api/phone/start', { phone: '+79990001122' })).j.demoCode && !(await S.post('/api/phone/verify', { phone: '+79990001122', code: '00000', name: 'x' })).j.token);
+    ck('телефонных методов на рабочем сервере нет', !(await S.post('/api/phone/start', { phone: '+79990001122' })).j.token && !(await S.post('/api/phone/verify', { phone: '+79990001122', code: '00000', name: 'x' })).j.token);
     const own = await S.reg('sec_owner', { setup: code }); const o = own.token && await S.conn(own.token);
     ck('владелец с кодом регистрируется и становится главным админом', !!o && o.me.admin === 'superadmin');
     await sleep(300);
@@ -194,11 +194,6 @@ async function production() {
     ck('следующие люди регистрируются без кода и без прав', !!uc && !uc.me.admin);
     if (o) o.close(); if (uc) uc.close();
   } finally { await S.stop(); }
-  const D = await server({ SMS_DEMO: 'on' });
-  try {
-    const r = (await D.post('/api/phone/start', { phone: '+79990001122' })).j;
-    ck('демо-вход по номеру включается только явно (SMS_DEMO=on)', !!r.demoCode && (await (await fetch(D.base + '/api/config')).json()).flags.phoneAuth === true);
-  } finally { await D.stop(); }
 }
 
 (async () => {
