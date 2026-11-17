@@ -54,6 +54,15 @@ const EN = {
   'Год рождения и возраст другим не показываются: в профиле виден только день и месяц.': 'Your year of birth and age are never shown to anyone — only day and month in your profile.',
   'Обычные чаты хранятся на сервере, секретные зашифрованы от всех, включая нас.': 'Regular chats are stored on the server; secret chats are encrypted from everyone — including us.',
   'Данные не продаются, рекламы нет. Аккаунт можно удалить в настройках.': 'Data is never sold, there are no ads. You can delete your account in settings.',
+  // ── приватность и бизнес
+  'Кто может звонить': 'Who can call me', 'Кто может писать первым': 'Who can message me first',
+  'Все': 'Everyone', 'Мои контакты': 'My contacts', 'Никто': 'Nobody',
+  'Мои контакты и премиум-подписчики': 'My contacts and Premium subscribers', 'Никто, кроме исключений': 'Nobody except exceptions',
+  'Архив историй — текущие и старше суток': 'Story archive — current and older',
+  'Бизнес': 'Business', 'Адрес': 'Address', 'Часы работы': 'Working hours', 'Сайт': 'Website',
+  'Сохранить бизнес': 'Save business', 'Мост с Telegram': 'Telegram bridge',
+  'Быстрые ответы': 'Quick replies', 'Люди рядом': 'People nearby',
+  'Скачать приложение для Android': 'Download for Android',
   // ── сервис
   'Ошибка': 'Error', 'Уведомление': 'Notification', 'Загрузка…': 'Loading…', 'Загружаем…': 'Loading…', 'Ссылка скопирована': 'Link copied',
   'Попробовать': 'Try', 'Ещё': 'More', 'Ещё раз': 'Again', 'Открыть': 'Open',
