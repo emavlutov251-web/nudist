@@ -23,6 +23,7 @@ if (fs.existsSync(DB_FILE) || fs.existsSync(BAK_FILE)) {
 }
 const DEFAULT_FLAGS = { registration: true, stories: true, calls: true, bots: true, stars: true, linkPreview: true, discovery: true, uploads: true };
 db.flags = { ...DEFAULT_FLAGS, ...db.flags };
+for (const stale of ['phoneAuth']) delete db.flags[stale];      // телефонной авторизации больше нет: вычищаем из сохранённых флагов
 // У каждой базы свой номер. По нему копия в S3 отличает «свою» базу от чужой: тестовый сервер с теми же ключами не затрёт боевую копию.
 db.meta = db.meta || {}; if (!db.meta.dbId) { db.meta.dbId = require('crypto').randomBytes(9).toString('base64url'); setImmediate(() => save()); }
 Cloud.setDbId(db.meta.dbId);
