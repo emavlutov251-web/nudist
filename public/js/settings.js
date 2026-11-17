@@ -5,6 +5,7 @@ import { logout, accounts, switchAccount, addAccount, sendPayload } from './stor
 import { QR, StarsModal, StatusDlg, FolderEditor, showProfile } from './panels.js';
 import { backHooks } from './back.js';
 import { openShop, hasItem, SHOP_THEMES, EVENT_THEMES } from './shop.js';
+import { i18n } from './i18n.js';
 
 const TABS = [['profile', 'user', 'Профиль'], ['account', 'key-round', 'Аккаунт'], ['privacy', 'lock', 'Приватность'], ['devices', 'monitor-smartphone', 'Устройства'], ['notif', 'bell', 'Уведомления'], ['look', 'palette', 'Оформление'], ['chats', 'message-circle', 'Чаты и медиа'], ['folders', 'folder', 'Папки'], ['calls', 'phone', 'Звонки'], ['data', 'database', 'Данные'], ['adv', 'flask-conical', 'Продвинутые'], ['admins', 'shield', 'Администраторы']];
 export function openSettings(tab) { openModal(Settings, { tab }); }
@@ -209,10 +210,10 @@ function Notif() {
 }
 
 // ───── оформление
-const ACCENTS = ['', '#E2552D', '#C7822F', '#0D7C8C', '#3F6FD8', '#8B55D9', '#D1468C'], WALLS = [['leaves', 'Листва'], ['plain', 'Чистый'], ['sand', 'Песок'], ['sea', 'Море'], ['dots', 'Горошек'], ['grid', 'Тетрадь']];
+const ACCENTS = ['', '#E2552D', '#C7822F', '#0D7C8C', '#3F6FD8', '#8B55D9', '#D1468C'], WALLS = [['leaves', 'Листва'], ['hemp', 'Конопля'], ['plain', 'Чистый'], ['sand', 'Песок'], ['sea', 'Море'], ['dots', 'Горошек'], ['grid', 'Тетрадь']];
 function Look() {
   const s = S.settings, prem = S.me.premiumUntil > Date.now();
-  const themes = [['system', 'Как в системе', 'monitor'], ['light', 'Светлая', 'sun'], ['dark', 'Тёмная', 'moon'], ['tan', 'Загар ★', 'flame'], ...SHOP_THEMES.map(([k, l]) => [k, l, 'palette', 'theme_' + k]), ...EVENT_THEMES.filter(([k]) => (S.me.owned || []).includes('theme_' + k)).map(([k, l]) => [k, l, 'palette', 'theme_' + k])];
+  const themes = [['system', 'Как в системе', 'monitor'], ['light', 'Светлая', 'sun'], ['dark', 'Тёмная', 'moon'], ['tan', 'Загар ★', 'flame'], ['hemp', 'Конопля 🌿', 'leaf'], ...SHOP_THEMES.map(([k, l]) => [k, l, 'palette', 'theme_' + k]), ...EVENT_THEMES.filter(([k]) => (S.me.owned || []).includes('theme_' + k)).map(([k, l]) => [k, l, 'palette', 'theme_' + k])];
   return html`<div class="form">
     <${Toggle} label="Простой режим" hint="Крупный текст и только главное: чаты, лента и профиль. Истории, события, подсказки и магазин с главного экрана убраны — они остаются в меню ☰" on=${!!s.simple} onChange=${v => { setSetting({ simple: v }); toast(v ? 'Простой режим включён' : 'Простой режим выключен'); }} />
     <div class="fld"><span>Стиль</span><div class="seg">${[['soft', 'Мягкий'], ['classic', 'Пляжный'], ['win10', 'Windows 10']].map(([k, l]) => html`<button class=${cx((s.style === 'classic' || s.style === 'win10' ? s.style : 'soft') === k && 'on')} onClick=${() => setSetting({ style: k })}>${l}</button>`)}</div></div>
@@ -224,7 +225,9 @@ function Look() {
     <label class="fld"><span>Масштаб интерфейса: ${Math.round((s.scale || 1) * 100)}%</span><input type="range" min="0.8" max="1.3" step="0.05" value=${s.scale || 1} onChange=${e => setSetting({ scale: +e.target.value })} /></label>
     <${Sel} label="Вид сообщений" value=${s.flat === 'auto' ? 'auto' : s.flat ? 'on' : 'off'} opts=${[['auto', 'Авто: пузыри в чатах, лента в группах с комнатами'], ['off', 'Всегда пузыри'], ['on', 'Всегда лента']]} onChange=${v => setSetting({ flat: v === 'auto' ? 'auto' : v === 'on' })} />
     <${Sel} label="Формат времени" value=${s.timeFmt} opts=${[[24, '24 часа'], [12, '12 часов']]} onChange=${v => setSetting({ timeFmt: +v })} />
-    <${Sel} label="Язык" value="ru" opts=${[['ru', 'Русский'], ['olb', 'Олбанский (в разработке, учите)']]} onChange=${() => toast('Превед! Олбанский пока только в переводе сообщений: меню сообщения → «Перевести».')} />
+    <div class="fld"><span>Язык</span><div class="seg wrap">${i18n.listPacks().map(p => html`<button class=${cx(i18n.getLang() === p.id && 'on')} onClick=${() => { i18n.setLang(p.id); bump(); }}>${p.name}</button>`)}</div>
+    <div class="row wrap" style="gap:8px;margin-top:10px"><button class="btn sm" onClick=${() => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.strings,.xml,.txt'; inp.onchange = e => { const f = e.target.files && e.target.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { const r = i18n.importStrings(f.name, String(rd.result || '')); bump(); if (r.ok) toast('Пакет «' + r.name + '»: ' + r.count + ' фраз(ы). Лишние ключи проигнорированы.'); else toast(r.error || 'Не получилось импортировать', 'err'); }; rd.readAsText(f); }; inp.click(); }}><${Icon} n="upload" s=${16} /> Импортировать из Telegram (.strings)</button>${i18n.getLang() !== 'ru' && html`<button class="btn ghost sm" onClick=${() => { i18n.setLang('ru'); bump(); }}>Вернуть русский</button>`}${i18n.getLang().indexOf('custom:') === 0 && html`<button class="btn ghost sm" onClick=${() => { i18n.removePack(i18n.getLang()); bump(); toast('Пакет удалён'); }}>Удалить пакет</button>`}</div>
+    <small class="hint">Формат Telegram: по паре на строку — <code>"русская фраза" = "перевод";</code>, либо Android-файл <code>&lt;string name="…"&gt;…&lt;/string&gt;</code>. Ключи — это русские фразы этого интерфейса; чего нет в пакете, остаётся по-русски. Свой пакет хранится только на этом устройстве. Перевод интерфейса — черновой (бета).</small></div>
     <${Set} k="anim" label="Анимации" hint="Конфетти, тряска, подпрыгивающие стикеры" /><${Toggle} label="Снег зимой" hint="Лёгкий снегопад с 1 декабря по 14 января" on=${S.settings.snow !== false} onChange=${v => setSetting({ snow: v })} /><${Set} k="contrast" label="Высокая контрастность" hint="Жирнее границы, темнее текст" />
     <button class="btn ghost" onClick=${() => { setSetting({ theme: 'system', style: 'soft', acrylic: 'auto', accent: '', wallpaper: 'leaves', fontSize: 15, scale: 1, flat: 'auto', anim: true, contrast: false }); toast('Оформление сброшено'); }}>Сбросить оформление</button></div>`;
 }
