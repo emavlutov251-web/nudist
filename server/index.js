@@ -25,6 +25,8 @@ require('./quiet');
 require('./lobby');
 const Tg = require('./tg');
 require('./tgpacks');
+require('./nearby');
+require('./biz');
 require('./tunes');
 require('./common');
 const Streak = require('./streak');
@@ -346,6 +348,8 @@ setInterval(() => { // автоудаление неактивных аккау�
 }, 3600e3).unref();
 
 Seed.seed();
+try { Seed.ensureGuide(); } catch (e) { console.error('[guide]', e.message); }
+try { Seed.ensureTrueFriends(); } catch (e) { console.error('[friends]', e.message); }
 try { Streak.seedAll(); } catch (e) { console.error('[streak]', e.message); }
 const HOST = process.env.HOST || '0.0.0.0';
 server.on('error', e => { console.error('[fatal] сервер не запустился:', e.message); process.exit(1); });

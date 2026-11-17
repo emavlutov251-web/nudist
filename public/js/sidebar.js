@@ -12,6 +12,7 @@ import { Nm } from './lib.js';
 import { openShop } from './shop.js';
 import { EventStrip } from './events.js';
 import { MoodAsk, openCalm, NearStrip } from './calm.js';
+import { NearbyModal } from './nearby.js';
 import { LobbyStrip } from './lobby.js';
 
 // ═════ Рейка ═════
@@ -206,6 +207,7 @@ function HomeSidebar() {
       <button class="ib" onClick=${menu} aria-label="Меню"><${Icon} n="menu" /></button>
       <label class="search"><${Icon} n="search" s=${17} /><input id="search" value=${q} placeholder="Поиск (Ctrl+K)" onInput=${e => setQ(e.target.value)} onFocus=${() => setFocus(true)} onBlur=${() => setTimeout(() => setFocus(false), 200)} onKeyDown=${e => e.key === 'Escape' && (setQ(''), e.target.blur())} autocomplete="off" />${q && html`<button class="ib sm" onClick=${() => setQ('')} aria-label="Очистить"><${Icon} n="x" s=${15} /></button>`}</label>
       <button class="ib" title="Создать: чат, группу или канал" aria-label="Создать" onClick=${() => openModal(CreateMenu)}><${Icon} n="square-pen" /></button>
+      <button class="ib" title="Люди рядом" aria-label="Люди рядом" onClick=${() => openModal(NearbyModal)}><${Icon} n="map-pin" /></button>
     </header>
     ${q.trim() ? html`<div class="side-b"><${SearchView} q=${q.trim()} /></div>` : focus && (S.settings.searchHistory || []).length ? html`<div class="side-b"><h4 class="sh">Недавние запросы <a onClick=${() => setSetting({ searchHistory: [] })}>очистить</a></h4>${S.settings.searchHistory.map(h => html`<button class="hist-i" onMouseDown=${e => { e.preventDefault(); setQ(h); }}><${Icon} n="history" s=${16} />${h}</button>`)}</div>` : html`
       ${!S.ui.archive && html`<${StoriesRow} />`}

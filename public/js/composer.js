@@ -110,7 +110,9 @@ export function Composer({ chat, thread }) {
   const wasEdit = useRef(false);
   useEffect(() => { if (edit) { wasEdit.current = true; setText(edit.text || ''); ta.current && ta.current.focus(); } else if (wasEdit.current) { wasEdit.current = false; setText(''); } }, [edit && edit.id]);
   useEffect(() => { if (reply && ta.current) ta.current.focus(); }, [reply && reply.m.id]);
+  useEffect(() => { if (S.ui.prefill) { const t = String(S.ui.prefill).slice(0, 500); S.ui.prefill = null; setText(t); ta.current && ta.current.focus(); } }, []);
   useEffect(() => { if (matchMedia('(min-width: 800px)').matches && ta.current) ta.current.focus(); }, []);
+  const bizQuick = ((S.me.biz && S.me.biz.quick) || []).filter(q => q && q.body);
   useLayoutEffect(() => { const el = ta.current; if (!el) return; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 220) + 'px'; }, [text]);
   useEffect(() => { const f = e => stage(e.detail); addEventListener('nudist-files', f); return () => removeEventListener('nudist-files', f); }, [reply]);
 
@@ -254,6 +256,7 @@ export function Composer({ chat, thread }) {
     ${hints.length > 0 && html`<div class="st-hints">${hints.map(s => html`<${Sticker} st=${s} size=${64} onClick=${() => { setText(''); saveDraft(chat.id, ''); sticker(s); }} />`)}</div>`}
     ${(reply || edit) && html`<div class="c-ctx"><${Icon} n=${edit ? 'pencil' : 'reply'} s=${18} /><div><b>${edit ? 'Редактирование' : 'Ответ: ' + userName(S.users[reply.m.from])}</b><span>${edit ? msgPreview(edit) : reply.quote || msgPreview(reply.m) || 'сообщение'}</span></div><button class="ib sm" onClick=${() => { if (edit) setText(''); S.ui.reply = null; S.ui.edit = null; bump(); }} aria-label="Отмена"><${Icon} n="x" s=${17} /></button></div>`}
     ${forumRoot && html`<input class="c-title" maxlength="120" placeholder="Заголовок поста. Теги — через #решётку" value=${title} onInput=${e => setTitle(e.target.value)} />`}
+    ${bizQuick.length > 0 && !edit && html`<div class="chips pad qrep">${bizQuick.slice(0, 10).map((q, i) => html`<button key=${i} class="chip" title=${q.body} onClick=${() => { const v = tref.current.trimEnd(); setText((v ? v + ' ' : '') + q.body); ta.current && ta.current.focus(); }}>${q.t || q.body.slice(0, 24)}</button>`)}</div>`}
     ${fmt && html`<div class="fmt"><button title="Жирный (Ctrl+B)" onClick=${() => insert('**', '**')}><b>Ж</b></button><button title="Курсив (Ctrl+I)" onClick=${() => insert('__', '__')}><i>К</i></button><button title="Зачёркнутый (Ctrl+Shift+X)" onClick=${() => insert('~~', '~~')}><s>З</s></button><button title="Спойлер-листок (Ctrl+Shift+P)" onClick=${() => insert('||', '||')}>🍃</button><button title="Моноширинный (Ctrl+Shift+M)" onClick=${() => insert('`', '`')}><code>{}</code></button><button title="Блок кода" onClick=${() => insert('```js\n', '\n```')}><${Icon} n="code" s=${15} /></button><button title="Цитата" onClick=${() => insert('> ')}><${Icon} n="quote" s=${15} /></button><button title="Список" onClick=${() => insert('- ')}><${Icon} n="list" s=${15} /></button><button title="Ссылка" onClick=${() => insert('[', '](https://)')}><${Icon} n="link" s=${15} /></button></div>`}
     ${r ? html`<div class="rec">${r.kind === 'round' && html`<video class="rec-round" ref=${vref} muted autoplay playsinline></video>`}
         <button class="ib" title="Отменить запись" onClick=${() => stopRec(false)}><${Icon} n="trash-2" /></button><span class="rec-dot" style=${`transform:scale(${1 + r.level * 0.9})`}></span><b>${fmtDur(r.sec)}</b>

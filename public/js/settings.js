@@ -7,7 +7,7 @@ import { backHooks } from './back.js';
 import { openShop, hasItem, SHOP_THEMES, EVENT_THEMES } from './shop.js';
 import { i18n } from './i18n.js';
 
-const TABS = [['profile', 'user', 'Профиль'], ['account', 'key-round', 'Аккаунт'], ['privacy', 'lock', 'Приватность'], ['devices', 'monitor-smartphone', 'Устройства'], ['notif', 'bell', 'Уведомления'], ['look', 'palette', 'Оформление'], ['chats', 'message-circle', 'Чаты и медиа'], ['folders', 'folder', 'Папки'], ['calls', 'phone', 'Звонки'], ['data', 'database', 'Данные'], ['adv', 'flask-conical', 'Продвинутые'], ['admins', 'shield', 'Администраторы']];
+const TABS = [['profile', 'user', 'Профиль'], ['account', 'key-round', 'Аккаунт'], ['privacy', 'lock', 'Приватность'], ['biz', 'store', 'Бизнес'], ['devices', 'monitor-smartphone', 'Устройства'], ['notif', 'bell', 'Уведомления'], ['look', 'palette', 'Оформление'], ['chats', 'message-circle', 'Чаты и медиа'], ['folders', 'folder', 'Папки'], ['calls', 'phone', 'Звонки'], ['data', 'database', 'Данные'], ['adv', 'flask-conical', 'Продвинутые'], ['admins', 'shield', 'Администраторы']];
 export function openSettings(tab) { openModal(Settings, { tab }); }
 function Settings({ id, tab: t0 }) {
   const [tab, setTab] = useState(t0 || (window.innerWidth < 720 ? '' : 'profile')), me = S.me, cur = TABS.find(t => t[0] === tab);
@@ -16,7 +16,7 @@ function Settings({ id, tab: t0 }) {
     h.depth = inTab; backHooks.set(id, h); bump();
     return () => backHooks.delete(id);
   }, [tab]);
-  const Body = { profile: Profile, account: Account, privacy: Privacy, devices: Devices, notif: Notif, look: Look, chats: Chats, folders: Folders, calls: Calls, data: Data, adv: Adv, admins: Admins }[tab];
+  const Body = { profile: Profile, account: Account, privacy: Privacy, devices: Devices, notif: Notif, look: Look, chats: Chats, folders: Folders, calls: Calls, data: Data, adv: Adv, admins: Admins, biz: Biz }[tab];
   return html`<${Modal} id=${id} title=${cur ? cur[2] : 'Настройки'} icon="settings" wide cls=${cx('settings', tab && 'in-tab')}>
     <div class="set"><nav class="set-nav" aria-label="Разделы настроек">
       <button class="set-me" onClick=${() => setTab('profile')}><${Avatar} u=${me} src=${me.avatar} name=${userName(me)} color=${me.color} s=${44} /><span><b>${userName(me)} <${Badges} list=${me.badges} s=${13} /></b><small>${me.username ? '@' + me.username : me.phone || ''}</small></span></button>
@@ -84,6 +84,7 @@ function Account() {
       <button class="li" onClick=${email}><${Icon} n="mail" /><span><b>Почта для восстановления</b><small>${me.email || 'не указана'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
       <button class="li" onClick=${pass}><${Icon} n="key-round" /><span><b>Пароль</b><small>${me.hasPassword ? 'установлен' : me.tg ? 'не задан — вход через Telegram' : 'не задан — без пароля не войти с другого устройства'}</small></span><${Icon} n="chevron-right" s=${16} /></button>
       ${(S.tgBot || me.tg) && html`<button class="li" onClick=${tgRow}><${Icon} n="send" /><span><b>Telegram</b><small>${me.tg ? `привязан${me.tg === true ? '' : ': @' + me.tg} · можно входить без пароля` : 'не привязан — привяжите, чтобы входить без пароля'}</small></span><${Icon} n="chevron-right" s=${16} /></button>`}
+      ${me.tg && html`<div class="li-row"><${Toggle} label="Мост с Telegram" hint="Личные сообщения из «Нудиста» приходят в чат с нашим ботом; ответить можно прямо там — бот доставит в «Нудист». Или напишите боту «@username текст»" on=${me.tgBridge !== false} onChange=${async () => { const r = await call('me.tg.bridge', {}); if (r) toast(r.bridge ? 'Мост включён' : 'Мост выключен'); }} /></div>`}
       ${me.hasPassword && html`<button class="li" onClick=${codes}><${Icon} n="life-buoy" /><span><b>Коды восстановления</b><small>${me.recoveryLeft ? `осталось: ${me.recoveryLeft} · на случай, если забудете пароль` : 'нет — забытый пароль придётся сбрасывать через администратора'}</small></span><${Icon} n="chevron-right" s=${16} /></button>`}</div>
     <${Sel} label="Удалить аккаунт, если я не захожу" hint="Таймер самоуничтожения. Сбрасывается при каждом входе." value=${me.autodelete || 6} opts=${[[1, '1 месяц'], [3, '3 месяца'], [6, '6 месяцев'], [12, '1 год'], [24, '2 года']]} onChange=${v => call('me.autodelete', { months: +v })} />
     <h5>Аккаунты на этом устройстве</h5>
@@ -154,7 +155,36 @@ function Privacy() {
   return html`<div class="form">
     <p class="hint">В «Нудисте» все на виду — кроме того, что вы решите прикрыть. Что и где хранится, написано в <a href="/privacy" target="_blank" rel="noopener">политике конфиденциальности</a>.</p>
     <${Toggle} label="Режим инкогнито" hint="Никто не видит, что вы в сети и когда заходили. Не уходят отметки «прочитано» и «печатает…», просмотры историй не записываются, в поиске вас находят только по точному @username. Если вы ответили — человек, понятно, увидит, что вы прочитали" on=${!!me.incog} onChange=${async v => { try { await rpc('me.incog', { on: v }); toast(v ? 'Инкогнито включён' : 'Инкогнито выключен'); } catch (e) { toast(e.message, 'err'); } }} />
-    ${PRIV.map(([k, l]) => html`<${Sel} label=${l} value=${p[k] || 'all'} opts=${[['all', 'Все'], ['contacts', 'Мои контакты'], ['none', 'Никто']]} onChange=${v => call('me.privacy', { [k]: v })} />`)}
+    ${PRIV.map(([k, l]) => (k === 'calls' || k === 'msgs') ? '' : html`<${Sel} label=${l} value=${p[k] || 'all'} opts=${[['all', 'Все'], ['contacts', 'Мои контакты'], ['none', 'Никто']]} onChange=${v => call('me.privacy', { [k]: v })} />`)}
+    <${Sel} label="Кто может звонить" value=${p.calls || 'all'} opts=${[['all', 'Все'], ['contacts', 'Мои контакты'], ['none', 'Никто']]} onChange=${v => call('me.privacy', { calls: v })} />
+    <${Sel} label="Кто может писать первым" value=${p.msgs || 'all'} opts=${[['all', 'Все'], ['contacts', 'Мои контакты'], ['none', 'Никто, кроме исключений']].concat(((S.me.premiumUntil || 0) > Date.now() || (S.me.trialUntil || 0) > Date.now()) ? [['contacts_premium', 'Мои контакты и премиум-подписчики'], ['paid', 'Любые незнакомцы за листики (25 🍃 вам)']] : [])} onChange=${v => call('me.privacy', { msgs: v })} />
+    ${(() => {
+      const prem = (S.me.premiumUntil || 0) > Date.now() || (S.me.trialUntil || 0) > Date.now();
+      if (!prem) return html`<div class="note warn"><span><b>Расширенные лимиты — только с Премиум.</b> «Мои контакты и премиум-подписчики», «сообщения за 25 🍃» (незнакомцы платят вам) и исключения на 100 человек — даже при «Никто».</span><button class="btn sm" onClick=${() => openShop('plans')}>Премиум</button></div>`;
+      const addEx = async (k, list) => {
+        const v = await promptDlg({ title: 'Исключение из ограничений', label: '@username человека', placeholder: 'nudist_user' });
+        if (!v) return;
+        const name = String(v).replace(/^@/, '').trim();
+        if (!/^[A-Za-z][A-Za-z0-9_]{2,31}$/.test(name)) return toast('Username латиницей, без пробелов', 'err');
+        try {
+          const r = await rpc('user.get', { username: name });
+          const id = r && r.user && r.user.id;
+          if (!id) return toast('Не нашли такого в «Нудисте»', 'err');
+          if (r.user) S.users[id] = { ...S.users[id], ...r.user };
+          const next = [...new Set([...list, id])].slice(0, 100);
+          if (await call('me.privacy', { [k]: next })) toast('Добавлено в исключения');
+        } catch (e) { toast(e.message, 'err'); }
+      };
+      return html`<h5>Исключения (Премиум)</h5>
+        ${[['callsEx', 'Звонки'], ['msgsEx', 'Сообщения']].map(([k, l]) => {
+          const list = p[k] || [];
+          return html`<div class="fld"><span>${l} · ${list.length}/100</span>
+            ${list.length > 0 && html`<div class="chips">${list.map(id => { const u = S.users[id] || {}; return html`<button class="chip" title="Убрать из исключений" onClick=${() => call('me.privacy', { [k]: list.filter(x => x !== id) })}>${u.username ? '@' + u.username : u.name || ('id:' + String(id).slice(0, 6))}<${Icon} n="x" s=${11} /></button>`; })}</div>`}
+            <button class="btn ghost sm" onClick=${() => addEx(k, list)}><${Icon} n="user-plus" s=${15} /> Добавить по @username</button>
+          </div>`;
+        })}
+        <p class="hint">Исключения работают даже при «Никто». Листики за платные сообщения достаются вам — видимо, за внимание.</p>`;
+    })()}
     <${Toggle} label="Закрытый профиль" hint="«О себе», ссылки и город видны только вашим контактам" on=${!!me.private} onChange=${v => call('me.update', { private: v })} />
     <${Toggle} label="Скрывать IP и устройство" hint="Сервер не записывает ваш адрес и название устройства в список сеансов. Уже записанное стирается сразу. Минус: в «Устройствах» сеансы станут неразличимы" on=${!!me.hideMeta} onChange=${v => call('me.update', { hideMeta: v })} />
     <${Toggle} label="Показывать мою коллекцию в профиле" hint="Вкладка «Вещи»: рамки, цвета имени, эффекты и значки, которые у вас есть" on=${!S.settings.hideCol} onChange=${v => setSetting({ hideCol: !v })} />
@@ -209,6 +239,32 @@ function Notif() {
     <button class="btn ghost" onClick=${() => { sfx(s.notifSound); if (perm === 'granted') try { new Notification('Нудист', { body: 'Проверка связи. Вы пропустили 47 сообщений. Шутка. Пока что.', icon: '/icon.svg' }); } catch (e) { toast('Браузер не дал показать уведомление', 'err'); } else toast('Так звучит уведомление. Системные пока не разрешены.'); }}>Проверить уведомление</button></div>`;
 }
 
+// ───── бизнес
+function Biz() {
+  const me = S.me, b = me.biz || {}, prem = (S.me.premiumUntil || 0) > Date.now() || (S.me.trialUntil || 0) > Date.now();
+  const [f, setF] = useState({ addr: b.addr || '', hours: b.hours || '', site: b.site || '', greetOn: !!b.greetOn, greet: b.greet || '', awayOn: !!b.awayOn, away: b.away || '', quick: (b.quick || []).map(x => ({ t: x.t, body: x.body })) });
+  const set = (k, v) => setF({ ...f, [k]: v });
+  const link = me.username ? (location.origin + '/#dm=@' + me.username) : '';
+  const saveAll = async () => { const r = await call('me.biz', f); if (r) toast('Бизнес сохранён: адрес, часы и автоответы видны всем в вашем профиле'); };
+  return html`<div class="form">
+    <p class="hint">Бизнес-раздел как в «Telegram для бизнеса»: адрес, часы и сайт видят все, кто откроет ваш профиль, а приветствие и «нет на месте» отвечают на первое сообщение сами. Бесплатно.</p>
+    <label class="fld"><span>Адрес</span><input value=${f.addr} maxlength="160" placeholder="Например: Екатеринбург, ул. Примерная, 1" onInput=${e => set('addr', e.target.value)} /></label>
+    <label class="fld"><span>Часы работы</span><input value=${f.hours} maxlength="120" placeholder="Пн–Пт 09:00–18:00, Сб 10:00–16:00" onInput=${e => set('hours', e.target.value)} /></label>
+    <label class="fld"><span>Сайт</span><input value=${f.site} maxlength="200" placeholder="https://example.com" onInput=${e => set('site', e.target.value)} /></label>
+    ${link && html`<div class="fld"><span>Ссылка на чат с вами</span><div class="row"><code class="mono" style="flex:1;overflow-x:auto;white-space:nowrap">${link}</code><button class="btn sm ghost" title="Копировать" onClick=${() => { copyText(link); toast('Ссылка скопирована'); }}><${Icon} n="copy" s=${15} /></button></div><small class="hint">Работает везде: откроется чат с вами. С текстом: <code class="mono">${link + '?text=Здравствуйте!'}</code></small></div>`}
+    <h5>Приветствие новым клиентам</h5>
+    <${Toggle} label="Автоответ на первое сообщение" hint="Раз в 7 дней на одного человека. Текст ниже" on=${f.greetOn} onChange=${v => set('greetOn', v)} />
+    ${f.greetOn && html`<textarea rows="3" maxlength="500" placeholder="Здравствуйте! Вижу ваш вопрос — отвечаем в рабочее время." value=${f.greet} onInput=${e => set('greet', e.target.value)}></textarea>`}
+    <h5>Нет на месте</h5>
+    <${Toggle} label="Отвечать «нет на месте»" on=${f.awayOn} onChange=${v => set('awayOn', v)} />
+    ${f.awayOn && html`<textarea rows="3" maxlength="500" placeholder="Сейчас нас нет на месте. Вернёмся в Пн в 09:00 — а пока оставьте вопрос, он не потеряется." value=${f.away} onInput=${e => set('away', e.target.value)}></textarea>`}
+    <h5>Быстрые ответы · ${f.quick.length}/10</h5><p class="hint">Кнопки над полем ввода: нажмите — и текст вставится в сообщение. Идеально для «Цены», «Как заказать», «Самовывоз».</p>
+    ${f.quick.map((q, i) => html`<div class="row" key=${i}><input style="width:110px;flex:none" maxlength="40" placeholder="Коротко" value=${q.t} onInput=${e => { const quick = f.quick.slice(); quick[i] = { ...quick[i], t: e.target.value }; set('quick', quick); }} /><input style="flex:1" maxlength="300" placeholder="Полный текст ответа" value=${q.body} onInput=${e => { const quick = f.quick.slice(); quick[i] = { ...quick[i], body: e.target.value }; set('quick', quick); }} /><button class="ib" title="Удалить" aria-label="Удалить" onClick=${() => set('quick', f.quick.filter((_, j) => j !== i))}><${Icon} n="trash-2" s=${17} /></button></div>`)}
+    ${f.quick.length < 10 && html`<button class="btn ghost sm" onClick=${() => set('quick', [...f.quick, { t: '', body: '' }])}><${Icon} n="plus" s=${15} /> Добавить ответ</button>`}
+    <div class="row"><button class="btn" onClick=${saveAll}>Сохранить бизнес</button></div>
+    <p class="hint">Обязательно к прочтению: автоответ — это обычный текст от вашего имени с пометкой «Бизнес-автоответ». Никому не пишем первыми, листики не сгорают.</p>
+  </div>`;
+}
 // ───── оформление
 const ACCENTS = ['', '#E2552D', '#C7822F', '#0D7C8C', '#3F6FD8', '#8B55D9', '#D1468C'], WALLS = [['leaves', 'Листва'], ['hemp', 'Конопля'], ['plain', 'Чистый'], ['sand', 'Песок'], ['sea', 'Море'], ['dots', 'Горошек'], ['grid', 'Тетрадь']];
 function Look() {

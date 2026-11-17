@@ -118,10 +118,62 @@ H['me.tg.poll'] = (c, p) => {
   u.tg = { id: q.tg.id, username: q.tg.username, at: now() }; index = null; pend.delete(p.code); save(); R.selfUpdate(u);
   return { ok: true, tg: u.tg.username || true };
 };
+H['me.tg.bridge'] = c => {
+  const u = db.users[c.uid]; need(u.tg, 'Сначала привяжите Telegram: «Вход через Telegram» на странице входа или в «Настройки → Аккаунт».');
+  u.tgBridge = u.tgBridge === false;      // было выключено — включаем, было включено — выключаем
+  save(); R.selfUpdate(u);
+  return { ok: true, bridge: u.tgBridge !== false };
+};
 H['me.tg.drop'] = c => {
   const u = db.users[c.uid]; need(u.tg, 'Telegram не привязан'); need(u.username && u.pass, 'Сначала задайте пароль: без него и без Telegram в аккаунт будет не войти');
   delete u.tg; index = null; save(); R.selfUpdate(u); return { ok: true };
 };
+
+// ───── мост Telegram ↔ «Нудист»: личные сообщения в обе стороны (только для лички и только с привязанным Telegram)
+// В Нудист: человек шлёт боту «@username текст» или «/write @username текст», либо отвечает на сообщение, которое бот сам переслал сюда.
+// В Telegram: каждое личное сообщение в «Нудисте», отправленное тому, у кого привязан Telegram и включён мост, падает туда же. Текст только, без файлов.
+const mirrored = new Map();      // "tgChatId:msgId" -> nudistChatId (только для ответа из Telegram)
+const rememberMirrored = (chatId, msgId, nudistChatId) => { if (!msgId) return; mirrored.set(chatId + ':' + msgId, nudistChatId); if (mirrored.size > 400) mirrored.delete(mirrored.keys().next().value); };
+const mediaLabel = m => ({ photo: '[фото]', video: '[видео]', voice: '[голосовое]', round: '[кружочек]', file: '[файл]', audio: '[аудио]', gif: '[GIF]' }[m.type] || '');
+const PRICE = () => { const n = Number(process.env.MSG_LEAF_PRICE); return Number.isFinite(n) && n >= 1 && n <= 1000 ? Math.floor(n) : 25; };
+
+function tgDeliver(fromTgChatId, who, chatIdOrUser, text) {
+  const u = byTg(who.id);
+  if (!u) { say(fromTgChatId, 'Сначала привяжите Telegram: «Нудист» → Настройки → Аккаунт → Telegram. Без привязки писать от вашего имени нельзя.'); return; }
+  let ch = null;
+  if (typeof chatIdOrUser === 'string' && chatIdOrUser.startsWith('@')) {
+    const o = db.users[C.byName.get(chatIdOrUser.slice(1).toLowerCase())];
+    if (!o) { say(fromTgChatId, 'Не нашёл пользователя ' + chatIdOrUser + ' в «Нудисте».'); return; }
+    if (o.deleted) { say(fromTgChatId, 'Этот аккаунт удалён.'); return; }
+    ch = C.openDm(u.id, o.id);
+    const hasThread = (db.msgs[ch.id] || []).some(m => m.from === o.id);
+    const ok = C.canMsgUser(o, u.id, hasThread);
+    if (ok === 'deny') { say(fromTgChatId, '@' + (o.username || '') + ' не принимает сообщения от посторонних. Попросите его добавить вас в контакты или исключения приватности.'); return; }
+    if (ok === 'paid') {
+      const price = PRICE();
+      if ((u.stars || 0) < price) { say(fromTgChatId, 'Это сообщение платное для посторонних (' + price + ' 🍃), у вас не хватает листиков.'); return; }
+      u.stars -= price; o.stars = (o.stars || 0) + price; save();
+    }
+  } else { ch = db.chats[chatIdOrUser]; }
+  if (!ch || !ch.members || !ch.members[u.id]) { say(fromTgChatId, 'Не получилось открыть чат: вы в нём не состоите.'); return; }
+  C.postMessage(ch, u.id, { text, via: 'tg' });
+  say(fromTgChatId, 'Отправлено ✅');
+}
+
+C.hooks.afterPost.push((chat, m) => {
+  try {
+    if (!chat || chat.type !== 'dm' || !m.from || m.type === 'service' || m.auto || m.enc || m.via === 'tg') return;
+    const targetId = Object.keys(chat.members).find(id => id !== m.from);
+    const t = targetId && db.users[targetId];
+    if (!t || !t.tg || t.tgBridge === false || t.deleted) return;
+    const sender = db.users[m.from];
+    const who = sender ? (sender.username ? '@' + sender.username : (sender.name || 'Нудист')) : 'Нудист';
+    const body = m.text ? String(m.text).slice(0, 3000) : (mediaLabel(m) || '[сообщение]');
+    call('sendMessage', { chat_id: t.tg.id, text: '💬 Из Нудиста от ' + who + ':\n\n' + body })
+      .then(r => rememberMirrored(t.tg.id, r && r.message_id, chat.id))
+      .catch(e => console.warn('[tg] мост:', e.message));
+  } catch (e) { console.warn('[tg] мост:', e.message); }
+});
 
 // ───── сообщения боту (вебхук Telegram)
 const say = (chat, text, extra) => call('sendMessage', { chat_id: chat, text, ...extra }).catch(e => console.warn('[tg] ответ не ушёл:', e.message));
@@ -132,6 +184,10 @@ function hook(secret, upd) {
   const who = tgUser(m.from); if (!who) return 200;
   try { A.limit('tgm:' + who.id, 20, 60e3); } catch (e) { return 200; }
   const text = String(m.text || ''), arg = (/^\/start(?:@\w+)?\s+(\S+)/.exec(text) || [])[1] || '';
+  const writeCmd = /^\/write(?:@\w+)?\s+@?([A-Za-z][A-Za-z0-9_]{2,31})\s+([\s\S]{1,4096})$/.exec(text) || /^@([A-Za-z][A-Za-z0-9_]{2,31})\s+([\s\S]{1,4096})$/.exec(text);
+  if (writeCmd) { tgDeliver(m.chat.id, who, '@' + writeCmd[1], writeCmd[2].trim()); return 200; }
+  const replyTo = m.reply_to_message && mirrored.get(m.chat.id + ':' + m.reply_to_message.message_id);
+  if (replyTo && text.trim()) { tgDeliver(m.chat.id, who, replyTo, text.trim()); return 200; }
   if (arg.startsWith('login_')) {
     const p = pend.get(arg.slice(6));
     if (!p || p.exp < now()) say(m.chat.id, 'Эта ссылка для входа уже устарела. Вернитесь на сайт и нажмите «Войти через Telegram» ещё раз.');
@@ -142,7 +198,7 @@ function hook(secret, upd) {
   const known = byTg(who.id), rows = [];
   if (/^https:\/\//.test(SITE)) rows.push([{ text: '🍃 Открыть «Нудист»', web_app: { url: SITE + '/' } }], [{ text: '🌐 Открыть в браузере', url: SITE + '/#tgl=' + one }]);
   say(m.chat.id, (known ? `С возвращением, ${who.name}! ` : `Привет, ${who.name}! «Нудист» — мессенджер, которому нечего скрывать: чаты, группы, лента, игры с друзьями. `)
-    + 'Жмите кнопку — ' + (known ? 'и вы в своём аккаунте.' : 'аккаунт создастся за пару секунд, пароль придумывать не нужно.') + '\n\nКнопка «в браузере» работает 10 минут и один раз.', { reply_markup: { inline_keyboard: rows } });
+    + 'Жмите кнопку — ' + (known ? 'и вы в своём аккаунте.' : 'аккаунт создастся за пару секунд, пароль придумывать не нужно.') + '\n\nКнопка «в браузере» работает 10 минут и один раз.\n\nНаписать в «Нудист» отсюда: @username текст (или ответьте на пересланное сообщение).', { reply_markup: { inline_keyboard: rows } });
   return 200;
 }
 

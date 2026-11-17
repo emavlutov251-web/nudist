@@ -302,3 +302,21 @@ div.val-card { cursor: default; } .val-card.on { border-color: var(--ink); box-s
 .app-tile.ev .app-ic { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--accent); }
 .push-strip { display: flex; align-items: center; gap: 10px; margin: 6px 8px 4px; padding: 9px 8px 9px 12px; border-radius: 14px; background: color-mix(in srgb, var(--warn) 14%, var(--card)); border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line)); cursor: pointer; }
 .push-strip span { flex: 1; min-width: 0; display: flex; flex-direction: column; } .push-strip b { font-size: .92em; } .push-strip small { color: var(--ink2); font-size: .78em; line-height: 1.3; }
+
+/* ── истории в профиле и архив ───────────── */
+.pf-stories small{display:block;font:600 .72em var(--font);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin:2px 0 6px}
+.pf-story-row{display:flex;gap:12px;overflow-x:auto;padding:2px 2px 6px;margin-bottom:4px;scrollbar-width:none}
+.pf-story{flex:none;width:74px}
+.pf-story img,.pf-story video{width:74px;height:74px;object-fit:cover;display:block;border-radius:50%;border:2px solid var(--accent);background:var(--hover)}
+.pf-story span{display:flex;width:74px;height:74px;border-radius:50%;border:2px solid var(--accent);color:#fff;font-size:9.5px;line-height:1.25;align-items:center;justify-content:center;padding:8px;overflow:hidden;text-align:center}
+.archv-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.archv-cell{position:relative;background:var(--hover);border:1px solid var(--line);border-radius:12px;overflow:hidden;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center}
+.archv-cell img,.archv-cell video{width:100%;height:100%;object-fit:cover}
+.archv-cell span{display:flex;width:100%;height:100%;align-items:center;justify-content:center;color:#fff;font-size:10.5px;line-height:1.3;padding:10px;text-align:center;overflow:hidden}
+.archv-cell small{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.55);color:#fff;font-size:10px;padding:1px 6px;border-radius:8px}
+.archv-view img{max-width:100%;max-height:52vh;border-radius:12px}
+.archv-view video{max-width:100%;max-height:52vh;border-radius:12px}
+.archv-text{padding:36px 20px;border-radius:12px;color:#fff;font-size:17px;text-align:center;white-space:pre-wrap;margin-bottom:8px}
+/* ── люди рядом и быстрые ответы ─────────── */
+.near-list{display:flex;flex-direction:column}
+.qrep{margin:0 0 2px}

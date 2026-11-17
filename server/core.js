@@ -121,6 +121,30 @@ function canSee(u, viewerId, key) {
   const p = (u.privacy || {})[key] || DEFAULT_PRIVACY[key];
   return p === 'all' || (p === 'contacts' && (u.contacts || []).includes(viewerId));
 }
+// ───── расширенные лимиты (Премиум): звонки и личные сообщения + исключения
+const inList = (u, vid) => !!(u.contacts || []).includes(vid);
+const inEx = (u, key, vid) => (((u.privacy || {})[key + 'Ex']) || []).includes(vid);
+function canCallUser(u, vid) {
+  if (!u || !vid || u.id === vid) return true;
+  if (inEx(u, 'calls', vid)) return true;
+  const p = (u.privacy || {}).calls || DEFAULT_PRIVACY.calls;
+  if (p === 'all') return true;
+  if (p === 'contacts') return inList(u, vid);
+  return false;      // 'none'
+}
+// Итог для первого сообщения в личку: 'ok' — писать можно, 'paid' — за листики, 'deny' — нельзя.
+function canMsgUser(u, vid, hasThread) {
+  if (!u || !vid || u.id === vid) return 'ok';
+  if (inEx(u, 'msgs', vid)) return 'ok';
+  if (hasThread) return 'ok';              // она(он) уже писал(а) в этот чат — отвечать можно всегда
+  const p = (u.privacy || {}).msgs || DEFAULT_PRIVACY.msgs;
+  if (p === 'none') return 'deny';          // совсем никто, кроме исключений и уже открытой переписки
+  if (inList(u, vid)) return 'ok';          // контакты пишут всегда (кроме «Никто»)
+  if (p === 'all') return 'ok';
+  if (p === 'contacts_premium') return isPremium(db.users[vid]) ? 'ok' : 'deny';
+  if (p === 'paid') return 'paid';
+  return 'deny';                           // 'contacts'
+}
 function badges(u) {
   const b = [...(u.badges || [])];
   const tier = tierOf(u); if (tier) b.push(tier === 'plus' ? 'premium' : tier);
@@ -143,6 +167,7 @@ function pubUser(u, vid) {
   if (u.profile) o.profile = u.profile;
   if (u.pubKey) o.pubKey = u.pubKey;
   if (u.playing) o.playing = u.playing;
+  if (u.biz && (u.biz.addr || u.biz.hours || u.biz.site)) o.biz = { addr: u.biz.addr || '', hours: u.biz.hours || '', site: u.biz.site || '' };
   if (cosHook && u.cos) { const cos = cosHook(u); if (cos) o.cos = cos; }
   if (u.private && u.id !== vid && !(u.contacts || []).includes(vid)) { delete o.bio; delete o.links; delete o.city; delete o.birthday; o.private = true; }
   return o;
@@ -163,7 +188,7 @@ const canImport = u => !!u && (IMPORTERS.has(u.id) || isOwner(u));
 const ROBOTS = new Set(String(process.env.ROBOTS || '').split(',').map(s => s.trim()).filter(Boolean));
 const POLICY = '2026-11-16';      // редакция политики конфиденциальности (public/privacy.html); сменили текст — смените дату, и приложение спросит согласие заново
 function selfUser(u) {
-  return { ...pubUser(u, u.id), incog: u.incog || undefined, near: nearOf(u), policy: (u.policy || {}).v, policyNeed: POLICY, phone: u.phone, email: u.email, tg: u.tg ? u.tg.username || true : undefined, stars: u.stars || 0, premiumUntil: Math.max(u.premiumUntil || 0, u.trialUntil || 0) || undefined, tier: tierOf(u) || undefined, ...(selfHook ? selfHook(u) : null), privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, owner: isOwner(u) || undefined, grant: canGrant(u) || undefined, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, private: !!u.private, hideMeta: !!u.hideMeta, lastDaily: u.lastDaily, dailyRun: u.dailyRun || 0, muted: u.muted > now() ? u.muted : undefined, taps: u.tapDay === today() ? u.taps : 0 };
+  return { ...pubUser(u, u.id), incog: u.incog || undefined, near: nearOf(u), policy: (u.policy || {}).v, policyNeed: POLICY, phone: u.phone, email: u.email, tg: u.tg ? u.tg.username || true : undefined, stars: u.stars || 0, premiumUntil: Math.max(u.premiumUntil || 0, u.trialUntil || 0) || undefined, tier: tierOf(u) || undefined, ...(selfHook ? selfHook(u) : null), privacy: { ...DEFAULT_PRIVACY, ...u.privacy }, contacts: u.contacts || [], blocked: u.blocked || [], totp: !!u.totpOn, hasPassword: !!u.pass, admin: u.admin, owner: isOwner(u) || undefined, grant: canGrant(u) || undefined, autodelete: u.autodelete || 6, recoveryLeft: (u.recovery || []).length, biz: u.biz || undefined, tgBridge: u.tg ? u.tgBridge !== false : undefined, private: !!u.private, hideMeta: !!u.hideMeta, lastDaily: u.lastDaily, dailyRun: u.dailyRun || 0, muted: u.muted > now() ? u.muted : undefined, taps: u.tapDay === today() ? u.taps : 0 };
 }
 // Кому рассылать «в сети / изменил профиль»: только тем, кто этого человека действительно видит — собеседникам, контактам
 // и участникам небольших общих чатов и серверов. Рассылка «всем подключённым» на каждое подключение — это N² и смерть при первом же наплыве.
@@ -555,4 +580,4 @@ function senior(scope, rankOf, actor, key, what, peek) {
 }
 const CHAT_RANK = { owner: 3, admin: 2, mod: 1, member: 0 };
 const chatRank = ch => uid => CHAT_RANK[((ch.members || {})[uid] || {}).role] || 0;
-module.exports = { unsavedMs, pubRead, setNoHook, setShopHooks, collection, senior, chatRank, CHAT_RANK, canGrant, TIERS, tierOf, setCosHook, setSelfHook, unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };
+module.exports = { unsavedMs, pubRead, setNoHook, setShopHooks, collection, senior, chatRank, CHAT_RANK, canGrant, TIERS, tierOf, setCosHook, setSelfHook, unreadCount, streakRestore, streakLost, petable, POLICY, chatMuted, needVoice, isRobot, markSeen, viewersOf, canImport, setOfflineHook, setMsgHook, audience, size, dropUpload, releaseFiles, sweepFiles, streakOf, streakable, streakDone, dayMsk, OWNERS, isOwner, metrics, ROOT, DATA, UPLOADS, db, save, flushSync, now, id, token, PubError, fail, need, str, int, today, isUpload, USERNAME_RE, conns, connById, emit, emitAll, isOnline, day, touchDau, byName, chatNames, usernameTaken, DEFAULT_PRIVACY, isPremium, canSee, canCallUser, canMsgUser, pubUser, selfUser, broadcastUser, dmId, st, sPerms, sCan, membersOf, isMember, can, myRole, audit, pollView, msgView, chatView, emitChat, findMsg, postMessage, service, updateMsg, deleteMessages, expiring, hooks, userChats, addToChat, removeFromChat, newChat, openDm, destroyChat, lastVisible };

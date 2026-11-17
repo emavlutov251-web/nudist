@@ -61,7 +61,21 @@ H['me.update'] = (c, p) => {
 };
 H['me.privacy'] = (c, p) => {
   const u = user(c); u.privacy = u.privacy || {};
-  for (const k of Object.keys(C.DEFAULT_PRIVACY)) if (['all', 'contacts', 'none'].includes(p[k])) u.privacy[k] = p[k];
+  const prem = C.isPremium(u);
+  const BASIC = { phone: ['all', 'contacts', 'none'], lastSeen: ['all', 'contacts', 'none'], avatar: ['all', 'contacts', 'none'], bio: ['all', 'contacts', 'none'], invites: ['all', 'contacts', 'none'], stories: ['all', 'contacts', 'none'], calls: ['all', 'contacts', 'none'], msgs: ['all', 'contacts', 'none', 'contacts_premium', 'paid'] };
+  for (const k of Object.keys(BASIC)) {
+    const v = p[k]; if (v === undefined) continue;
+    if (!BASIC[k].includes(v)) continue;
+    const adv = (k === 'msgs' || k === 'calls') && (v === 'contacts_premium' || v === 'paid');
+    if (adv && !prem) fail('Расширенный лимит «' + (v === 'paid' ? 'сообщения за листики' : 'контакты и премиум-подписчики') + '» доступен с Премиум.');
+    u.privacy[k] = v;
+  }
+  for (const k of ['callsEx', 'msgsEx']) {
+    if (p[k] === undefined) continue;
+    if (!prem) fail('Исключения в «Кто может» — функция Премиум.');
+    if (!Array.isArray(p[k]) || p[k].length > 100) fail('Исключений должно быть до 100');
+    u.privacy[k] = [...new Set(p[k].map(x => str(x, 24)))].filter(id => db.users[id] && !db.users[id].deleted);
+  }
   save(); selfUpdate(u); C.broadcastUser(u);
 };
 H['me.settings'] = (c, p) => {
@@ -604,7 +618,17 @@ function checkSend(c, chat, p) {
       need(!o.deleted, 'Аккаунт удалён. Писать некому.');
       need(!(o.blocked || []).includes(c.uid), 'Пользователь ограничил круг общения');
       need(!(u.blocked || []).includes(o.id), 'Вы заблокировали этого пользователя');
-      if (!o.bot && !C.canSee(o, c.uid, 'msgs') && !(db.msgs[chat.id] || []).some(m => m.from === o.id)) fail('Пользователь принимает сообщения только от ' + ((o.privacy || {}).msgs === 'contacts' ? 'контактов' : 'избранных'));
+      if (!o.bot) {
+        const hasThread = (db.msgs[chat.id] || []).some(m => m.from === o.id);
+        const can = C.canMsgUser(o, c.uid, hasThread);
+        if (can === 'deny') fail('Пользователь принимает сообщения не от всех. Попросите его добавить вас в контакты или в исключения приватности.');
+        if (can === 'paid') {
+          const price = envInt('MSG_LEAF_PRICE', 25, 1, 1000);
+          need((u.stars || 0) >= price, 'Это сообщение стоит ' + price + ' 🍃: получатель ограничил круг общения. У вас не хватает листиков.');
+          u.stars -= price; const or = db.users[o.id]; or.stars = (or.stars || 0) + price; save();
+          selfUpdate(u); selfUpdate(or);
+        }
+      }
     }
   } else if (chat.type === 'channel' && p.thread) { need(!C.chatMuted(chat, c.uid), 'Администраторы канала запретили вам комментировать'); }      // комментарии доступны подписчикам
   else need(can(chat, c.uid, 'send'), chat.type === 'channel' ? 'Писать в канал могут только администраторы' : (chat.members && chat.members[c.uid] && chat.members[c.uid].pending ? 'Сначала пройдите проверку: нажмите на листок' : 'У вас нет права писать в этот чат'));

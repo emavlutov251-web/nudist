@@ -40,6 +40,16 @@ const untilMorning = () => { const d = new Date(); d.setHours(8, 0, 0, 0); if (d
 const RULE_SETS = [['Общение', '1. Уважаем друг друга: без оскорблений и травли.\n2. Без спама и рекламы.\n3. Личные данные других людей не публикуем.\n4. Споры — по делу, без перехода на личности.'], ['Учёба', '1. Вопросы по теме — сюда, болтовня — в личку.\n2. Домашку не списываем, а разбираем.\n3. Файлы и конспекты подписываем: предмет и тема.\n4. Ночью (23:00–7:00) не шумим.'], ['Игры', '1. Ищешь команду — пиши игру, время и уровень.\n2. Читы и продажа аккаунтов запрещены.\n3. Спойлеры прячем под ||спойлер||.\n4. Проиграл — не токсичь.'], ['По-нудистски', '1. Не одеваться без спроса.\n2. Не спамить.\n3. Мемы — свежие.\n4. Кто обиделся — тот в полотенце.']];
 // ═════ Профиль ═════
 export function showProfile(userId, username, tab) { openModal(Profile, { userId, username, tab }); }
+// Истории прямо в профиле: текущие кружочки + у себя — кнопка «Архив историй».
+const STORY_BG = { leaf: '#1F9D57', sea: '#0D7C8C', night: '#132124', sun: '#E2552D' };
+function ProfileStories({ u }) {
+  if (S.flags.stories === false) return null;
+  const list = S.stories.filter(s => s.user === u.id).sort((a, b) => a.ts - b.ts);
+  if (!list.length) return null;
+  const me = u.id === S.me.id;
+  const users = [...new Set(S.stories.map(x => x.user))];
+  return html`<div class="pf-stories"><small>${me ? 'Мои истории' : 'Истории'}</small><div class="pf-story-row">${list.map(s => html`<button class="pf-story" title=${'История от ' + fmtFull(s.ts)} onClick=${() => { S.storyView = { users, u: u.id, i: list.indexOf(s) }; bump(); }}>${s.kind === 'photo' && s.media ? html`<img src=${s.media.url} alt="история" />` : s.kind === 'video' && s.media ? html`<video src=${s.media.url} muted playsinline preload="metadata" />` : html`<span style=${'background:' + (STORY_BG[s.bg] || '#1F9D57')}>${(s.text || '🍃').slice(0, 60)}</span>`}</button>`)}</div></div>`;
+}
 function Profile({ id, userId, username, tab: tab0 }) {
   // Профиль открывается сразу из того, что уже известно о человеке (свой — всегда, чужой — если он есть в чатах), а свежие данные подгружаются следом.
   // Раньше окно ждало ответа сервера и на плохой связи висело с одним листиком до полуминуты.
@@ -64,6 +74,8 @@ function Profile({ id, userId, username, tab: tab0 }) {
       <p>${u.status && (u.status.e || u.status.t) ? html`<span class="pf-st">${u.status.e} ${u.status.t}</span>` : ''}${lastSeen(u)}</p>
       ${u.playing && html`<p class="pf-play"><${Icon} n="gamepad-2" s=${14} /> играет в ${u.playing}</p>`}</div>
     <div class="pf-body">
+      <${ProfileStories} u=${u} />
+      ${me && html`<button class="pf-row click" onClick=${() => openModal(StoryArchive)}><small>Архив</small><p>Архив историй — текущие и старше суток</p></button>`}
       ${!me && !u.deleted && html`<div class="pf-acts"><button onClick=${() => go(() => openUser(u.id))}><${Icon} n="message-circle" /><span>Написать</span></button>${!u.bot && html`<button onClick=${async () => { await openUser(u.id); const c = Object.values(S.chats).find(x => x.type === 'dm' && x.peer === u.id); if (c) go(() => startCall(c.id, false)); }}><${Icon} n="phone" /><span>Позвонить</span></button><button onClick=${secret}><${Icon} n="lock" /><span>Секретный чат</span></button>`}<button onClick=${e => showMenu(e, [
         { icon: contact ? 'user-minus' : 'user-plus', label: contact ? 'Убрать из контактов' : 'В контакты', run: () => call('me.contact', { id: u.id, on: !contact }) },
         S.flags.stars && !u.bot && { emoji: '🎁', label: 'Подарить подарок', run: () => openGiftShop(u.id) },
@@ -83,6 +95,7 @@ function Profile({ id, userId, username, tab: tab0 }) {
       ${tab === 'col' && !u.bot && !u.deleted ? html`<${Collection} list=${d.col} user=${u} mine=${me} />` : tab === 'gifts' && !u.bot && !u.deleted ? html`<${GiftGrid} user=${u.id} onTotal=${setGn} />` : html`
       ${u.private && html`<p class="hint">🔒 Закрытый профиль: подробности видят только контакты.</p>`}
       ${u.bio && html`<div class="pf-row"><small>О себе</small><p>${u.bio}</p></div>`}
+      ${u.biz && (u.biz.addr || u.biz.hours || u.biz.site) && html`<div class="pf-row"><small>Бизнес</small>${u.biz.addr && html`<p>📍 ${u.biz.addr}</p>`}${u.biz.hours && html`<p>🕐 ${u.biz.hours}</p>`}${u.biz.site && html`<a href=${u.biz.site} target="_blank" rel="noopener noreferrer">${u.biz.site.replace(/^https?:\/\//, '')}</a>`}</div>`}
       ${u.username && html`<button class="pf-row click" onClick=${() => { copyText('@' + u.username); toast('Username скопирован'); }}><small>Username</small><p>@${u.username}</p></button>`}
       ${u.phone && html`<div class="pf-row"><small>Телефон</small><p>${u.phone}</p></div>`}
       ${(u.city || local) && html`<div class="pf-row"><small>Город и время</small><p>${[u.city, local && 'местное время ' + local].filter(Boolean).join(' · ')}</p></div>`}
@@ -483,4 +496,25 @@ function CsTools({ chat, onClose }) {
   return html`<div class="form"><h5>Удаление по фильтру</h5><div class="row wrap"><label class="fld grow"><span>Содержит текст</span><input value=${f.q} onInput=${e => setF({ ...f, q: e.target.value })} /></label><label class="fld"><span>За последние, часов</span><input type="number" min="1" value=${f.hours} onInput=${e => setF({ ...f, hours: e.target.value })} /></label></div><button class="btn danger" onClick=${purge}><${Icon} n="eraser" s=${16} /> Удалить подходящие</button>
     <h5>Волна банов</h5><p class="hint">Выберите нескольких — забаним разом и вычистим их сообщения.</p><button class="btn danger" onClick=${wave}><${Icon} n="gavel" s=${16} /> Выбрать и забанить</button>
     ${chat.role === 'owner' && html`<h5>Опасная зона</h5><button class="btn danger" onClick=${async () => { const v = await promptDlg({ title: 'Удалить навсегда?', label: `Введите название «${chat.title}» для подтверждения`, ok: 'Удалить' }); if (v === chat.title) { await call('chat.delete', { id: chat.id }); onClose(); } else if (v !== null) toast('Название не совпало. Чат спасён.'); }}><${Icon} n="trash-2" s=${16} /> Удалить ${chat.type === 'channel' ? 'канал' : 'группу'}</button>`}</div>`;
+}
+
+
+// Архив историй: все мои истории, включая старше 24 часов (сервер хранит, в ленте они просто не показываются).
+function StoryArchive({ id }) {
+  const [d, setD] = useState(null), [view, setView] = useState(null);
+  useEffect(() => { rpc('story.list', { archive: true }).then(r => setD(r.stories || [])).catch(e => { setD([]); toast(e.message, 'err'); }); }, []);
+  const del = async s => {
+    const r = await rpc('story.del', { id: s.id }).catch(e => { toast(e.message, 'err'); return null; });
+    if (r) { setD(list => list.filter(x => x.id !== s.id)); setView(null); toast('История удалена'); }
+  };
+  return html`<${Modal} id=${id} title="Архив историй" icon="archive" cls="small">
+    ${!d ? html`<${Spinner} />` : view ? html`
+      <div class="archv-view">
+        ${view.kind === 'photo' && view.media ? html`<img src=${view.media.url} alt="" />` : view.kind === 'video' && view.media ? html`<video src=${view.media.url} controls autoplay playsinline />` : html`<div class="archv-text" style=${'background:' + (STORY_BG[view.bg] || '#1F9D57')}>${view.text}</div>`}
+        <p class="hint">${fmtFull(view.ts)}${view.views != null ? ' · просмотров: ' + view.views : ''}</p>
+        <div class="row"><button class="btn ghost" onClick=${() => setView(null)}>К списку</button><button class="btn danger" onClick=${() => del(view)}><${Icon} n="trash-2" s=${15} /> Удалить навсегда</button></div>
+      </div>`
+    : d.length ? html`<p class="hint">Все ваши истории хранятся здесь — и те, что в обычном списке живут лишь 24 часа.</p><div class="archv-grid">${d.slice().reverse().map(st => html`<button class="archv-cell" title=${fmtFull(st.ts)} onClick=${() => setView(st)}>${st.kind === 'photo' && st.media ? html`<img src=${st.media.url} alt="" loading="lazy" />` : st.kind === 'video' && st.media ? html`<video src=${st.media.url} muted preload="metadata" />` : html`<span style=${'background:' + (STORY_BG[st.bg] || '#1F9D57')}>${(st.text || '').slice(0, 80)}</span>`}<small>${new Date(st.ts).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</small></button>`)}</div>`
+    : html`<${Empty} icon="archive" title="Архив пуст" text="Опубликуйте первую историю — кружок «+» над списком чатов. Ваши истории будут сохраняться здесь и после суток." />`}
+  <//>`;
 }

@@ -203,6 +203,7 @@ function Auth() {
           <button class="btn big" disabled=${busy}>${busy ? 'Секунду…' : mode === 'register' ? 'Раздеться и войти' : mode === 'recover' ? 'Сменить пароль и войти' : mode === 'phone' && !step ? 'Получить код' : 'Войти'}</button>
           ${cfg && cfg.tg && (mode === 'login' || mode === 'register') && html`<a class="btn big ghost tg-btn" href=${tg ? tg.url : 'https://t.me/' + cfg.tg} target="_blank" rel="noopener" onClick=${tgGo}><${Icon} n="send" s=${18} /> ${mode === 'register' ? 'Через Telegram — без пароля' : 'Войти через Telegram'}</a>`}
           ${mode === 'login' && html`<p class="auth-alt">Впервые здесь? <a onClick=${() => sw('register')}>Создать аккаунт</a> · <a onClick=${() => sw('recover')}>Забыли пароль?</a></p>`}
+          ${(mode === 'login' || mode === 'register') && html`<p class="auth-alt"><a class="apk-dl" href="/nudist.apk" download="nudist.apk"><${Icon} n="download" s=${15} /> Скачать приложение для Android</a></p>`}
           ${mode === 'register' && html`<p class="auth-alt">Уже есть аккаунт? <a onClick=${() => sw('login')}>Войти</a></p><p class="hint">${cfg && cfg.setup ? 'Сервер новый: первым регистрируется владелец, он же станет администратором. Остальные смогут зарегистрироваться после него.' : 'Номер телефона и почта не нужны.'}</p>`}
           ${mode === 'recover' && html`<p class="auth-alt"><a onClick=${() => sw('login')}>Вспомнил пароль</a></p><p class="hint">Код восстановления — один из тех, что вы сохранили в «Настройки → Аккаунт». <b>Нет кода?</b> Напишите администратору: он пришлёт одноразовую ссылку для сброса. <a href="/contacts" target="_blank" rel="noopener">Как связаться</a>. Сам пароль не знаем даже мы.</p>`}`}
         <p class="auth-legal"><a href="/pay" target="_blank" rel="noopener">Цены и оплата</a> · <a href="/offer" target="_blank" rel="noopener">Оферта</a> · <a href="/contacts" target="_blank" rel="noopener">Контакты и реквизиты</a></p>
@@ -304,6 +305,18 @@ async function handleHash(first) {
   if (/^#stickers(=[\w]+)?$/.test(location.hash)) { const n = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); import('./stickers.js').then(m => m.openImport(n ? { link: 'https://t.me/addstickers/' + n } : {})); return; }
   if (location.hash === '#ask') { history.replaceState(history.state, '', location.pathname); import('./growth.js').then(g => g.openAsk()); return; }
   if (location.hash === '#invite') { history.replaceState(history.state, '', location.pathname); import('./growth.js').then(g => g.openInvite()); return; }
+  if (/^#dm=/.test(location.hash)) {
+    const hp = new URLSearchParams(location.hash.slice(1));
+    const name = String(hp.get('dm') || '').replace(/^@/, '').trim(); const payload = String(hp.get('text') || '').slice(0, 500);
+    history.replaceState(history.state, '', location.pathname);
+    if (name) {
+      const found = Object.values(S.users).find(u => u && u.username && u.username.toLowerCase() === name.toLowerCase());
+      const open = u => { openUser(u.id); if (payload) S.ui.prefill = payload; };
+      if (found) open(found);
+      else rpc('user.get', { username: name }).then(r => r.user && open(r.user)).catch(e => toast(e.message || 'Не нашли пользователя', 'err'));
+    }
+    return;
+  }
   if (first && pendingRef()) { const r = pendingRef(); clearRef(); if (S.me && r.toLowerCase() !== (S.me.username || '').toLowerCase()) { showProfile(null, r); return; } }      // уже вошедший открыл чужую ссылку-приглашение — покажем, кто звал
   const h = location.hash.slice(1); if (!h) { if (first && innerWidth > 800) { const l = local.get('lastChat'); if (l && S.chats[l]) openChat(l); } return; }
   const p = new URLSearchParams(h);

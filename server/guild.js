@@ -289,6 +289,7 @@ function rtcChat(c, cid) {
 }
 H['rtc.join'] = (c, p) => {
   const ch = rtcChat(c, p.chat);
+  if (ch.type === 'dm') { const other = Object.keys(ch.members).find(id => id !== c.uid); const o = other && db.users[other]; if (o && !C.canCallUser(o, c.uid)) fail('Пользователь не принимает звонки' + (((o.privacy || {}).callsEx || []).length ? ' (только из списка исключений)' : '')); }
   for (const [cid, r] of rooms) if (r.peers.has(c.id) && cid !== ch.id) leaveRoom(cid, c.uid, c.id);
   let r = rooms.get(ch.id);
   if (!r) { r = { peers: new Map(), started: now(), by: c.uid, video: !!p.video }; rooms.set(ch.id, r); if (ch.server) r.answered = now(); }
