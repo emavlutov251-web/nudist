@@ -83,11 +83,8 @@ function findReset(t) {
 // Сообщение человеку от служебного аккаунта: о сбросе пароля он должен узнать, даже если ссылку выпросил кто-то другой.
 function sysTell(u, text) { try { const sys = db.meta.sys; if (sys && db.users[sys] && !u.bot) C.postMessage(C.openDm(sys, u.id), sys, { text }, { quiet: true }); } catch (e) { console.warn('[reset]', e.message); } }
 
-// ───── вход по номеру. Настоящего SMS-шлюза нет: код показывается на экране, владение номером он не подтверждает.
-// Поэтому на рабочем сервере вход по номеру выключен всегда; включить демо можно только явно, переменной SMS_DEMO=on (для разработки и показа).
-const SMS_DEMO = process.env.SMS_DEMO === 'on';
-const phoneOn = () => SMS_DEMO && !!db.flags.phoneAuth;
-const pubFlags = () => ({ ...db.flags, phoneAuth: phoneOn() });
+// Вход только по username+паролю или через Telegram. Телефонной авторизации в проекте нет (SMS-шлюза нет и не будет по решению).
+const pubFlags = () => ({ ...db.flags });
 
 // ───── первый запуск. Первый человек на сервере становится главным админом. На рабочем сервере (NODE_ENV=production) это место
 // нельзя оставлять открытым: пока владельца нет, регистрация требует код установки. Код — в переменной SETUP_CODE либо создаётся сам,
@@ -176,10 +173,7 @@ function deleteUser(u) {
 }
 
 // ───── HTTP-обработчики (body: объект, meta: {ip, ua})
-const phoneCodes = new Map(); // phone -> {code, exp, tries}
 const qr = new Map();         // id -> {secret, exp, token?}
-const normPhone = p => { p = String(p || '').replace(/[^\d+]/g, ''); if (/^8\d{10}$/.test(p)) p = '+7' + p.slice(1); if (/^\d{10,15}$/.test(p)) p = '+' + p; return /^\+\d{10,15}$/.test(p) ? p : null; };
-const findByPhone = p => Object.values(db.users).find(u => u.phone === p && !u.deleted);
 
 function second(u, b) { // вторая ступень: пароль (для входа по телефону) и TOTP
   if (u.totpOn) {
@@ -211,36 +205,6 @@ const api = {
     const u = db.users[C.byName.get(lname)];
     if (!u || u.bot || !(await checkPassAsync(b.password, u.pass))) fail('Неверный username или пароль');
     return second(u, b) || createSession(u, meta);
-  },
-  'phone/start'(b, meta) {
-    need(phoneOn(), 'Вход по номеру отключён: SMS не подключены. Войдите по username и паролю.');
-    limit('sms:' + meta.ip, 60, 600e3);
-    const phone = normPhone(b.phone); need(phone, 'Введите номер в международном формате, например +7 999 123-45-67');
-    const code = String(crypto.randomInt(10000, 100000));
-    phoneCodes.set(phone, { code, exp: now() + 300e3, tries: 0 });
-    console.log(`[sms-demo] код для ${phone}: ${code}`);
-    // Демо-режим (SMS_DEMO=on): шлюза нет, код возвращается клиенту и показывается на экране. На рабочем сервере сюда не попасть.
-    return { sent: true, demoCode: code, exists: !!findByPhone(phone) };
-  },
-  'phone/verify'(b, meta) {
-    need(phoneOn(), 'Вход по номеру отключён: SMS не подключены. Войдите по username и паролю.');
-    const phone = normPhone(b.phone); need(phone, 'Некорректный номер');
-    const pc = phoneCodes.get(phone);
-    need(pc && pc.exp > now(), 'Код устарел, запросите новый');
-    if (++pc.tries > 5) { phoneCodes.delete(phone); fail('Слишком много попыток, запросите новый код'); }
-    need(pc.code === String(b.code || '').trim(), 'Неверный код');
-    let u = findByPhone(phone);
-    if (!u) {
-      need(db.flags.registration, 'Регистрация временно закрыта');
-      const name = str(b.name, 64); if (!name) return { need: 'name' };
-      needSetup(b.setup);
-      u = createUser({ phone, name });
-    } else {
-      if (u.pass && !u.totpOn) { if (!b.password) return { need: 'password' }; if (!checkPass(b.password, u.pass)) fail('Неверный облачный пароль'); }
-      const s2 = second(u, { code: b.totp }); if (s2) return s2;
-    }
-    phoneCodes.delete(phone);
-    return createSession(u, meta);
   },
   recover(b, meta) {
     limit('rec:' + meta.ip, 6, 600e3);
@@ -287,8 +251,8 @@ function approveQr(user, qid) {
   const q = qr.get(qid); need(q && q.exp > now() && !q.token, 'QR-код устарел. Обновите его на новом устройстве.');
   q.token = createSession(user, q.meta).token;
 }
-setInterval(() => { const t = now(); for (const [k, q] of qr) if (q.exp < t - 60e3) qr.delete(k); for (const [k, p] of phoneCodes) if (p.exp < t) phoneCodes.delete(k); }, 60e3).unref();
+setInterval(() => { const t = now(); for (const [k, q] of qr) if (q.exp < t - 60e3) qr.delete(k); }, 60e3).unref();
 
 setupInit();
 
-module.exports = { second, newReset, sysTell, RESET_TTL, pubFlags, phoneOn, setupNeeded, REF_BONUS, api, hashPass, checkPass, totp, totpOk, b32enc, newRecovery, useRecovery, createUser, createSession, killSession, sid, deleteUser, approveQr, limit, hooks, normPhone, findByPhone, phoneCodes };
+module.exports = { second, newReset, sysTell, RESET_TTL, pubFlags, setupNeeded, REF_BONUS, api, hashPass, checkPass, totp, totpOk, b32enc, newRecovery, useRecovery, createUser, createSession, killSession, sid, deleteUser, approveQr, limit, hooks };

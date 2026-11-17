@@ -27,6 +27,7 @@ const Tg = require('./tg');
 require('./tgpacks');
 require('./nearby');
 require('./biz');
+require('./fcm');
 require('./tunes');
 require('./common');
 const Streak = require('./streak');

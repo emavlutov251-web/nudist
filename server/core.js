@@ -21,7 +21,7 @@ if (fs.existsSync(DB_FILE) || fs.existsSync(BAK_FILE)) {
   }
   if (!loaded) console.error('[db] ни база, ни копия не прочитались — старт с пустой базой');
 }
-const DEFAULT_FLAGS = { registration: true, phoneAuth: true, stories: true, calls: true, bots: true, stars: true, linkPreview: true, discovery: true, uploads: true };
+const DEFAULT_FLAGS = { registration: true, stories: true, calls: true, bots: true, stars: true, linkPreview: true, discovery: true, uploads: true };
 db.flags = { ...DEFAULT_FLAGS, ...db.flags };
 // У каждой базы свой номер. По нему копия в S3 отличает «свою» базу от чужой: тестовый сервер с теми же ключами не затрёт боевую копию.
 db.meta = db.meta || {}; if (!db.meta.dbId) { db.meta.dbId = require('crypto').randomBytes(9).toString('base64url'); setImmediate(() => save()); }

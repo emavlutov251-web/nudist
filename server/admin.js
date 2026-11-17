@@ -51,6 +51,7 @@ function stats() {
     groups: chats.filter(c => c.type === 'group').length, channels: chats.filter(c => c.type === 'channel').length, dms: chats.filter(c => c.type === 'dm').length, secrets: chats.filter(c => c.type === 'secret').length, servers: Object.keys(db.servers).length,
     stories: Object.values(db.stories).filter(s => s.ts > t - 864e5).length, reportsOpen: db.reports.filter(r => r.status === 'open').length, uploads: up.size, uploadFiles: up.files, uploadsMax: up.max || 0, starsTotal: people.reduce((a, u) => a + (u.stars || 0), 0), days };
 }
+const fcmOn = () => { try { return require('./fcm').on(); } catch (e) { return false; } };
 function monitor() {
   const m = process.memoryUsage(); let conn = 0; for (const s of C.conns.values()) conn += s.size;
   let dbSize = 0; try { dbSize = fs.statSync(path.join(C.DATA, 'db.json')).size; } catch (e) { /* ещё не записана */ }
@@ -59,7 +60,7 @@ function monitor() {
       { name: 'HTTP API', ok: true, note: 'работает (этот процесс)' }, { name: 'WebSocket-шлюз', ok: true, note: conn + ' соединений' },
       { name: 'STUN/TURN', ok: !!(process.env.ICE_SERVERS || (process.env.TURN_HOST && process.env.TURN_SECRET)), note: process.env.TURN_HOST && process.env.TURN_SECRET ? 'свой TURN: ' + process.env.TURN_HOST : process.env.ICE_SERVERS ? 'задан через ICE_SERVERS' : 'только публичный STUN, TURN не настроен' },
       { name: 'SFU', ok: false, note: 'не развёрнут — звонки идут P2P mesh (до 12 участников)' }, { name: 'Брокер (Kafka)', ok: false, note: 'не используется — один процесс, события в памяти' },
-      { name: 'Хранилище', ok: true, note: 'JSON-файл ' + (dbSize / 1024).toFixed(0) + ' КБ' }, { name: 'SMS-шлюз', ok: false, note: 'не подключён — демо-коды' }, { name: 'Push (FCM/APNs)', ok: false, note: 'не подключены — только уведомления браузера' },
+      { name: 'Хранилище', ok: true, note: 'JSON-файл ' + (dbSize / 1024).toFixed(0) + ' КБ' }, { name: 'Push (веб и Android)', ok: true, note: fcmOn() ? 'веб-push (VAPID): работает; Android: лента /api/notify + FCM (Firebase): включён; iOS: нет' : 'веб-push (VAPID): работает; Android: лента /api/notify (долгоживущий опрос службы приложения) + FCM включится заданием FCM_SERVICE_ACCOUNT; iOS: нет' },
     ] };
 }
 

@@ -123,8 +123,10 @@ function describe(uid, chat, m, mention, s) {
 }
 // Сообщение человеку, у которого сейчас нет ни одного открытого соединения: браузерный push
 C.setOfflineHook((uid, chat, m, mention, s) => {
-  const u = db.users[uid]; if (!u || !u.push || !u.push.length || !allowed(uid)) return;
-  const p = describe(uid, chat, m, mention, s); if (p) push(u, p).catch(e => console.warn('[push]', e.message));
+  const u = db.users[uid]; if (!u) return;
+  const p = describe(uid, chat, m, mention, s); if (!p) return;
+  if (u.push && u.push.length && allowed(uid)) push(u, p).catch(e => console.warn('[push]', e.message));
+  if (u.fcm && u.fcm.length) require('./fcm').send(u, p).catch(e => console.warn('[fcm]', e.message));
 });
 // Любое новое сообщение: в ленту телефона, если его приложение на связи
 C.setMsgHook((uid, chat, m, mention, s) => {
