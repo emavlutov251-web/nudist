@@ -250,4 +250,4 @@ function botCmd(bot, chat, m, t) {
 function tick() { for (const f of [announce, drawSanta, awardSnow, dropTangerine, ...X.ticks]) { try { f(); } catch (e) { console.error('[events]', e.message); } } }
 setInterval(tick, 30e3).unref(); setTimeout(tick, 5000).unref();
 
-module.exports = Object.assign(X, { on, win, list, button, botCmd, tick, T, year, at, mskDate, tell, credit, fmt, sys, uname, LIST, DAY, MSK });
+module.exports = Object.assign(X, { on, win, winFor: (y, k) => WIN(y)[k], list, button, botCmd, tick, T, year, at, mskDate, tell, credit, fmt, sys, uname, LIST, DAY, MSK });

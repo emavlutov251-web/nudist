@@ -1,5 +1,6 @@
 // Магазин: украшения за листики, подписка Plus / Pro / Max, наборы, листики за рубли, сезон. Серверная часть — server/shop.js.
 import { html, useState, useEffect, S, rpc, toast, Icon, Avatar, Badges, cx, openModal, closeModal, Modal, userName, confirmDlg, promptDlg, setSetting, Spinner, on, Nm } from './lib.js';
+import { shopFirstHint } from './hints.js';
 import { sfx, confetti, Sticker, PACKS } from './fun.js';
 import { buyItem } from './pay.js';
 import { GiftMarket } from './gifts.js';
@@ -14,7 +15,7 @@ const ITEM_TIER = { stickers_space: 'common', stickers_party: 'common', stickers
 export const SHOP_THEMES = [['sand', 'Песок'], ['forest', 'Лес'], ['neon', 'Неон'], ['void', 'Пустота']];
 export const EVENT_THEMES = [['nightbeach', 'Ночной пляж'], ['newyear', 'Новый год'], ['minimal', 'Минимализм'], ['matrix', 'Матрица'], ['rain', 'Дождливый город']];      // темы событий: в настройках видны только тем, кто их купил
 export const hasItem = id => { const me = S.me || {}; return (me.owned || []).includes(id) || !!(me.tier && ITEM_TIER[id] && INCLUDED[me.tier].includes(ITEM_TIER[id])); };
-export const openShop = tab => openModal(ShopModal, { tab });
+export const openShop = tab => { openModal(ShopModal, { tab }); shopFirstHint(); };
 
 // ───── эффект сообщения: короткая вспышка над пузырём, когда сообщение только что пришло
 const FX = { sparkle: ['✨', '⭐', '💫'], hearts: ['💕', '❤️', '💖'], confetti: ['🎉', '🎊', '✨'], lightning: ['⚡', '💥', '⚡'], bubbles: ['🫧', '💧', '🫧'], goldsand: ['✨', '🟡', '⏳'], firework: ['🎆', '🎇', '✨'], blank: ['📄', '🤍', '▫️'], petals: ['🌸', '🌷', '🌸'], calm: ['🫧', '🍃', '☁️'], web: ['🕸️', '🕷️', '🕸️'], bats: ['🦇', '🌙', '🦇'], meteor: ['☄️', '🌠', '✨'] };

@@ -917,8 +917,8 @@ const hook = { dailyExtra: () => 0, tapPct: () => 0, fx: () => null, sent: null,
 // Сколько листиков и как быстро можно добыть. Числа меняются переменными окружения (см. README), применяются после перезапуска.
 const envInt = (k, d, min, max) => { const n = Number(process.env[k]); return process.env[k] !== undefined && Number.isFinite(n) && n >= min && n <= max ? Math.floor(n) : d; };
 const LEAF = {
-  per: envInt('LEAF_TAPS', 10, 1, 1000),                 // тапов в «Листопаде» на один листик
-  limit: envInt('LEAF_DAY_LIMIT', 30, 0, 100000),        // листиков в день за тапы
+  per: envInt('LEAF_TAPS', 40, 1, 1000),                 // тапов в «Листопаде» на один листик
+  limit: envInt('LEAF_DAY_LIMIT', 6, 0, 100000),         // листиков в день за тапы
   dailyMin: envInt('LEAF_DAILY_MIN', 5, 0, 100000),      // ежедневный бонус, от
   dailyMax: envInt('LEAF_DAILY_MAX', 20, 0, 100000),     // потолок бонуса при ежедневных заходах
   dailyStep: envInt('LEAF_DAILY_STEP', 3, 0, 100000),    // прибавка за каждый следующий день подряд

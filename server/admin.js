@@ -47,7 +47,9 @@ function stats() {
   const users = Object.values(db.users).filter(u => !u.deleted), people = users.filter(u => !u.bot), t = now();
   const days = []; for (let i = 13; i >= 0; i--) { const k = today(t - i * 864e5), d = db.daily[k] || { msgs: 0, regs: 0, dau: [] }; days.push({ d: k, msgs: d.msgs, regs: d.regs, dau: d.dau.length }); }
   const chats = Object.values(db.chats); const up = uploadsSize();
-  return { users: people.length, bots: users.length - people.length, online: [...C.conns.keys()].length, dau: (db.daily[today()] || { dau: [] }).dau.length, wau: people.filter(u => u.seen > t - 7 * 864e5).length, mau: people.filter(u => u.seen > t - 30 * 864e5).length,
+  let act7 = 0; const fdays = (db.funnel && db.funnel.days) || {}; for (let i = 0; i < 7; i++) { const k = today(now() - i * 864e5); act7 += (fdays[k] && fdays[k].acts) || 0; }
+  const streaks = chats.filter(ch => ch.sk && (ch.sk.n || 0) >= 3).length;
+  return { users: people.length, streaks, act7, bots: users.length - people.length, online: [...C.conns.keys()].length, dau: (db.daily[today()] || { dau: [] }).dau.length, wau: people.filter(u => u.seen > t - 7 * 864e5).length, mau: people.filter(u => u.seen > t - 30 * 864e5).length,
     premium: people.filter(C.isPremium).length, banned: people.filter(u => u.banned).length, msgs: Object.values(db.msgs).reduce((a, m) => a + m.length, 0), msgsToday: (db.daily[today()] || {}).msgs || 0,
     groups: chats.filter(c => c.type === 'group').length, channels: chats.filter(c => c.type === 'channel').length, dms: chats.filter(c => c.type === 'dm').length, secrets: chats.filter(c => c.type === 'secret').length, servers: Object.keys(db.servers).length,
     stories: Object.values(db.stories).filter(s => s.ts > t - 864e5).length, reportsOpen: db.reports.filter(r => r.status === 'open').length, uploads: up.size, uploadFiles: up.files, uploadsMax: up.max || 0, starsTotal: people.reduce((a, u) => a + (u.stars || 0), 0), days };

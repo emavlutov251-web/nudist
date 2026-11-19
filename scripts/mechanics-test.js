@@ -89,6 +89,10 @@ const ck = (name, ok, extra) => { total++; if (!ok) { bad++; console.log('  ✗ 
     ck('забытый пароль меняется по коду восстановления', !!rc.token && !!(await post('/api/login', { username: 'mech_anna', password: 'Novyi-parol-1' })).token);
     const link = await own.rpc('admin.user.reset', { id: b.me.id }); const rs = await post('/api/reset', { token: link.token, password: 'Novyi-parol-2' });
     ck('и по одноразовой ссылке от главного админа', !!rs.token && rs.recovery.length === 8 && !!(await post('/api/reset', { token: link.token, password: 'x'.repeat(8) })).error);
+    const dump = JSON.parse(fs.readFileSync(path.join(dir, 'db.json'), 'utf8'));
+    const commonId = dump.meta.common, tf = Object.values(dump.chats).find(c => c.username === 'istinnie_druzya');
+    ck('«Весь Нудист» заводится сам даже без OWNERS, и зарегистрированные уже внутри', !!commonId && !!dump.chats[commonId] && ['mech_owner', 'mech_anna', 'mech_boris'].every(n => { const u = Object.values(dump.users).find(x => x.username === n); return u && dump.chats[commonId].members[u.id]; }), dump.meta.common);
+    ck('«Истинные друзья» не найдены в поиске, вход — только по ссылке и заявке', !!tf && tf.pub === false && tf.approval === true, tf && { pub: tf.pub, approval: tf.approval });
     const h = await (await fetch(base + '/api/health')).json(); ck('состояние сервера: размер базы и время сохранения видны', h.ok && h.db && typeof h.db.saveMs === 'number' && typeof h.db.unsavedMs === 'number', h.db);
     const idx = await (await fetch(base + '/')).text(); ck('картинка для ссылок берётся с адреса, по которому открыли сайт', idx.includes(`og:image" content="${base}/og.png"`), (/og:image[^>]*/.exec(idx) || [])[0]);
   } finally { srv.kill(); await sleep(300); fs.rmSync(dir, { recursive: true, force: true }); }

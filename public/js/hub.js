@@ -1,5 +1,6 @@
 // «Нудист»: музыка, клипы, прямые эфиры, каталог мини-приложений и поддержка. Один экран с вкладками поверх чатов.
 import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, fmtDur, fmtNum, fmtSize, fmtShort, confirmDlg, promptDlg, pickFile, upload, addUsers, Empty, Spinner, local, plural, showMenu, Toggle, md, copyText } from './lib.js';
+import { hubFirstHint } from './hints.js';
 import { openChat, showChannel, sendPayload } from './store.js';
 import { playAudio, AudioBar } from './media.js';
 import { Cover, tagCover, spendEnergy, EnergyPill } from './perks.js';
@@ -22,7 +23,7 @@ export function openHub(tab) {
   if (tab === 'clips' || tab === 'live' || tab === 'video') { S.ui.hub = 'feed'; S.ui.feed = 'video'; if (tab !== 'video') VID.mode = tab; }
   else if (tab === 'feed' || tab === 'user') { S.ui.hub = 'feed'; S.ui.feed = tab === 'user' ? 'user' : S.ui.feed || 'feed'; }
   else { const keep = local.get('hub.tab'), ok = t => TABS.some(x => x[0] === t); S.ui.hub = ok(tab) ? tab : ok(keep) ? keep : 'music'; local.set('hub.tab', S.ui.hub); }
-  S.ui.boss = false; bump();
+  S.ui.boss = false; hubFirstHint(); bump();
 }
 export function closeHub() { if (LV.cur && !leaveGuard()) return; S.ui.hub = null; bump(); }
 // Не даём случайно уронить эфир переключением вкладки.

@@ -15,6 +15,7 @@ import { Hub, openHub, openApps } from './hub.js';
 import { Dock, foldDock } from './dock.js';
 import { takeRef, pendingRef, clearRef, pendingUtm, clearUtm, offerSiteUpdate, StartCards } from './growth.js';
 import './i18n.js';
+import { appEntryHints } from './hints.js';
 takeRef();
 // Офлайн-кеш оболочки: со второго захода приложение открывается с диска. Вышла новая версия — докачается в фоне и предложит обновиться.
 function swSetup() {
@@ -159,7 +160,7 @@ function Auth() {
   const submit = e => {
     e.preventDefault();
     go(async () => {
-      if (mode === 'register') { if (!agree) throw new Error('Чтобы зарегистрироваться, примите политику конфиденциальности'); if (done(await http('register', { username: f.username, password: f.password, name: f.name, agree: true, setup: f.setup || undefined, ref: pendingRef() || undefined, utm: pendingUtm() }))) { clearRef(); clearUtm(); } }
+      if (mode === 'register') { if (!agree) throw new Error('Чтобы зарегистрироваться, примите политику конфиденциальности'); const r = await http('register', { username: f.username, password: f.password, name: f.name, agree: true, setup: f.setup || undefined, ref: pendingRef() || undefined, utm: pendingUtm() }); if (r.token) local.set('just.reg', '1'); if (done(r)) { clearRef(); clearUtm(); } }
       else if (mode === 'login') { const r = await http('login', { username: f.username, password: f.password, code: f.totp || undefined }); if (!done(r) && r.need === 'totp') setStep('totp'); }
       else if (mode === 'recover') done(await http('recover', { username: f.username, code: f.rec, password: f.password }));
     });
@@ -239,6 +240,13 @@ function Modals() { return S.modals.map(m => html`<${m.c} key=${m.id} id=${m.id}
 
 function App() {
   useStore();
+  useEffect(() => {
+    if (S.ready && S.me && local.get('just.reg')) {
+      local.set('just.reg', null);
+      const t = setTimeout(() => import('./growth.js').then(g => g.openInvite()).catch(() => {}), 900);      // новый человек: сразу показываем «Позови друзей»
+      return () => clearTimeout(t);
+    }
+  }, [S.ready, S.me && S.me.id]);
   if (S.reset) return html`<${ResetScreen} /><${Toasts} />`;
   if (S.tgEnter && !S.token) return html`<${TgEnter} /><${Toasts} />`;
   if (!S.token) return html`<${Auth} /><${Toasts} />`;
@@ -313,7 +321,7 @@ async function handleHash(first) {
   else if (p.get('join')) { history.replaceState(history.state, '', location.pathname); openModal(JoinPreview, { q: p.get('join') }); }
   else if (p.get('u')) { history.replaceState(history.state, '', location.pathname); showProfile(null, p.get('u')); }
 }
-onReady(first => handleHash(first));
+onReady(first => { handleHash(first); appEntryHints(); });
 window.addEventListener('hashchange', () => S.ready && !hashFromHistory() && handleHash(false));
 window.addEventListener('focus', () => bump());
 

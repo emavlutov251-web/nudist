@@ -1,0 +1,53 @@
+/* «Гладкость интерфейса»: мягкие анимации всего, что можно нажать, страховка от вылезания за экран,
+   индикатор свайпа-ответа. Грузится последним и перекрывает точечные правила базовых файлов. */
+
+/* ─── Плавность общих контейнеров (перекраска при смене темы — нежно, не мигая) ─── */
+body, .sidebar, .main, .topbar, .modal, .panel, .card, .ph { transition: background-color .25s var(--ease, ease), border-color .25s var(--ease, ease); }
+
+/* ─── Кнопки и интерактив: мягкий отклик на нажатие ─── */
+.btn:not(:disabled):active { transform: scale(.965); filter: brightness(.96); }
+.ib:active { transform: scale(.9); }
+.chip:active, .seg button:active, .mi:active:not(:disabled), .mi-cap:active { transform: scale(.97); }
+.ci:active, .club:active { background: var(--hover); }
+.post:active { transform: translateY(0) scale(.99); }
+.msg-act button:active, .rxs button:active { transform: scale(.88); }
+.nav button { transition: color .18s var(--ease, ease), transform .15s var(--ease, ease); }
+.nav button:active { transform: scale(.9); }
+.rail-b:active, .send:active, .play:active { transform: scale(.92); }
+.si-x:active, .hintbar .h-a:active, .hintbar .h-x:active { transform: scale(.94); }
+
+/* hover — тоже с движением, а не резким включением */
+.ci, .mi, .chip, .mi-cap, .post { transition: background .18s var(--ease, ease), border-color .18s var(--ease, ease), transform .15s var(--ease, ease), filter .15s; }
+
+/* ─── Сообщения: появление новых и свайп-ответ ─── */
+@keyframes msg-in { from { opacity: 0; transform: translateY(5px) scale(.985); } }
+.msg { animation: msg-in .2s var(--ease, ease); touch-action: pan-y; }
+.msg.swipe-snap { transition: transform .19s var(--ease, ease); }
+.swipe-ind { position: fixed; z-index: 70; left: 12px; width: 44px; height: 44px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--panel); border: 1px solid var(--line); color: var(--accent);
+  box-shadow: var(--shadow); opacity: 0; transform: scale(.5); pointer-events: none;
+  transition: opacity .15s var(--ease, ease), transform .15s var(--ease, ease); }
+.swipe-ind.on { opacity: 1; }
+.swipe-ind svg { width: 21px; height: 21px; }
+
+/* ─── Лёгкое появление панелей и строк ─── */
+@keyframes ui-in { from { opacity: 0; transform: translateY(8px); } }
+.modal-b > .form, .modal-b > form { animation: ui-in .18s var(--ease, ease); }
+
+/* ─── Текст и медиа не вылезают за экран ─── */
+img, video, canvas { max-width: 100%; height: auto; }
+iframe { max-width: 100%; }
+#app, .shell, .main { max-width: 100vw; overflow-x: hidden; }
+.bubble, .txt, .msg-n, .ci-t, .ci-p, .pf-row p, .mi span, .mi small, .foot, .day span, .unread-div span,
+.rq b, .rq span, .fwd, .fwd b, .lp, .lp b, .lp i, .lp small, .post-t, .pack-chip b, .pack-chip small,
+h1, h2, h3, h4, h5, h6, p, li, td, th, q, blockquote, dd, dt { overflow-wrap: anywhere; min-width: 0; }
+pre, code { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; max-width: 100%; }
+.btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+button, a { max-width: 100%; }
+input, textarea, select { max-width: 100%; }
+.row, .row-item, .c-row { min-width: 0; }
+.modal, .menu, .toast, .hintbar { max-width: calc(100vw - 20px); }
+.nav small { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-act { max-width: calc(100vw - 28px); overflow: hidden; }
+.toasts { max-width: calc(100vw - 20px); }
+body { overscroll-behavior-x: none; }
