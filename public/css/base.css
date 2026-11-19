@@ -21,6 +21,8 @@
   --in: #FFFFFF; --out: #D9F0DD; --out-ink: #12301F; --shadow: 0 1px 2px rgba(40, 32, 12, .08), 0 8px 28px rgba(40, 32, 12, .10);
   --overlay: rgba(20, 30, 24, .48); --code: #F3EEE2;
   --n0: #C4411E; --n1: #9C5F14; --n2: #157C46; --n3: #0A6876; --n4: #315ABC; --n5: #7240BF; --n6: #B13375; --n7: #515D58;
+  /* иконки: дуотон в стиле логотипа */
+  --ic-line: #173F2C; --ic-soft: #1F9D57; --ic-gold: #C8891A; --ic-fill: #1F9D57; --ic-deep: #D7EFDD;
   color-scheme: light;
 }
 [data-theme='dark'] {
@@ -29,10 +31,12 @@
   --in: #19292C; --out: #1B4831; --out-ink: #E4F5E9; --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 32px rgba(0, 0, 0, .42);
   --overlay: rgba(3, 8, 9, .66); --code: #0F1C1F; --leaf: #2FB56B;
   --n0: #FF8A66; --n1: #E8A858; --n2: #5BD08F; --n3: #4CC3D4; --n4: #7FA5F5; --n5: #B58CF0; --n6: #F07FB6; --n7: #A9B5B0;
+  --ic-line: #C4F0D8; --ic-soft: #7FE3AC; --ic-gold: #FFD34D; --ic-fill: #2FB56B; --ic-deep: #16382A;
   color-scheme: dark;
 }
 [data-theme='tan'] {
   --bg: #F4DFCB; --panel: #FBEDDD; --card: #FFF8F0; --rail: #4E2413; --rail-ink: #F3D3BC;
+  --ic-line: #4E2413; --ic-soft: #C8552B; --ic-gold: #A97B10; --ic-fill: #C8552B; --ic-deep: #F3D9C4;
   --ink: #3A1D10; --ink2: #7A4E38; --ink3: #A9846F; --line: #E8C8AD; --hover: #F1D5BC; --press: #E9C6A8;
   --in: #FFF8F0; --out: #F6CDB0; --out-ink: #3A1D10; --leaf: #C8552B; --code: #F6E4D2;
   color-scheme: light;
@@ -44,6 +48,7 @@
   --overlay: rgba(2, 8, 4, .68); --code: #0F1D13; --leaf: #58B84E; --accent: #58B84E; --warn: #D7A94C; --danger: #E0655A; --sun: #E08A3C;
   --sea: #2E8F6E;
   --n0: #FF9C6E; --n1: #E8C464; --n2: #6FE046; --n3: #45D4B2; --n4: #84B6FF; --n5: #C39AF5; --n6: #F08AC0; --n7: #A7B8AB;
+  --ic-line: #D5F4CE; --ic-soft: #6FE046; --ic-gold: #E8C464; --ic-fill: #58B84E; --ic-deep: #16301D;
   color-scheme: dark;
 }
 [data-contrast='1'] { --line: color-mix(in srgb, var(--ink) 55%, transparent); --ink2: var(--ink); --ink3: color-mix(in srgb, var(--ink) 80%, var(--bg)); }
@@ -189,3 +194,13 @@ pre.code.mono { padding: 10px 12px; white-space: pre-wrap; word-break: break-all
 blockquote { margin: 4px 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--accent); color: var(--ink2); }
 .txt .li { display: flex; gap: 7px; } .txt .li > span { flex: none; color: var(--ink3); min-width: 1.1em; text-align: right; }
 code.mono { padding: 1px 5px; border-radius: 5px; background: var(--code); border: 1px solid var(--line); } code[data-copyable] { cursor: copy; }
+
+/* ───── иконки «Нудиста» (public/js/icons.js): четыре переменные темы + набор классов деталей */
+.ic { overflow: visible; flex: none; }
+.il  { stroke: var(--ic-line); stroke-width: 2.05; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.ilf { fill: var(--ic-line); }
+.is  { stroke: var(--ic-soft); stroke-width: 2.05; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.iss { fill: var(--ic-deep); }
+.isf { fill: var(--ic-soft); }
+.ig  { stroke: var(--ic-gold); stroke-width: 2.05; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.igf { fill: var(--ic-gold); }

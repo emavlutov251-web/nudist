@@ -383,7 +383,7 @@ Docker и `deploy/install.sh` — два равноценных способа, 
 
 ## Лицензии
 
-Код — MIT. Внутри: Preact и htm (MIT), ws (MIT), иконки Lucide (ISC), qrcode-generator (MIT), шрифты Unbounded, Golos Text и JetBrains Mono (SIL OFL 1.1), подписи эмодзи из emojibase (MIT).
+Код — MIT. Внутри: Preact и htm (MIT), ws (MIT), собственные рисованные иконки «Нудиста» (в репозитории, см. public/js/icons.js), qrcode-generator (MIT), шрифты Unbounded, Golos Text и JetBrains Mono (SIL OFL 1.1), подписи эмодзи из emojibase (MIT).
 
 ## Оформление Fluent (Windows 10 1709/1809)
 
