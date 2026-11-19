@@ -1,0 +1,25 @@
+'use strict';
+// Решающая проверка плана публикаций «редакции сообщества»: чистые функции, без сервера и сети.
+const { planTasks, QUESTIONS, WRAPS, BATTLES } = require('../server/community');
+const t = iso => Date.parse(iso);
+const kinds = at => planTasks(t(at)).map(x => x.kind);
+const keys = at => planTasks(t(at)).map(x => x.key);
+const waitFor = (at, k) => kinds(at).includes(k);
+const assert = (ok, msg) => { if (!ok) { console.error('[community-test] FAIL: ' + msg); process.exit(1); } console.log('  ✓ ' + msg); };
+// 2026-11-20 — пятница, 2026-11-22 — воскресенье (проверить: календарь 2026!)
+assert(new Date(Date.parse('2026-11-20T00:00:00Z')).getUTCDay() === 5, '2026-11-20 — пятница');
+assert(new Date(Date.parse('2026-11-22T00:00:00Z')).getUTCDay() === 0, '2026-11-22 — воскресенье');
+assert(waitFor('2026-11-21T07:30:00Z', 'question'), '09:30 МСК — вопрос дня есть');
+assert(!waitFor('2026-11-21T07:30:00Z', 'battle'), 'в субботу мем-батла нет');
+assert(!waitFor('2026-11-21T18:00:00Z', 'question'), 'после 21:00 вопрос дня не рассылаем (опоздавшая сводка никому не нужна)');
+assert(waitFor('2026-11-21T19:00:00Z', 'wrap'), '22:00 МСК — итог дня есть');
+assert(waitFor('2026-11-20T14:00:00Z', 'battle'), '17:00 в пятницу — старт мем-батла');
+assert(waitFor('2026-11-22T17:30:00Z', 'week'), '20:30 в воскресенье — итоги недели');
+assert(waitFor('2026-12-05T07:30:00Z', 'advent'), '5 декабря 10:30 МСК — адвент-напоминание');
+assert(keys('2026-12-01T07:30:00Z').includes('ev-winter-2026'), '1 декабря — анонс зимней коллекции');
+assert(!waitFor('2026-12-01T07:30:00Z', 'event') || keys('2026-12-01T07:30:00Z').filter(k => k.startsWith('ev-')).every(k => k.endsWith('-2026')), 'анонсы событий помечаются годом');
+assert(keys('2027-01-16T07:30:00Z').includes('ev-jan-2027'), '16 января 2027 — анонс «Голого января» 2027');
+assert(keys('2026-12-31T19:00:00Z').includes('ev-ny-2026'), '31 декабря 22:00 МСК — анонс «Голого Нового года»');
+assert(!kinds('2026-07-20T07:30:00Z').includes('advent'), 'летом адвента нет');
+assert(QUESTIONS.length >= 40 && WRAPS.length >= 20 && BATTLES.length >= 4, 'пулы контента в порядке');
+console.log('[community-test] всё верно');

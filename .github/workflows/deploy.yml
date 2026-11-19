@@ -46,6 +46,8 @@ jobs:
         run: node scripts/security-test.js
       - name: Механики (листики, магазин, энергия, капсулы, чаевые, рекорды, лобби, лента, сброс пароля)
         run: node scripts/mechanics-test.js
+      - name: «Редакция сообщества» (план постов по календарю)
+        run: node scripts/community-test.js
       - name: Docker-образ собирается и запускается
         run: |
           docker build -t nudist:ci .

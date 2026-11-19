@@ -113,6 +113,7 @@ const muted = (u, t) => { const l = u.settings && u.settings.triggers; if (!t ||
 // Что написать в уведомлении о сообщении; null — уведомлять не о чем
 function describe(uid, chat, m, mention, s) {
   const u = db.users[uid]; if (!u || m.from === uid || (u.blocked || []).includes(m.from)) return null;
+  if (m.silent) return null; // тихие сообщения редакции не будят телефон push-ом
   if (s && s.mute > now() && !mention) return null;
   if ((chat.type === 'channel' || chat.server) && !mention) return null;      // каналы и серверы шумные: только упоминания
   if (m.type === 'call' && !(m.call && m.call.missed)) return null;      // запись о состоявшемся звонке не повод будить телефон
