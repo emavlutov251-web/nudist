@@ -258,7 +258,7 @@ function PromptDlg({ id, title, label, value = '', placeholder, ok = 'Готов
 export const promptDlg = o => new Promise(res => openModal(PromptDlg, { ...o, res }));
 
 // ───── базовые компоненты
-export function Icon({ n, s = 20, cls }) { return html`<svg class=${cx('ic', cls)} width=${s} height=${s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" dangerouslySetInnerHTML=${{ __html: ICONS[n] || '' }}></svg>`; }
+export function Icon({ n, s = 20, cls }) { return html`<svg class=${cx('ic', cls)} width=${s} height=${s} viewBox="0 0 24 24" aria-hidden="true" dangerouslySetInnerHTML=${{ __html: ICONS[n] || '' }}></svg>`; }
 const LEAF = ['......X......', '.....XXX.....', '..X..XXX..X..', '.XXX.XXX.XXX.', '.XXXXXXXXXXX.', 'X.XXXXXXXXX.X', 'XXXXXXXXXXXXX', 'XXXXXXXXXXXXX', '.XXXXXXXXXXX.', '..XXXXXXXXX..', '...XX.X.XX...', '......X......', '......X......'];
 const LEAF_TONES = ['#1F9D57', '#2BB36A', '#178A4A', '#45C97F', '#23A860'];
 export function Logo({ s = 40, mono }) {
