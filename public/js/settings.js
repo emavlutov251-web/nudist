@@ -21,7 +21,7 @@ function Settings({ id, tab: t0 }) {
     <div class="set"><nav class="set-nav" aria-label="Разделы настроек">
       <button class="set-me" onClick=${() => setTab('profile')}><${Avatar} u=${me} src=${me.avatar} name=${userName(me)} color=${me.color} s=${44} /><span><b>${userName(me)} <${Badges} list=${me.badges} s=${13} /></b><small>${me.username ? '@' + me.username : me.phone || ''}</small></span></button>
       ${TABS.filter(t => t[0] !== 'admins' || me.admin).map(([k, ic, l]) => html`<button class=${cx(tab === k && 'on')} onClick=${() => setTab(k)}><${Icon} n=${ic} s=${18} />${l}</button>`)}
-      <button onClick=${() => openModal(StarsModal)}><${Icon} n="leaf" s=${18} />Листики и Премиум<small>${fmtNum(me.stars || 0)} 🍃</small></button>
+      <button onClick=${() => openModal(StarsModal)}><${Icon} n="leaf" s=${18} />Листики и Премиум<small>${fmtNum(me.stars || 0)}<${Icon} n="leaf" s=${12} cls="tx-leaf" /></small></button>
       <button class="danger" onClick=${async () => { if (await confirmDlg({ title: 'Выйти из аккаунта?', text: 'Секретные чаты на этом устройстве станут нечитаемыми.', ok: 'Выйти', danger: true })) logout(); }}><${Icon} n="log-out" s=${18} />Выйти</button>
       <p class="hint">Нудист · веб-версия<br/>Нам нечего скрывать. Вам — есть что: загляните в «Приватность».</p></nav>
       <div class="set-body">${tab && html`<button class="btn sm ghost set-back" onClick=${() => setTab('')}><${Icon} n="arrow-left" s=${15} /> Разделы</button>`}${Body && html`<${Body} close=${() => closeModal(id)} />`}</div></div><//>`;

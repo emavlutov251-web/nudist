@@ -20,3 +20,18 @@ label { display: block; font-size: 13px; color: var(--ink2); } label > * { margi
 
 /* Партия из лобби: раундом управляет лобби, свои кнопки перезапуска игре не нужны. */
 [data-match] #go, [data-match] #new, [data-match] #again, [data-match] #share { display: none !important; }
+
+/* инлайн-иконки вместо эмодзи в мини-играх */
+.mi-ic { width: 1em; height: 1em; vertical-align: -0.12em; flex: none; }
+.hud .mi-ic, .big .mi-ic { vertical-align: -0.08em; }
+.face .mi-ic { width: 100%; height: 100%; }
+
+/* Плавность: карточки и результат появляются мягко, табы — подчёркиванием */
+@keyframes ku-in { from { opacity: 0; transform: translateY(8px); } }
+.card, .stat, .tabs, main > h1 { animation: ku-in .3s ease-out both; }
+.tabs button { transition: color .2s, border-color .25s; }
+.row > button, .tabs button, .card .big .mi-ic { transition: transform .15s, background .2s, opacity .2s; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.big .mi-ic { animation: ku-pop .38s cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes ku-pop { from { transform: scale(.3) rotate(-10deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .card, .stat, .tabs, main > h1, .big .mi-ic { animation: none; } }

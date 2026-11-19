@@ -206,7 +206,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const u = S.users[m.from], mine = m.from === S.me.id, sel = S.ui.sel;
   if (m.type === 'service' && m.present) return html`<${GiftCard} m=${m} />`;
   if (m.type === 'service' && m.gift) { const mine = m.from === S.me.id, who = userName(S.users[m.from]); return html`<div class="leafgift" data-mid=${m.id}><div class=${cx('lg-card', mine && 'mine')}>
-    <span class="lg-e" aria-hidden="true">🍃</span><div class="lg-m"><b>${mine ? '−' : '+'}${fmtNum(m.gift)} ${plural(m.gift, ['листик', 'листика', 'листиков'])}</b><span>${mine ? 'Вы поделились листиками' : who + ' делится с вами'} · ${fmtTime(m.ts)}</span>${m.note && html`<q>${m.note}</q>`}</div>
+    <span class="lg-e" aria-hidden="true"><${Icon} n="leaf" s=${17} /></span><div class="lg-m"><b>${mine ? '−' : '+'}${fmtNum(m.gift)} ${plural(m.gift, ['листик', 'листика', 'листиков'])}</b><span>${mine ? 'Вы поделились листиками' : who + ' делится с вами'} · ${fmtTime(m.ts)}</span>${m.note && html`<q>${m.note}</q>`}</div>
     ${!mine && S.flags.stars && html`<button class="btn sm" onClick=${() => shareLeaves(m.from)}>Ответить тем же</button>`}</div></div>`; }
   if (m.type === 'service') return html`<div class="svc" data-mid=${m.id}><span>${svcText(m)}</span></div>`;
   const chan = m.as === 'chan', out = mine && !flat && !chan && chat.type !== 'channel';
@@ -222,9 +222,31 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const yt = text && chat.type !== 'secret' && !oldShell() ? ytFind(text) : null;      // ролик YouTube играет прямо здесь, в окне плеера
   const onClick = e => { if (!sel) return; e.preventDefault(); e.stopPropagation(); S.ui.sel = sel.includes(m.id) ? sel.filter(x => x !== m.id) : [...sel, m.id]; bump(); };
   const menu = e => { if (e.target.closest('a[href],input,textarea') && !e.shiftKey) return; msgMenu(e, m, chat, { thread, onJump }); };
+  // ответ свайпом: тянем сообщение вправо — за 60px отвечаем. Вертикальный скролл списка не трогаем (touch-action: pan-y).
+  let sw = null;
+  const SW_MAX = 96, SW_FIRE = 60;
+  const onPtrDown = e => { if (sel || m.tmp) return; if (e.pointerType === 'mouse' && e.button !== 0) return; if (e.target.closest('a[href],input,textarea,video,audio,button.rq')) return; sw = { id: e.pointerId, x: e.clientX, y: e.clientY, locked: false }; };
+  const onPtrMove = e => {
+    if (!sw || e.pointerId !== sw.id) return;
+    const dx = e.clientX - sw.x, dy = e.clientY - sw.y;
+    if (!sw.locked) {
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.4 && dx > 0) { sw.locked = true; e.currentTarget.classList.add('swiping'); try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {} }
+      else if (Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx)) { sw = null; return; }
+      else return;
+    }
+    const v = Math.max(0, Math.min(SW_MAX, dx)); e.currentTarget.style.setProperty('--sw', v.toFixed(1)); e.currentTarget.classList.toggle('can', v >= SW_FIRE);
+  };
+  const onPtrUp = e => {
+    if (!sw || (e.pointerId !== undefined && sw.id !== e.pointerId)) { sw = null; return; }
+    const el = e.currentTarget, v = parseFloat(el.style.getPropertyValue('--sw') || '0');
+    el.classList.remove('swiping', 'can'); el.style.setProperty('--sw', '0');
+    if (sw.locked && v >= SW_FIRE) { S.ui.reply = { m }; S.ui.edit = null; bump(); sfx('pop'); }
+    sw = null;
+  };
   const canThread = !thread && !m.tmp && (chat.type === 'channel' || m.tcount > 0);
   const meta = html`<span class="meta">${m.sig && html`<i>${m.sig}</i>`}${m.auto && html`<i title="Автоматический ответ бизнеса">автоответ</i>`}${m.views ? html`<i title="Просмотры"><${Icon} n="eye" s=${12} /> ${fmtNum(m.views)}</i>` : ''}${m.silent && html`<${Icon} n="bell-off" s=${11} />`}${m.exp && html`<i title=${'Исчезнет ' + fmtFull(m.exp)}><${Icon} n="flame" s=${11} /></i>`}${m.edited && html`<i>изм.</i>`}<time title=${fmtFull(m.ts)}>${fmtTime(m.ts)}</time>${out && html`<${TicksInline} chat=${chat} m=${m} />`}</span>`;
-  return html`<div class=${cx('msg', out && 'out', grouped && 'grp', bare && 'bare', sel && 'selmode', sel && sel.includes(m.id) && 'sel', m.tmp && 'tmp', m.failed && 'failed', root && 'root')} data-mid=${m.id} onClick=${onClick} onContextMenu=${menu} onDblClick=${e => { if (!sel && !m.tmp && !e.target.closest('.ph,.voice,.kbd,.poll,video,a')) { S.ui.reply = { m }; S.ui.edit = null; bump(); } }}>
+  return html`<div class=${cx('msg', out && 'out', grouped && 'grp', bare && 'bare', sel && 'selmode', sel && sel.includes(m.id) && 'sel', m.tmp && 'tmp', m.failed && 'failed', root && 'root')} data-mid=${m.id} onClick=${onClick} onContextMenu=${menu} onPointerDown=${onPtrDown} onPointerMove=${onPtrMove} onPointerUp=${onPtrUp} onPointerCancel=${onPtrUp} onDblClick=${e => { if (!sel && !m.tmp && !e.target.closest('.ph,.voice,.kbd,.poll,video,a')) { S.ui.reply = { m }; S.ui.edit = null; bump(); } }}>
+    <span class="msg-swipe" aria-hidden="true"><${Icon} n="reply" s=${19} /></span>
     ${sel && html`<span class="msg-chk"><${Icon} n=${sel.includes(m.id) ? 'circle-check' : 'circle'} s=${20} /></span>`}
     ${(flat || (multi && !out)) && html`<span class="msg-ava">${showAva && (m.hook ? html`<span class="ava" style="width:36px;height:36px;background:var(--sea);color:#fff"><${Icon} n="webhook" s=${18} /></span>` : chan ? html`<${ChatAvatar} chat=${chat} s=${36} />` : html`<${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${36} deleted=${u && u.deleted} onClick=${() => !sel && showProfile(m.from)} />`)}${flat && grouped && html`<time>${fmtTime(m.ts)}</time>`}</span>`}
     <div class="bubble">${m.fx && !m.tmp && html`<${MsgFx} m=${m} />`}
@@ -247,7 +269,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
       ${m.lobby && html`<${LobbyCard} m=${m} chat=${chat} />`}
       ${m.cap && html`<${CapCard} m=${m} chat=${chat} />`}
       ${m.ask && m.from !== S.me.id && html`<div class="bub-ask">${m.answer && html`<p>${m.answer.text}</p>`}<button class="btn sm ghost" onClick=${ev => { ev.stopPropagation(); answerAsk({ id: m.id, text: String(m.text || '').replace(/^🍃 \*\*Анонимный вопрос\*\*\n\n/, ''), answer: m.answer && m.answer.text }); }}><${Icon} n=${m.answer ? 'pencil' : 'reply'} s=${14} /> ${m.answer ? 'Изменить ответ' : 'Ответить в историях'}</button></div>`}
-      ${m.tips > 0 && html`<div class="tipchip" title=${`Чаевые автору: ${m.tipc || 1} раз`}>💰 ${m.tips} 🍃</div>`}
+      ${m.tips > 0 && html`<div class="tipchip" title=${`Чаевые автору: ${m.tipc || 1} раз`}><${Icon} n="coins" s=${13} /> ${m.tips} <${Icon} n="leaf" s=${12} /></div>`}
       ${canThread && html`<button class="thr" onClick=${e => { e.stopPropagation(); openChat(chat.id, { thread: m.id, keepServer: true }); }}><${Icon} n="message-square-text" s=${15} /> ${m.tcount ? `${m.tcount} ${chat.type === 'channel' ? plural(m.tcount, ['комментарий', 'комментария', 'комментариев']) : plural(m.tcount, ['ответ', 'ответа', 'ответов'])}` : 'Прокомментировать'}<${Icon} n="chevron-right" s=${15} /></button>`}
       ${m.failed && html`<button class="retry" onClick=${() => retryMsg(chat.id, m)}><${Icon} n="circle-alert" s=${14} /> Не отправлено: ${m.failed}. Повторить</button>`}
     </div>

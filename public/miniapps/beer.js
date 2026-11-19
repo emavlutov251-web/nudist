@@ -1,8 +1,8 @@
 // «Пивная битва»: кто больше выпьет и не уснёт. Каждая кружка поднимает градус, а с ним и шанс на бесславный финал.
 import { ready, share, $, store, earn, host, result, match, net, onGo, live } from '/miniapps/kit.js';
+import { MI, FACES, FACE_VOMIT, FACE_HIC } from '/miniapps/mini-icons.js';
 const BOTS = [{ n: 'Дядя Толя', nerve: .22, say: 'Я своё отпил ещё в девяностых.' }, { n: 'Сосед Валера', nerve: .4, say: 'Наливай, чё ты как неродной.' }, { n: 'Баба Зина', nerve: .55, say: 'Милок, я на свадьбах троих таких перепивала.' }, { n: 'Студент Гоша', nerve: .7, say: 'У меня завтра пара в восемь, так что по-быстрому.' }];
 const FINE = ['Тебе ничего не было.', 'Пошло как по маслу.', 'Только румянец на щеках.', 'Даже не поморщился.', 'Организм сказал «спасибо» и попросил ещё.'];
-const FACES = ['🙂', '😊', '😄', '🥴', '😵‍💫', '🫠'];
 const risk = d => Math.min(.72, .02 + .012 * d * d);      // шанс уснуть после следующей кружки при градусе d
 let me, bot, who, over, last;
 const mk = n => ({ n, mugs: 0, deg: 0, done: false, out: false, hic: false, snacks: 0 });
@@ -39,9 +39,10 @@ function finish() {
   $('#log').innerHTML += `<b>${r > 0 ? (bot.out ? 'Победа! Соперник под столом, а вы на ногах.' : `Победа! ${me.mugs} против ${bot.mugs}.`) : r < 0 ? (me.out ? 'Поражение. Проснётесь — будет стыдно.' : `Поражение: ${me.mugs} против ${bot.mugs}.`) : me.out ? 'Ничья: оба под столом.' : 'Ничья. Расходимся друзьями.'}</b>`;
 }
 function draw() {
-  for (const [p, el] of [[me, $('#me')], [bot, $('#bot')]]) { el.querySelector('.nm').textContent = p.n; el.querySelector('.mugs b').textContent = p.mugs; el.querySelector('.deg i').style.width = Math.min(100, p.deg * 12.5) + '%'; el.querySelector('.face').textContent = p.out ? '🤮' : FACES[Math.min(FACES.length - 1, Math.floor(p.deg / 1.6))]; el.classList.toggle('out', p.out); el.classList.toggle('done', p.done && !p.out); }
+  for (const [p, el] of [[me, $('#me')], [bot, $('#bot')]]) { el.querySelector('.nm').textContent = p.n; el.querySelector('.deg i').style.width = Math.min(100, p.deg * 12.5) + '%'; el.querySelector('.face').innerHTML = p.out ? FACE_VOMIT : FACES[Math.min(FACES.length - 1, Math.floor(p.deg / 1.6))](); el.classList.toggle('out', p.out); el.classList.toggle('done', p.done && !p.out); }
   const wait = PVP && (!started || !!myMv);      /* вдвоём: до старта и пока соперник думает кнопки молчат */
-  $('#drink').disabled = $('#stop').disabled = over || me.done || wait; $('#snack').disabled = over || me.done || wait || me.snacks >= 3; $('#snack').textContent = `🥒 Закусить (${3 - me.snacks})`; $('#drink').textContent = me.hic && !over ? '🫢 Икать' : '🍺 Пить';
+  $('#drink').disabled = $('#stop').disabled = over || me.done || wait; $('#snack').disabled = over || me.done || wait || me.snacks >= 3; $('#snack').innerHTML = `${MI.pickle} Закусить (${3 - me.snacks})`; $('#drink').innerHTML = me.hic && !over ? `${FACE_HIC} Икать` : `${MI.mug} Пить`;
+  document.querySelectorAll('.mugs').forEach(el => el.innerHTML = MI.mug + ' × <b>' + (el.closest('#me') ? me.mugs : bot.mugs) + '</b>');
   $('#risk').textContent = over ? `Ваш рекорд: кружек в победной партии — ${store.get("beer.best", 0)}` : `Шанс уснуть после следующей кружки: ${Math.round(risk(me.deg) * 100)}%`;
   window.__g = { me, bot, over, last };
 }
