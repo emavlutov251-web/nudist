@@ -25,7 +25,7 @@ addEventListener('message', e => {
   if (d.nudist === 'sent') toast('Отправлено в чат');
   if (d.nudist === 'error') toast(d.text);
   if (d.nudist === 'top') tops.forEach(f => f(d));
-  if (d.nudist === 'earned') { if (d.n) toast(`+${d.n} 🍃` + (d.left ? '' : ' · на сегодня это всё')); else if (!earn.told) { earn.told = true; toast('Листики за эту игру на сегодня собраны. Завтра вырастут новые.'); } }
+  if (d.nudist === 'earned') { const n_ = Math.abs(d.n || 0) % 100, k_ = n_ % 10, word_ = n_ > 10 && n_ < 20 ? 'листиков' : k_ === 1 ? 'листик' : k_ >= 2 && k_ <= 4 ? 'листика' : 'листиков'; if (d.n) toast(`+${d.n} ${word_}` + (d.left ? '' : ' · на сегодня это всё')); else if (!earn.told) { earn.told = true; toast('Листики за эту игру на сегодня собраны. Завтра вырастут новые.'); } }
 });
 export function ready(fn) { if (fn) subs.push(fn); say({ nudist: 'ready' }); }
 export function share(text) { if (parent === window) return toast('Откройте приложение внутри «Нудиста»'); say({ nudist: 'send', text: String(text).slice(0, 2000) }); }

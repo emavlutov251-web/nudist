@@ -1,6 +1,8 @@
 // События: «Чёрная пятница», зимняя коллекция, адвент-календарь, «Тайный Санта», «Снежный ком», «Голый Новый год».
 // Экран «События» в хабе, тонкая полоска над списком чатов и снег зимой. Серверная часть — server/events.js.
 import { html, useState, useEffect, S, bump, rpc, toast, Icon, Avatar, cx, userName, confirmDlg, Spinner, local, plural, openModal, closeModal, Modal } from './lib.js';
+import { GiftArt } from './giftart.js';
+import { EventArt } from './eventart.js';
 import { sfx, confetti } from './fun.js';
 
 const num = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -27,7 +29,7 @@ export function EventStrip() {
   const PRI = ['ny', 'bf', 'advent', 'santa', 'snow', 'winter', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct'], rank = x => (x.state === 'on' ? 0 : 10) + PRI.indexOf(x.id);      // сначала то, где есть чем заняться сегодня
   const e = (EV.list || []).filter(x => !off[x.id + x.from] && (x.state === 'on' || (x.state === 'soon' && x.from - t < 7 * 864e5))).sort((a, b) => rank(a) - rank(b))[0]; if (!e) return null;
   return html`<div class="ev-strip" role="button" tabIndex="0" onClick=${() => openEvents(e.id)} onKeyDown=${k => { if (k.key === 'Enter') openEvents(e.id); }}>
-    <span class="ev-strip-e">${e.e}</span>
+    <${EventArt} id=${e.id} e=${e.e} s=${26} cls="ev-strip-art" />
     <span class="ev-strip-t"><b>${e.name}</b><small>${e.state === 'on' ? `идёт, осталось ${left(e.to - t)}` : `начнётся через ${left(e.from - t)}`}</small></span>
     <button class="ib sm" title="Скрыть" aria-label="Скрыть" onClick=${k => { k.stopPropagation(); local.set('ev.off', { ...off, [e.id + e.from]: 1 }); bump(); }}><${Icon} n="x" s=${15} /></button>
   </div>`;
@@ -67,7 +69,7 @@ function Santa() {
   const act = async (m, p, ok) => { if (busy) return; setBusy(true); try { const r = await rpc(m, p); setV(r.santa || r); if (ok) toast(ok); return r; } catch (e) { err(e); } finally { setBusy(false); } };
   const give = async g => {
     if ((S.me.stars || 0) < g.price) return toast(`Не хватает ${num(g.price - (S.me.stars || 0))} 🍃`);
-    if (!(await confirmDlg({ title: `${g.e} ${g.name}`, text: `Подарить подопечному за ${num(g.price)} 🍃? Он увидит подарок от Тайного Санты, без вашего имени.`, ok: 'Подарить' }))) return;
+    if (!(await confirmDlg({ title: g.name, text: `Подарить подопечному за ${num(g.price)} 🍃? Он увидит подарок от Тайного Санты, без вашего имени.`, ok: 'Подарить' }))) return;
     if (await act('santa.give', { gift: g.id }, 'Подарок вручён. Хо-хо-хо.')) { confetti(); sfx('fanfare'); }
   };
   if (v.state === 'soon') return html`<p class="ev-note">Запись откроется ${day(v.from)}. Пока копите листики: подарок стоит ${v.min}–${v.max} 🍃.</p>`;
@@ -78,7 +80,7 @@ function Santa() {
     if (!v.ward) return html`<p class="ev-note">Жеребьёвка уже прошла. Запишитесь в следующем декабре.</p>`;
     return html`<div class="santa">
       <div class="ev-row"><span class="santa-w"><${Avatar} u=${v.ward} src=${v.ward.avatar} name=${userName(v.ward)} color=${v.ward.color} s=${40} /><span><small>Ваш подопечный</small><b>${userName(v.ward)}</b></span></span>${v.done && html`<span class="ev-pill">🎁 Подарок вручён</span>`}</div>
-      ${!v.done && html`<p class="ev-note">Выберите подарок на ${v.min}–${v.max} 🍃. Дарить можно до ${day(v.to - 1)}.</p><div class="santa-g">${(v.gifts || []).map(g => html`<button key=${g.id} class="santa-i" disabled=${busy} onClick=${() => give(g)}><i>${g.e}</i><b>${g.name}</b><small>${num(g.price)} 🍃</small></button>`)}</div>`}
+      ${!v.done && html`<p class="ev-note">Выберите подарок на ${v.min}–${v.max} 🍃. Дарить можно до ${day(v.to - 1)}.</p><div class="santa-g">${(v.gifts || []).map(g => html`<button key=${g.id} class="santa-i" disabled=${busy} onClick=${() => give(g)}><GiftArt id=${g.id} e=${g.e} s=${44} cls="santa-art" /><b>${g.name}</b><small>${num(g.price)} 🍃</small></button>`)}</div>`}
     </div>`;
   }
   return html`<p class="ev-note">Санта отдыхает до следующего декабря.</p>`;
@@ -148,7 +150,7 @@ function Album() {
   const [a, setA] = useState(null); useEffect(() => { rpc('year.album').then(setA).catch(() => {}); }, []);
   if (!a) return null; const n = a.stamps.filter(s => s.got).length;
   return html`<section class="album"><div class="album-h"><b>Альбом ${a.y}</b><span>${n} из ${a.stamps.length} марок</span></div>
-    <div class="album-g">${a.stamps.map(s => html`<span key=${s.id} class=${cx('stamp', s.got && 'got')} title=${s.name}><i>${s.e}</i><small>${new Date(s.from + MSK).toLocaleDateString('ru-RU', { month: 'short', timeZone: 'UTC' }).replace('.', '')}</small></span>`)}</div>
+    <div class="album-g">${a.stamps.map(s => html`<span key=${s.id} class=${cx('stamp', s.got && 'got')} title=${s.name}><${EventArt} id=${s.id} e=${s.e} s=${30} cls="ev-stamp-art" /><small>${new Date(s.from + MSK).toLocaleDateString('ru-RU', { month: 'short', timeZone: 'UTC' }).replace('.', '')}</small></span>`)}</div>
     <div class="album-goals" hidden=${!a.goals.length}>${a.goals.map(g => html`<span key=${g.n} class=${cx(g.got && 'got')}>${g.n} ${g.n < 5 ? 'марки' : 'марок'} — ${g.prize}</span>`)}</div>
     <small class="album-hint">${a.goals.length ? 'Марку дают за три задания события. Пропустили месяц — марка останется пустой до следующего года.' : 'Марку дают за три задания события. Большой альбом на 12 марок с наградами начнётся с «Голого января».'}</small></section>`;
 }
@@ -164,7 +166,7 @@ export function Events() {
     ${!list.length && html`<div class="ev-empty"><span>🏖️</span><b>Сейчас событий нет</b><small>Следующее появится здесь заранее. Отдыхаем.</small></div>`}
     ${list.map(e => { const Body = BODY[e.id], isOpen = open === e.id; return html`<section key=${e.id} class=${cx('ev', 'ev-' + e.id, 'st-' + e.state, isOpen && 'open')}>
       <button class="ev-h" aria-expanded=${isOpen} onClick=${() => setOpen(isOpen ? null : e.id)}>
-        <span class="ev-e">${e.e}</span>
+        <${EventArt} id=${e.id} e=${e.e} s=${44} cls="ev-art-big" />
         <span class="ev-t"><b>${e.name}</b><small>${e.state === 'on' ? `идёт · осталось ${left(e.to - t)}` : e.state === 'soon' ? `с ${day(e.from)} · через ${left(e.from - t)}` : `закончилось ${day(e.to - 1)}`}</small></span>
         <span class=${cx('ev-st', e.state)}>${e.state === 'on' ? 'идёт' : e.state === 'soon' ? 'скоро' : 'итоги'}</span>
       </button>
