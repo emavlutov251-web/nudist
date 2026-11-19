@@ -1,6 +1,7 @@
 'use strict';
 // Админ-панель владельца сервиса: RBAC, пользователи, жалобы, флаги, статистика, мониторинг, аудит.
 const fs = require('fs'), os = require('os'), path = require('path'), crypto = require('crypto');
+const Funnel = require('./funnel');
 const C = require('./core');
 const Cloud = require('./cloud');
 const A = require('./auth');
@@ -66,6 +67,7 @@ function monitor() {
 
 H['admin.me'] = c => ({ role: guard(c, 'viewer').admin });
 H['admin.stats'] = c => { guard(c, 'viewer'); return stats(); };
+H['admin.funnel'] = c => { guard(c, 'viewer'); return Funnel.stats(); };      // воронка посадочной: визит → APK → регистрация → первое сообщение
 H['admin.monitor'] = c => { guard(c, 'viewer'); return monitor(); };
 H['admin.users'] = (c, p) => {
   guard(c, 'viewer'); const q = str(p.q, 64).toLowerCase();
@@ -235,6 +237,7 @@ function httpApi(pathname, auth) {
   const key = (auth || '').replace(/^Bearer\s+/i, ''); const h = crypto.createHash('sha256').update(key).digest('hex');
   if (!key || !(db.meta.apiKeys || []).some(k => k.hash === h)) return { code: 401, body: { error: 'unauthorized' } };
   if (pathname === '/api/admin/stats') return { code: 200, body: stats() };
+  if (pathname === '/api/admin/funnel') return { code: 200, body: Funnel.stats() };
   if (pathname === '/api/admin/monitor') return { code: 200, body: monitor() };
   if (pathname === '/api/admin/flags') return { code: 200, body: db.flags };
   return { code: 404, body: { error: 'not found' } };

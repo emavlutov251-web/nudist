@@ -3,105 +3,301 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Нудист — скачать на Android</title>
-<meta name="description" content="Мессенджер «Нудист»: чаты, группы, звонки, лента и анонимные вопросы. Скачайте приложение для Android.">
+<title>Нудист — мессенджер, которому нечего скрывать. Скачать на Android</title>
+<meta name="description" content="Чаты, группы, звонки, лента, истории, игры и анонимные вопросы — в приложении на 37 КБ. Без номера телефона, открывается в России без VPN. 500 листиков за регистрацию.">
+<link rel="canonical" href="/start">
+<meta property="og:type" content="website">
 <meta property="og:title" content="Нудист — мессенджер, которому нечего скрывать">
-<meta property="og:description" content="Чаты, звонки, лента и анонимные вопросы. Без номера телефона. Скачайте на Android.">
+<meta property="og:description" content="37 КБ, без номера телефона, работает в России без VPN. Чаты, звонки, истории, игры и анонимные вопросы. 500 🍃 за вход.">
 <meta property="og:image" content="/og.png">
+<meta property="og:url" content="/start">
 <meta name="theme-color" content="#0E191B">
 <link rel="icon" href="/icon.svg">
 <style>
 *{box-sizing:border-box;margin:0}
-html,body{min-height:100%}
-body{font:16px/1.45 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;color:#EAF3EE;background:#0E191B;background-image:radial-gradient(120% 60% at 50% -10%,#1F9D57 0%,rgba(31,157,87,.25) 38%,rgba(14,25,27,0) 70%);background-attachment:fixed;padding:22px 16px calc(28px + env(safe-area-inset-bottom))}
-a{color:inherit}
-.wrap{width:100%;max-width:460px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
-.brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:600}
-.brand img{width:40px;height:40px;border-radius:10px;display:block}
-h1{font-size:30px;line-height:1.12;font-weight:700;letter-spacing:-.01em}
-.lead{font-size:17px;opacity:.86;margin-top:10px}
-.card{background:rgba(25,41,44,.88);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:10px}
-.card h3{font-size:19px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.card p{font-size:15px;opacity:.82}
-.btn{font:inherit;font-size:17px;font-weight:600;border:0;border-radius:12px;min-height:54px;padding:8px 16px;cursor:pointer;color:#fff;background:#1F9D57;display:flex;align-items:center;justify-content:center;gap:8px;text-align:center;text-decoration:none;transition:transform .08s,background .15s}
-.btn:hover{background:#23AD60}
-.btn:active{transform:scale(.98)}
-.btn:focus-visible,a:focus-visible{outline:3px solid #7FE3AC;outline-offset:2px}
-.btn svg{width:22px;height:22px;flex:none}
-.note{font-size:14px;line-height:1.4;background:rgba(0,0,0,.26);border-radius:12px;padding:12px}
-.note b{display:block;margin-bottom:6px}
-.note ol{padding-left:20px;display:flex;flex-direction:column;gap:4px}
-.desk{display:flex;gap:14px;align-items:center}
-.desk .qr{flex:none;width:132px;height:132px;border-radius:10px;overflow:hidden;background:#fff}
-.desk .qr svg{display:block;width:100%;height:100%}
-.phone{align-self:center;width:250px;max-width:72%;border:8px solid #060B0C;border-radius:34px;overflow:hidden;background:#060B0C;box-shadow:0 24px 60px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.12)}
-.phone img{display:block;width:100%;height:auto;border-radius:26px}
-.feats{list-style:none;padding:0;display:flex;flex-direction:column;gap:10px}
-.feats li{display:flex;gap:12px;align-items:flex-start;font-size:15px}
-.feats i{font-style:normal;font-size:24px;line-height:1.1;flex:none;width:30px;text-align:center}
-.feats b{display:block;font-weight:600}
-.feats span{opacity:.78}
-[hidden]{display:none!important}
-@media (min-width:900px){
-  body{padding:48px 32px}
-  .wrap{max-width:980px;display:grid;grid-template-columns:minmax(0,1fr) 300px;column-gap:64px;row-gap:26px;align-items:start}
-  .brand,.hero,.how,.feats{grid-column:1}
-  .phone{grid-column:2;grid-row:1/span 4;width:300px;max-width:none;align-self:start;margin-top:8px}
-  h1{font-size:44px}
-  .lead{font-size:19px;max-width:560px}
-  .phone{position:sticky;top:32px}
-  .card{padding:20px}
-  .card .btn{align-self:flex-start;min-width:300px}
-  .desk .qr{width:148px;height:148px}
+:root{
+  --bg:#0E191B; --panel:#16262A; --panel2:#1A2B30; --line:rgba(255,255,255,.1); --line2:rgba(255,255,255,.16);
+  --text:#EAF3EE; --muted:rgba(234,243,238,.62); --green:#1F9D57; --green2:#23AD60; --mint:#7FE3AC; --gold:#FFD34D;
 }
-@media (prefers-reduced-motion:reduce){.btn{transition:none}}
+html{scroll-behavior:smooth}
+body{font:16px/1.5 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;color:var(--text);background:var(--bg);overflow-x:hidden}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--mint);outline-offset:2px;border-radius:6px}
+/* фоновые световые пятна */
+.bg{position:fixed;inset:0;z-index:-1;overflow:hidden;background:
+  radial-gradient(110% 55% at 50% -12%, rgba(31,157,87,.4), rgba(14,25,27,0) 60%),
+  radial-gradient(60% 40% at 88% 22%, rgba(127,227,172,.12), transparent 65%),
+  radial-gradient(50% 45% at 8% 42%, rgba(31,157,87,.14), transparent 65%)}
+.bg::after{content:"";position:absolute;inset:0;opacity:.5;background-image:radial-gradient(rgba(255,255,255,.05) 1px, transparent 1.4px);background-size:26px 26px;mask-image:radial-gradient(90% 70% at 50% 20%, #000 30%, transparent 75%);-webkit-mask-image:radial-gradient(90% 70% at 50% 20%, #000 30%, transparent 75%)}
+
+.wrap{width:100%;max-width:1180px;margin:0 auto;padding:0 20px}
+
+/* ── верхняя полоса ── */
+.top{position:sticky;top:0;z-index:20;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background:rgba(14,25,27,.72);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:12px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font-size:19px;font-weight:700;letter-spacing:.02em;text-decoration:none}
+.brand img{width:34px;height:34px;border-radius:9px}
+.top-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
+.link{font-size:14px;color:var(--muted);text-decoration:none;padding:8px 10px;border-radius:10px}
+.link:hover{color:var(--text)}
+.btn{font:inherit;font-size:16px;font-weight:650;border:0;border-radius:13px;min-height:50px;padding:10px 18px;cursor:pointer;color:#fff;background:var(--green);display:inline-flex;align-items:center;justify-content:center;gap:9px;text-align:center;text-decoration:none;transition:transform .1s,background .15s,box-shadow .2s;box-shadow:0 8px 26px rgba(31,157,87,.35)}
+.btn:hover{background:var(--green2)}
+.btn:active{transform:scale(.97)}
+.btn svg{width:21px;height:21px;flex:none}
+.btn.sm{min-height:40px;font-size:14.5px;padding:6px 14px;border-radius:11px;box-shadow:none}
+.btn-ghost{background:rgba(255,255,255,.06);box-shadow:none;border:1px solid var(--line2)}
+.btn-ghost:hover{background:rgba(255,255,255,.1)}
+.btn-gold{background:linear-gradient(160deg,#FFD34D,#F5A623);color:#3A2A05;box-shadow:0 8px 26px rgba(255,211,77,.28)}
+.btn-gold:hover{background:linear-gradient(160deg,#FFDD7A,#FFB63D)}
+
+/* ── hero ── */
+.hero{display:grid;grid-template-columns:1fr;gap:34px;padding:34px 0 10px;align-items:center}
+.badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:.04em;color:var(--mint);background:rgba(127,227,172,.12);border:1px solid rgba(127,227,172,.3);padding:7px 12px;border-radius:99px}
+.badge i{font-style:normal}
+h1{font-size:clamp(34px,7.2vw,56px);line-height:1.08;font-weight:800;letter-spacing:-.02em;margin:16px 0 6px}
+.grad{background:linear-gradient(115deg,#7FE3AC 0%,#2FD07A 45%,#FFD34D 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{font-size:clamp(16px,2.4vw,20px);color:var(--muted);max-width:520px;margin-top:10px}
+.lead b{color:var(--text)}
+.ctas{display:flex;flex-wrap:wrap;gap:12px;margin:22px 0 6px}
+.ctas .btn{font-size:17px;min-height:56px;padding:10px 22px}
+.apk-sub{display:flex;flex-direction:column;gap:2px;text-align:left}
+.apk-sub small{font-size:11.5px;font-weight:500;opacity:.85;letter-spacing:.02em}
+.micro{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px;font-size:13.5px;color:var(--muted)}
+.micro span{display:inline-flex;gap:7px;align-items:center}
+.micro b{color:var(--text)}
+.members{margin-top:14px;font-size:14px;color:var(--gold);display:flex;align-items:center;gap:8px;min-height:22px}
+.ref-banner{display:flex;gap:10px;align-items:center;margin-top:16px;padding:12px 14px;border-radius:14px;border:1px solid rgba(255,211,77,.45);background:linear-gradient(120deg,rgba(255,211,77,.16),rgba(255,211,77,.06));font-size:14.5px}
+.ref-banner b{color:var(--gold)}
+.ref-banner[hidden]{display:none}
+
+/* телефон в hero */
+.stage{position:relative;display:flex;justify-content:center;align-items:center;padding:8px 0 4px}
+.phone{position:relative;width:min(280px,66vw);border:9px solid #060B0C;border-radius:40px;overflow:hidden;background:#060B0C;box-shadow:0 34px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.14),0 0 90px rgba(31,157,87,.35);z-index:1}
+.phone img{display:block;width:100%;height:auto;border-radius:30px}
+.chip{position:absolute;z-index:2;display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;background:rgba(18,32,36,.92);border:1px solid var(--line2);backdrop-filter:blur(8px);padding:8px 12px;border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.4);white-space:nowrap}
+.chip small{display:block;font-weight:500;color:var(--muted);font-size:11px}
+.chip .ic{font-size:19px}
+.chip-1{top:9%;left:-4%;animation:float 5.2s ease-in-out infinite}
+.chip-2{top:38%;right:-5%;animation:float 6.4s .8s ease-in-out infinite}
+.chip-3{bottom:14%;left:-2%;animation:float 5.8s 1.6s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-13px)}}
+
+/* заметки про установку */
+.note{font-size:14px;line-height:1.45;background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:14px}
+.note b{display:block;margin-bottom:6px}
+.note ol{padding-left:19px;display:flex;flex-direction:column;gap:4px;color:var(--muted)}
+.note ol b{color:var(--text)}
+.desk{display:flex;gap:14px;align-items:center}
+.desk .qr{flex:none;width:128px;height:128px;border-radius:12px;overflow:hidden;background:#fff}
+.desk .qr svg{display:block;width:100%;height:100%}
+.note[hidden]{display:none}
+
+/* ── секции ── */
+section.block{padding:46px 0 8px}
+.h2{font-size:clamp(24px,4.6vw,34px);font-weight:800;letter-spacing:-.015em;text-align:center}
+.sub{color:var(--muted);text-align:center;margin:8px auto 0;max-width:560px;font-size:16px}
+
+/* скриншоты */
+.shots{display:grid;grid-auto-flow:column;grid-auto-columns:64%;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding:22px 4px 14px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.shots::-webkit-scrollbar{display:none}
+.shots figure{scroll-snap-align:center;margin:0;display:flex;flex-direction:column;gap:10px}
+.frame{border-radius:22px;overflow:hidden;border:1px solid var(--line2);box-shadow:0 22px 50px rgba(0,0,0,.45);background:var(--panel)}
+.frame img{display:block;width:100%;height:auto}
+figcaption{font-size:13.5px;color:var(--muted);text-align:center}
+figcaption b{color:var(--text)}
+
+/* видео */
+.demo{max-width:330px;margin:18px auto 0;border-radius:26px;overflow:hidden;border:1px solid var(--line2);box-shadow:0 26px 60px rgba(0,0,0,.5);background:#000}
+.demo video{display:block;width:100%;height:auto}
+
+/* фичи */
+.feats{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:24px}
+.feat{background:linear-gradient(170deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:18px;padding:16px 15px;display:flex;flex-direction:column;gap:6px;transition:transform .15s,border-color .2s}
+.feat:hover{transform:translateY(-3px);border-color:rgba(127,227,172,.35)}
+.feat i{font-style:normal;font-size:25px}
+.feat b{font-size:15px}
+.feat span{font-size:13px;color:var(--muted);line-height:1.42}
+
+/* бонусная полоса */
+.bonus{margin-top:40px;border-radius:24px;padding:26px 22px;position:relative;overflow:hidden;background:linear-gradient(135deg,#153A26 0%,#0F2A22 55%,#1A2B30 100%);border:1px solid rgba(127,227,172,.35);text-align:center}
+.bonus::before{content:"🍃";position:absolute;font-size:130px;opacity:.1;top:-24px;left:-14px;transform:rotate(-18deg)}
+.bonus::after{content:"🍃";position:absolute;font-size:130px;opacity:.1;bottom:-30px;right:-12px;transform:rotate(24deg)}
+.bonus h3{font-size:clamp(22px,4.4vw,30px);font-weight:800;letter-spacing:-.01em}
+.bonus p{color:var(--muted);margin:8px auto 0;max-width:480px;font-size:15px}
+.bonus p b{color:var(--mint)}
+.steps3{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 22px;margin:18px 0 4px;font-size:13.5px;color:var(--muted)}
+.steps3 b{color:var(--text);background:rgba(255,255,255,.08);border-radius:8px;padding:2px 8px;margin-right:6px}
+.bonus .btn{position:relative;margin-top:16px}
+
+/* FAQ */
+.faq{max-width:760px;margin:22px auto 0;display:flex;flex-direction:column;gap:10px}
+.faq details{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:4px 18px}
+.faq summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:12px;min-height:56px;font-weight:650;font-size:16px}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";margin-left:auto;font-size:24px;font-weight:400;color:var(--mint);transition:transform .2s}
+.faq details[open] summary::after{transform:rotate(45deg)}
+.faq details p{color:var(--muted);padding:0 0 16px;font-size:14.5px;line-height:1.55;max-width:640px}
+
+/* подвал */
+.legal{margin:44px 0 26px;text-align:center;font-size:13px;color:var(--muted);line-height:2}
+.legal a{color:var(--muted)}
+.legal a:hover{color:var(--text)}
+
+@media (min-width:720px){
+  .shots{grid-auto-flow:initial;grid-auto-columns:initial;grid-template-columns:repeat(3,1fr);overflow:visible}
+  .feats{grid-template-columns:repeat(3,1fr);gap:14px}
+  .feat{padding:20px}
+}
+@media (min-width:980px){
+  .hero{grid-template-columns:1.08fr .92fr;gap:44px;padding:48px 0 18px}
+  .stage{padding-top:0}
+  .phone{width:290px}
+  .chip-1{left:-9%}.chip-2{right:-9%}.chip-3{left:-7%}
+  .link.top{display:inline-flex}
+}
+@media (max-width:979px){.link.top{display:none}}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .chip{animation:none}
+  .btn{transition:none}
+}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="brand"><img src="/icon.svg" alt="" width="40" height="40">Нудист</div>
+<div class="bg" aria-hidden="true"></div>
 
-  <div class="hero">
-    <h1>Мессенджер, которому нечего скрывать</h1>
-    <p class="lead">Чаты, группы, звонки, лента и анонимные вопросы. Номер телефона не нужен: придумали имя и пароль — и вы внутри.</p>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/start" aria-label="Нудист — наверх"><img src="/icon.svg" alt="" width="34" height="34">Нудист</a>
+    <div class="top-actions">
+      <a class="link top" href="/" id="webTop">Открыть в браузере</a>
+      <a class="btn sm" href="#apk">Скачать</a>
+    </div>
   </div>
+</header>
 
-  <section class="card how" aria-labelledby="t-apk">
-    <h3 id="t-apk">Приложение для Android</h3>
-    <p id="apkText">Файл APK, <span id="size">37 КБ</span> — легче любого мема. Ставится за минуту.</p>
+<main>
+<div class="wrap">
 
-    <div class="note" id="ios" hidden>Приложение пока есть только для Android. На iPhone «Нудист» работает в Safari: <a id="web" href="/">открыть</a>, затем «Поделиться» → «На экран „Домой“».</div>
+  <!-- ══════════ HERO ══════════ -->
+  <div class="hero">
+    <div class="hero-copy">
+      <span class="badge"><i>🌿</i> Открывается в России без VPN</span>
+      <h1>Мессенджер,<br>которому <span class="grad">нечего скрывать</span></h1>
+      <p class="lead">Чаты, группы, звонки, лента, истории, игры и анонимные вопросы — <b>в приложении на 37 КБ</b>. Номер телефона не нужен: придумали имя и пароль — и вы внутри.</p>
 
-    <div class="note desk" id="desk" hidden>
-      <div class="qr" id="qr"></div>
-      <div>APK ставится на телефон с Android. Наведите камеру телефона на код — эта страница откроется на нём.</div>
+      <div class="ref-banner" id="refBanner" hidden><span style="font-size:24px" aria-hidden="true">🎁</span><span>Вас позвал <b id="refName">@друг</b> — за регистрацию <b>обоим дадут по 100 🍃</b>.</span></div>
+
+      <div class="ctas">
+        <a class="btn" id="apk" href="/nudist.apk" download="nudist.apk">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+          <span class="apk-sub"><span id="apkLabel">Скачать APK</span><small>Android · <span id="size">37 КБ</span> · установка за минуту</small></span>
+        </a>
+        <a class="btn btn-ghost" id="web" href="/">Открыть в браузере
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+      </div>
+      <p id="apkText" class="sub" style="text-align:left;margin:2px 0 0;max-width:none;font-size:13px">Файл скачивается напрямую с нашего сервера — никаких посредников и каталогов.</p>
+
+      <div class="micro" aria-label="Что важно">
+        <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7FE3AC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>E2E в секретных чатах</span>
+        <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7FE3AC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg>Без номера телефона</span>
+        <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7FE3AC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h7l-1 8L19 10h-7z"/></svg><b>37 КБ</b> — легче мема</span>
+      </div>
+      <p class="members"><span aria-hidden="true">🔥</span><span><b id="memberCount">…</b> уже внутри — заходи за своими 500 🍃</span></p>
+
+      <div class="note" id="ios" hidden>На iPhone «Нудист» живёт в Safari: <a id="webIos" href="/">открой версию для браузера</a>, затем «Поделиться» → «На экран „Домой“». Иконка появится рядом с остальными приложениями.</div>
+      <div class="note desk" id="desk" hidden>
+        <div class="qr" id="qr" role="img" aria-label="QR-код этой страницы"></div>
+        <div>APK ставится на Android-телефон. Наведи камеру телефона на код — эта страница откроется на нём.</div>
+      </div>
+      <div class="note" id="steps" hidden>
+        <b>Файл скачивается. Дальше так:</b>
+        <ol>
+          <li>Открой <b>nudist.apk</b> из загрузок.</li>
+          <li>Телефон спросит, можно ли ставить приложения из этого источника — разреши.</li>
+          <li>Нажми «Установить». Приложения нет в Google Play, поэтому телефон может переспросить.</li>
+        </ol>
+      </div>
     </div>
 
-    <a class="btn" id="apk" href="/nudist.apk" download="nudist.apk">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
-      <span id="apkLabel">Скачать APK</span>
-    </a>
+    <div class="stage" aria-hidden="true">
+      <div class="phone"><img src="/start-phone.jpg" width="520" height="1125" alt="" fetchpriority="high"></div>
+      <div class="chip chip-1"><span class="ic">🙈</span><span>Голая правда<small>анонимные вопросы по ссылке</small></span></div>
+      <div class="chip chip-2"><span class="ic">🔥</span><span>Огонёк серии<small>дни подряд — не погаси!</small></span></div>
+      <div class="chip chip-3"><span class="ic">🍃</span><span>+500 за вход<small>и по 100 за друга</small></span></div>
+    </div>
+  </div>
+</div>
 
-    <div class="note" id="steps" hidden>
-      <b>Файл скачивается. Дальше так:</b>
-      <ol>
-        <li>Откройте <span>nudist.apk</span> из загрузок.</li>
-        <li>Телефон спросит, можно ли ставить приложения из этого источника — разрешите.</li>
-        <li>Нажмите «Установить». Приложения нет в Google Play, поэтому телефон может переспросить.</li>
-      </ol>
+<!-- ══════════ СКРИНШОТЫ ══════════ -->
+<section class="block wrap" aria-labelledby="t-screens">
+  <h2 class="h2" id="t-screens">Как это выглядит</h2>
+  <p class="sub">Настоящие экраны живого приложения, а не макеты из головы дизайнера.</p>
+  <div class="shots">
+    <figure><div class="frame"><img src="/promo/shot-chats.jpg" width="720" height="1487" alt="Чаты в «Нудисте»: история переписки, огоньки серий и реакции" loading="lazy"></div><figcaption><b>Чаты</b> · огоньки серий и реакции</figcaption></figure>
+    <figure><div class="frame"><img src="/promo/shot-story.jpg" width="720" height="1487" alt="История в «Нудисте»: фото на 24 часа с реакциями" loading="lazy"></div><figcaption><b>Истории</b> · живут 24 часа, как и положено</figcaption></figure>
+    <figure><div class="frame"><img src="/promo/shot-memes.jpg" width="720" height="867" alt="Мемы и стикеры в «Нудисте»: реакции в переписке" loading="lazy"></div><figcaption><b>Мемы и стикеры</b> · реакция важнее ответа</figcaption></figure>
+  </div>
+
+  <div class="demo">
+    <video controls preload="none" playsinline poster="/promo/shot-chats.jpg" aria-label="Короткое видео: как устроен «Нудист»">
+      <source src="/promo/screen-demo.mp4" type="video/mp4">
+      Видео не загрузилось — листайте скриншоты выше, они честные.
+    </video>
+  </div>
+</section>
+
+<!-- ══════════ ФИЧИ ══════════ -->
+<section class="block wrap" aria-labelledby="t-feats">
+  <h2 class="h2" id="t-feats">Почему не скучно</h2>
+  <p class="sub">Мессенджер, который тянет заходить каждый день — и не потому, что «надо».</p>
+  <div class="feats">
+    <div class="feat"><i aria-hidden="true">🙈</i><b>Голая правда</b><span>Анонимные вопросы по твоей ссылке. Кто спросил — не узнает никто, отвечать можно прямо из приложения.</span></div>
+    <div class="feat"><i aria-hidden="true">🍃</i><b>Листики и огоньки</b><span>Местная валюта за активность и серия переписки, как в TikTok: пишите друг другу каждый день, чтобы огонёк не погас.</span></div>
+    <div class="feat"><i aria-hidden="true">🔒</i><b>Секретные чаты</b><span>Сквозное шифрование: сообщения существуют только на ваших устройствах. Кодовое слово сверяется вживую.</span></div>
+    <div class="feat"><i aria-hidden="true">🕶</i><b>Кнопка «Прикрыться»</b><span>Один тап — и вместо переписки на экране важный рабочий отчёт. Для тех самых моментов.</span></div>
+    <div class="feat"><i aria-hidden="true">🎮</i><b>Игры в чате</b><span>Дуэли, викторины и мемы прямо в переписке. Проиграл — перевёл листики, выиграл — забрал.</span></div>
+    <div class="feat"><i aria-hidden="true">📞</i><b>Звонки и комнаты</b><span>Личные и групповые голосовые комнаты, звонки без номера телефона. Права, роли, очередь выступлений.</span></div>
+  </div>
+</section>
+
+<!-- ══════════ БОНУС ══════════ -->
+<div class="wrap">
+  <section class="bonus" aria-labelledby="t-bonus">
+    <h3 id="t-bonus">500 🍃 за вход — и ещё по 100 за друга</h3>
+    <p><b>Листики</b> — валюта «Нудиста»: тратятся на стикеры, эффекты и подарки. <b>500 начисляем сразу</b> после регистрации, <b>по 100</b> — за каждого друга, который зайдёт по твоей ссылке (до 5 в день, обоим).</p>
+    <div class="steps3" aria-label="Как это работает"><span><b>1</b>Скачай и зарегистрируйся</span><span><b>2</b>Открой «Позвать друзей» и отправь ссылку</span><span><b>3</b>Друг заходит — вы оба получаете по 100 🍃</span></div>
+    <a class="btn btn-gold" href="#apk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Получить свои 500 🍃</a>
+  </section>
+
+  <!-- ══════════ FAQ ══════════ -->
+  <section class="block" aria-labelledby="t-faq" style="padding-bottom:0">
+    <h2 class="h2" id="t-faq">Честные ответы</h2>
+    <div class="faq">
+      <details>
+        <summary>Приложения нет в Google Play. Это безопасно?</summary>
+        <p>Да. «Нудист» ставится напрямую с нашего сервера — файл не проходит через сторонние каталоги и не модифицируется. Телефон может переспросить про «неизвестный источник»: это штатное предупреждение для любого APK вне Play Market, файл при этом подписан нами. Исходники части клиента открыты, сборка воспроизводима.</p>
+      </details>
+      <details>
+        <summary>Зачем мессенджеру номер телефона? А, точно — незачем</summary>
+        <p>Именно так. Мы не просим ни номер, ни почту, ни доступ к контактам. Придумали username и пароль — аккаунт ваш. Потеряете пароль — поможем кодом восстановления или через поддержку, но лишних данных о вас у нас просто нет.</p>
+      </details>
+      <details>
+        <summary>Сколько это стоит?</summary>
+        <p>Бесплатно: чаты, звонки, истории, лента, игры. Листики зарабатываются активностью или дарятся друзьям. Премиум — только если захотите: больше места для файлов, особый статус и оформление. Платить не «заставит» ни одна кнопка.</p>
+      </details>
+      <details>
+        <summary>У меня iPhone или компьютер</summary>
+        <p>Откройте <a href="/" style="text-decoration:underline">веб-версию «Нудиста»</a> — она работает в Safari, Chrome и Яндекс Браузере. На iPhone можно добавить значок на главный экран: «Поделиться» → «На экран „Домой“», и мессенджер откроется как обычное приложение.</p>
+      </details>
     </div>
   </section>
 
-  <div class="phone"><img src="/start-phone.jpg" width="520" height="1125" alt="Переписка в «Нудисте»: сообщения, реакции и галочки о прочтении"></div>
-
-  <ul class="feats">
-    <li><i aria-hidden="true">🙈</i><div><b>Голая правда</b><span>Анонимные вопросы по вашей ссылке. Кто спросил — не узнает никто.</span></div></li>
-    <li><i aria-hidden="true">🍃</i><div><b>Листики</b><span>Местная валюта. Дают за переписку каждый день и за приглашённых друзей.</span></div></li>
-    <li><i aria-hidden="true">🕶</i><div><b>Кнопка «Прикрыться»</b><span>На случай, если за спиной внезапно возник начальник.</span></div></li>
-  </ul>
-
-  <p class="legal" style="margin:26px 0 8px;text-align:center;font-size:13.5px;opacity:.75;line-height:1.7"><a href="/pay">Цены и оплата</a> · <a href="/offer">Оферта</a> · <a href="/contacts">Контакты и реквизиты</a> · <a href="/privacy">Политика конфиденциальности</a></p>
+  <p class="legal"><a href="/pay">Цены и оплата</a> · <a href="/offer">Оферта</a> · <a href="/contacts">Контакты и реквизиты</a> · <a href="/privacy">Политика конфиденциальности</a><br>© 2026 «Нудист» · Сделано без номера телефона и без спроса на вашу переписку</p>
 </div>
+</main>
+
 <script src="/js/start.js"></script>
 <script type="module" src="/js/start-qr.js"></script>
 </body>

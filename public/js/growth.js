@@ -5,16 +5,22 @@ import { nativeApp, nativePush } from './store.js';
 
 // ───── приглашения
 // Ссылка вида https://…/?ref=username. Открыл не вошедший человек — запоминаем, кто позвал, и показываем регистрацию.
+// Метки кампании с посадочной и из рекламы: utm_source/medium/campaign/content. Только безопасные символы, как на сервере.
+const utmClean = (v, n = 48) => String(v || '').toLowerCase().replace(/[^a-z0-9_.\-]/g, '').slice(0, n);
 export function takeRef() {
   try {
-    const q = new URLSearchParams(location.search), r = (q.get('ref') || '').replace(/[^\w]/g, '').slice(0, 32);
-    if (!r) return;
-    local.set('ref', r);
-    history.replaceState(history.state, '', location.pathname + location.hash);
+    const q = new URLSearchParams(location.search), r = utmClean(q.get('ref'), 32);
+    if (r) local.set('ref', r);
+    const u = {};
+    for (const [k, key] of [['utm_source', 'src'], ['utm_medium', 'med'], ['utm_campaign', 'cam'], ['utm_content', 'cnt']]) { const v = utmClean(q.get(k)); if (v) u[k] = v; }
+    if (u.utm_source || u.utm_medium || u.utm_campaign || u.utm_content) local.set('utm', JSON.stringify(u));
+    if (r || Object.keys(u).length) history.replaceState(history.state, '', location.pathname + location.hash);
   } catch (e) { /* адрес без параметров */ }
 }
 export const pendingRef = () => local.get('ref') || '';
 export const clearRef = () => local.set('ref', null);
+export const pendingUtm = () => { try { const u = JSON.parse(local.get('utm') || 'null'); return u && typeof u === 'object' ? u : undefined; } catch (e) { return undefined; } };
+export const clearUtm = () => local.set('utm', null);
 export const inviteLink = () => location.origin + '/?ref=' + ((S.me && S.me.username) || '');
 
 export function InviteFriends({ id }) {

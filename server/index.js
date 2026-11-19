@@ -31,10 +31,12 @@ require('./fcm');
 require('./tunes');
 require('./common');
 const Streak = require('./streak');
+const Funnel = require('./funnel');
 const Seed = require('./seed');
 const { db, save, now, emit } = C;
 
 const PORT = Number(process.env.PORT) || 3000;
+let memberCache = null;      // счётчик людей для /api/config: не пересчитываем на каждый запрос
 const PUBLIC = path.join(C.ROOT, 'public');
 const MIME = { apk: 'application/vnd.android.package-archive', html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', json: 'application/json', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', ico: 'image/x-icon', woff2: 'font/woff2', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', mp3: 'audio/mpeg', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', pdf: 'application/pdf', webmanifest: 'application/manifest+json', txt: 'text/plain; charset=utf-8' };
 const INLINE_UPLOAD = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'mp4', 'webm', 'mov', 'mp3', 'ogg', 'oga', 'opus', 'wav', 'm4a', 'aac', 'flac', 'pdf', 'txt']);
@@ -213,7 +215,8 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/notify' && req.method === 'GET') { const a = sessionOf(req); if (a) { try { A.limit('notify:' + a.u.id, 90, 60000); } catch (e) { return json(res, 429, { error: 'Слишком часто' }); } } return Push.poll(req, res, url, a, json); }      // лента уведомлений для приложения на Android
     if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, db: { mb: Math.round((C.metrics.dbBytes || 0) / 104857.6) / 10, saveMs: C.metrics.saveMs || 0, unsavedMs: C.unsavedMs() }, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined, mirror: Cloud.mirrorStatus(), files: (u => u ? { mb: Math.round(u.bytes / 1048576), maxMb: Math.round(u.max / 1048576), count: u.files } : undefined)(Cloud.usage()) });
     if (p === '/api/version') return json(res, 200, { build: buildVer(), apk: Push.apkInfo(), cc: countryOf(req) });      // что сейчас выложено: интерфейс и сборка для Android
-    if (p === '/api/config') return json(res, 200, { flags: A.pubFlags(), setup: A.setupNeeded() || undefined, tg: Tg.botName() || undefined, name: 'Нудист', version: '1.0.0' });
+    if (p === '/api/config') { const t = Date.now(); if (!memberCache || t - memberCache.at > 120000) memberCache = { at: t, n: Object.values(db.users).filter(u => !u.deleted && !u.bot).length }; return json(res, 200, { flags: A.pubFlags(), setup: A.setupNeeded() || undefined, tg: Tg.botName() || undefined, name: 'Нудист', version: '1.0.0', members: memberCache.n }); }
+    if (p === '/api/track' && req.method === 'POST') { try { A.limit('trk:' + ipOf(req), 180, 60e3); } catch (e) { return json(res, 429, { error: 'Слишком часто' }); } const b = await readJson(req); return json(res, 200, Funnel.track(String(b.e || b.event || ''), Funnel.cleanUtm(b.utm ? { utm_source: b.utm.src, utm_medium: b.utm.med, utm_campaign: b.utm.cam, utm_content: b.utm.cnt } : b), b.ref, ipOf(req))); }      // статистика посадочной: визит, скачивание, открытие
     if (p === '/api/clientlog' && req.method === 'POST') {      // телефон сообщает, почему приложение не запустилось
       try { A.limit('clog:' + ipOf(req), 20, 600e3); const b = (await readBody(req, 6000)).toString('utf8').replace(/[\r\n]+/g, ' ').slice(0, 1500); console.log('[client]', (req.headers['user-agent'] || '').slice(0, 200), '|', b); } catch (e) { /* лимит или мусор */ }
       return json(res, 200, { ok: true });
