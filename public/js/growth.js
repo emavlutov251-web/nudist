@@ -199,7 +199,7 @@ function PetModal({ id, chat: cid, text }) {
       <div class="pet-badges">${STREAK_BADGES.map(n => html`<span class=${cx('pet-badge', best >= n && 'on')} key=${n}><i>🔥</i><small>${n} дн.</small></span>`)}</div></section>
     <section class="pet-card"><h3>Восстановление огонька</h3>
       <p class="pet-hint">Если огонёк погас, его можно вернуть в течение трёх дней. В этом месяце у вас ${left ? `${plural(left, ['осталась', 'остались', 'осталось'])} ${left} ${plural(left, ['попытка', 'попытки', 'попыток'])} из 3` : 'попыток не осталось'}.</p>
-      ${lost && html`<button class="btn" disabled=${busy || !left} onClick=${restore}>🔥 Вернуть серию: ${lost.n + (lost.plus || 0)} ${plural(lost.n + (lost.plus || 0), ['день', 'дня', 'дней'])}</button>`}</section>
+      ${lost && html`<button class="btn" disabled=${busy || !left} onClick=${restore}><${Icon} n="flame" s=${15} /> Вернуть серию: ${lost.n + (lost.plus || 0)} ${plural(lost.n + (lost.plus || 0), ['день', 'дня', 'дней'])}</button>`}</section>
     ${text && html`<p class="pet-hint">${text}</p>`}
   <//>`;
 }

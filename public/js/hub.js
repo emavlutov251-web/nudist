@@ -92,11 +92,42 @@ on('init', () => { setTimeout(() => { try { if (window.NudistApp && window.Nudis
 // Официальный плеер Яндекс Музыки открывается в закреплённом плеере: его можно свернуть, и музыка не остановится
 const ymDock = t => ({ kind: 'ym', key: 'ym:' + t.id, title: t.title, src: t.ext.frame, link: t.ext.page, h: t.ext.kind === 'track' ? 180 : 450 });
 
+// Музыка: сортировка и «альбомы по исполнителям» собираются на клиенте из того, что пришло с сервера
+const SORTS = [['new', 'Сначала новые'], ['alpha', 'По алфавиту: А → Я'], ['alpha-desc', 'По алфавиту: Я → А'], ['plays', 'Сначала популярные'], ['size-desc', 'Сначала крупные'], ['size-asc', 'Сначала лёгкие'], ['dur-desc', 'Сначала длинные'], ['dur-asc', 'Сначала короткие'], ['artist', 'По исполнителю']];
+const byTitle = (a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru', { sensitivity: 'base' });
+const byArtist = (a, b) => String(a.artist || '').localeCompare(String(b.artist || ''), 'ru', { sensitivity: 'base' });
+function sortTracks(list, sort) {
+  const l = list.slice();
+  switch (sort) {
+    case 'alpha': return l.sort(byTitle);
+    case 'alpha-desc': return l.sort((a, b) => byTitle(b, a));
+    case 'plays': return l.sort((a, b) => (b.plays || 0) - (a.plays || 0) || (b.ts || 0) - (a.ts || 0));
+    case 'size-desc': return l.sort((a, b) => (b.size || 0) - (a.size || 0));
+    case 'size-asc': return l.sort((a, b) => (a.size || 0) - (b.size || 0));
+    case 'dur-desc': return l.sort((a, b) => (b.dur || 0) - (a.dur || 0));
+    case 'dur-asc': return l.sort((a, b) => (a.dur || 0) - (b.dur || 0));
+    case 'artist': return l.sort((a, b) => byArtist(a, b) || byTitle(a, b));
+    default: return l.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  }
+}
+function albumGroups(list) {
+  const m = new Map();
+  for (const t of list) {
+    const k = t.artist || 'Неизвестный исполнитель';
+    let g = m.get(k);
+    if (!g) m.set(k, g = { artist: k, tracks: [], size: 0, plays: 0, cover: undefined });
+    g.tracks.push(t); g.size += t.size || 0; g.plays += t.plays || 0; if (!g.cover && t.cover) g.cover = t.cover;
+  }
+  const groups = [...m.values()];
+  for (const g of groups) g.tracks.sort(byTitle);
+  return groups.sort((a, b) => b.tracks.length - a.tracks.length || b.size - a.size || byArtist(a, b));
+}
 function Music() {
   const [tab, setTabM] = useState(local.get('music.tab') || 'my'), [q, setQ] = useState(''), [d, setD] = useState(null), [pub, setPub] = useState(!!local.get('music.pub'));
   const [net, setNet] = useState(null), [wave, setWave] = useState(''), [world, setWorld] = useState(false), [page, setPage] = useState(1), [busy, setBusy] = useState(false);
+  const [view, setView] = useState(local.get('music.view') || 'list'), [sort, setSort] = useState(local.get('music.sort') || 'new'), [artistF, setArtistF] = useState('');
   const outer = tab === 'find' || tab === 'radio';      // «Каталог» и «Радио» — музыка с чужих сайтов, а не наша библиотека
-  const go = t => { setQ(''); setPage(1); setTabM(t); local.set('music.tab', t); };
+  const go = t => { setQ(''); setPage(1); setArtistF(''); setTabM(t); local.set('music.tab', t); };
   const load = () => rpc('music.list', { tab, q }).then(r => { addUsers(r.users); if (r.mb) MB = r.mb; if (tab === 'my' && !q && !r.tracks.length && !local.get('music.tab')) return setTabM('all'); setD(r); }).catch(err);      // своей музыки ещё нет — показываем общую, а не пустой экран
   const loadNet = () => { const ask = tab === 'find' ? rpc('tunes.find', { q: q.trim() || 'rock', page }) : rpc('tunes.radio', { q: q.trim(), tag: wave, world }); setBusy(true);
     return ask.then(r => setNet(o => (tab === 'find' && page > 1 && o && !o.error ? { ...r, items: o.items.concat(r.items.filter(i => !o.items.some(j => j.key === i.key))) } : r))).catch(e => { if (page > 1) err(e); else setNet({ items: [], error: e.message }); }).then(() => setBusy(false)); };
@@ -105,7 +136,13 @@ function Music() {
   useEffect(() => { musicReload = () => { if (tab !== 'my') setTabM('my'); else load(); }; return () => { musicReload = null; }; });
   const cur = S.player && String(S.player.id).startsWith('trk_') ? S.player.id.slice(4) : null;
   useEffect(() => { if (cur) rpc('music.play', { id: cur }).catch(() => {}); }, [cur]);
-  const play = t => (t.ext && t.ext.s === 'ym' ? openDock(ymDock(t)) : playAudio(trackMsg(t), d.tracks.filter(x => x.url).map(trackMsg)));
+  const lib = d ? d.tracks : [];
+  const artistCount = new Map(); for (const t of lib) artistCount.set(t.artist, (artistCount.get(t.artist) || 0) + 1);
+  const artists = [...artistCount.keys()].sort((a, b) => a.localeCompare(b, 'ru'));
+  const shown = sortTracks(artistF ? lib.filter(t => t.artist === artistF) : lib, sort);
+  const albums = view === 'albums' ? albumGroups(lib) : [];
+  const playAlbum = g => { const p = g.tracks.filter(t => t.url); if (p.length) playAudio(trackMsg(p[0]), p.map(trackMsg)); else toast('Треки этого исполнителя играют только от «Яндекса»'); };
+  const play = t => (t.ext && t.ext.s === 'ym' ? openDock(ymDock(t)) : playAudio(trackMsg(t), shown.filter(x => x.url).map(trackMsg)));
   const playNet = it => playAudio(extMsg(it), net.items.map(extMsg));
   const keepNet = it => rpc('tunes.keep', { key: it.key }).then(() => { setNet(o => ({ ...o, items: o.items.map(i => (i.key === it.key ? { ...i, mine: true } : i)) })); toast(it.s === 'rb' ? 'Станция добавлена в вашу музыку' : 'Добавлено в вашу музыку'); }).catch(err);
   const yandex = async () => {
@@ -133,6 +170,15 @@ function Music() {
       <button class="btn ghost" onClick=${yandex} title="Добавить трек, альбом или плейлист по ссылке из Яндекс Музыки"><${Icon} n="link" s=${16} /> Из Яндекса</button>
     </div>
     ${!outer && html`<${Toggle} label="Новые треки сразу выкладывать в «Общую волну»" hint="Выключено — трек слышите только вы. Меняется потом в меню трека" on=${pub} onChange=${v => { setPub(v); local.set('music.pub', v); }} />`}
+    ${!outer && d && lib.length > 0 && html`<div class="mus-tools">
+      <div class="seg mus-view" role="tablist" aria-label="Как показывать музыку">
+        <button role="tab" aria-selected=${view === 'list'} class=${cx(view === 'list' && 'on')} onClick=${() => { setView('list'); local.set('music.view', 'list'); }}><${Icon} n="list" s=${15} /> Список</button>
+        <button role="tab" aria-selected=${view === 'albums'} class=${cx(view === 'albums' && 'on')} onClick=${() => { setView('albums'); local.set('music.view', 'albums'); }} title="Вся музыка одного исполнителя — одной «пластинкой»"><${Icon} n="layout-grid" s=${15} /> По исполнителям</button>
+      </div>
+      <label class="fld sel-ic" title="Порядок треков в списке"><${Icon} n="sliders-horizontal" s=${14} /><select value=${sort} onChange=${e => { const v = e.target.value; setSort(v); local.set('music.sort', v); }} aria-label="Сортировка треков">${SORTS.map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select></label>
+      <label class="fld sel-ic" title="Оставить треки одного исполнителя"><${Icon} n="mic" s=${14} /><select value=${artistF} onChange=${e => setArtistF(e.target.value)} aria-label="Фильтр по исполнителю"><option value="">Все исполнители (${artists.length})</option>${artists.map(a => html`<option value=${a}>${a} · ${artistCount.get(a)}</option>`)}</select></label>
+      ${artistF && html`<button class="ib sm" title="Сбросить фильтр по исполнителю" aria-label="Сбросить фильтр" onClick=${() => setArtistF('')}><${Icon} n="x" s=${15} /></button>`}
+    </div>`}
     ${ups.map(u => html`<div class="up-row"><${Icon} n="upload" s=${15} /><span>${u.name}</span><i><b style=${`width:${Math.round(u.p * 100)}%`}></b></i><small>${Math.round(u.p * 100)}%</small></div>`)}
     ${outer && html`
       <div class="chips mus-chips">${tab === 'find' ? GENRES.map(([n, v]) => html`<button class=${cx('chip', (q.trim() || 'rock') === v && 'on')} onClick=${() => { setPage(1); setQ(v); }}>${n}</button>`)
@@ -146,15 +192,23 @@ function Music() {
           ${it.mine ? html`<span class="ib sm" title="Уже в вашей музыке"><${Icon} n="check" s=${17} /></span>` : html`<button class="ib sm" title="Добавить в мою музыку" onClick=${() => keepNet(it)}><${Icon} n="plus" s=${17} /></button>`}</div>`; })}</div>
         ${tab === 'find' && net.more && html`<div class="center"><button class="btn ghost" disabled=${busy} onClick=${() => setPage(page + 1)}>Показать ещё</button></div>`}
         <p class="hint center">${tab === 'find' ? 'Музыка играет прямо с сайтов авторов (Jamendo, Wikimedia Commons) по свободным лицензиям — у каждого трека указаны автор, лицензия и ссылка. Поиск через Openverse.' : 'Станции из открытого справочника Radio Browser. Звук идёт напрямую со станции; если молчит — станция легла, попробуйте другую.'}</p>`}`}
-    ${outer ? null : !d ? html`<${Spinner} />` : !d.tracks.length ? html`<${Empty} icon="music" title=${q ? 'Ничего не нашлось' : tab === 'my' ? 'Тут пока тихо' : 'В общей волне пусто'} text=${q ? 'Попробуйте другое слово.' : tab === 'my' ? `Загрузите свои mp3 — и слушайте их с любого устройства. Подходят ещё m4a, ogg, wav и flac, до ${MB} МБ каждый. А можно ничего не загружать: найдите музыку в каталоге или включите радио.` : 'Никто ещё ничего не выложил. Станьте первым диджеем пляжа.'}>${!q && html`<button class="btn" onClick=${add}><${Icon} n="upload" s=${16} /> Загрузить музыку</button><button class="btn ghost" onClick=${() => go('find')}><${Icon} n="search" s=${16} /> Каталог</button><button class="btn ghost" onClick=${() => go('radio')}><${Icon} n="radio" s=${16} /> Радио</button>`}<//>` : html`
-      <div class="trk-list" role="list">${d.tracks.map((t, i) => { const on = cur === t.id; return html`<div role="listitem" key=${t.id} class=${cx('trk', on && 'on')} onDblClick=${() => play(t)}>
+    ${outer ? null : !d ? html`<${Spinner} />` : !d.tracks.length ? html`<${Empty} icon="music" title=${q ? 'Ничего не нашлось' : tab === 'my' ? 'Тут пока тихо' : 'В общей волне пусто'} text=${q ? 'Попробуйте другое слово.' : tab === 'my' ? `Загрузите свои mp3 — и слушайте их с любого устройства. Подходят ещё m4a, ogg, wav и flac, до ${MB} МБ каждый. А можно ничего не загружать: найдите музыку в каталоге или включите радио.` : 'Никто ещё ничего не выложил. Станьте первым диджеем пляжа.'}>${!q && html`<button class="btn" onClick=${add}><${Icon} n="upload" s=${16} /> Загрузить музыку</button><button class="btn ghost" onClick=${() => go('find')}><${Icon} n="search" s=${16} /> Каталог</button><button class="btn ghost" onClick=${() => go('radio')}><${Icon} n="radio" s=${16} /> Радио</button>`}<//>`
+    : view === 'albums' ? (albums.length ? html`<div class="mus-albums">${albums.map(g => html`<div class="mus-alb" key=${g.artist}>
+        <button class="mus-alb-p" onClick=${() => playAlbum(g)} title=${`Слушать по порядку: ${g.artist}`}><${Cover} src=${g.cover} seed=${g.artist} s=${76} /><i class="trk-o"><${Icon} n="play" s=${18} /></i></button>
+        <div class="mus-alb-m"><b title=${g.artist}>${g.artist}</b><small>${g.tracks.length} ${plural(g.tracks.length, ['трек', 'трека', 'треков'])} · ${fmtSize(g.size)}${g.plays ? ` · ${fmtNum(g.plays)} прослуш.` : ''}</small>
+        <button class="link" onClick=${() => { setArtistF(g.artist); setView('list'); local.set('music.view', 'list'); }}>Показать треки</button></div>
+      </div>`)}</div>
+      <p class="hint center">Пластинки собрались сами: всё одного исполнителя — в одну карточку. Тег «артист» берётся из файла (ID3) либо задаётся в меню трека «Название и исполнитель».</p>` : html`<${Empty} icon="mic" title="Пока пусто" text="Исполнителей не видно: добавьте в треки тег «артист» (из файла он подтянется сам) — и они соберутся сюда." />`)
+    : !shown.length ? html`<${Empty} icon="mic" title="Ничего не нашлось" text=${`У исполнителя «${artistF}» в этом списке ничего нет.`}><button class="btn ghost" onClick=${() => setArtistF('')}><${Icon} n="x" s=${15} /> Сбросить фильтр</button><//>`
+    : html`
+      <div class="trk-list" role="list">${shown.map((t, i) => { const on = cur === t.id; return html`<div role="listitem" key=${t.id} class=${cx('trk', on && 'on')} onDblClick=${() => play(t)}>
         <button class="trk-p trk-c" onClick=${() => play(t)} title=${on && S.player.on ? 'Пауза' : 'Слушать'}><${Cover} src=${t.cover} seed=${t.title + t.artist} s=${42} radio=${!!(t.ext && t.ext.s === 'rb')} /><i class=${cx('trk-o', on && 'on')}><${Icon} n=${on && S.player.on ? 'pause' : 'play'} s=${17} /></i></button>
         <div class="trk-m" onClick=${() => play(t)}><b>${on && S.player.on && html`<i class="eq" aria-hidden="true"><i></i><i></i><i></i></i>`}${t.title}</b><small>${t.artist}${t.ext && t.ext.s === 'ov' ? ` · ${t.ext.from}${t.ext.lic ? ' · ' + t.ext.lic : ''}` : ''}${tab === 'all' && !t.own ? (t.ext ? ' · добавил(а) ' : ' · загрузил(а) ') + userName(who(t.by)) : ''}</small></div>
         ${t.pub ? html`<span class="trk-tag" title="Трек в общей волне"><${Icon} n="globe" s=${13} /> ${fmtNum(t.plays)}</span>` : html`<span class="trk-tag" title="Трек виден только вам"><${Icon} n="lock" s=${13} /></span>`}
         <span class="trk-d">${t.dur ? fmtDur(t.dur) : t.ext && t.ext.s === 'rb' ? 'эфир' : t.ext && t.ext.s === 'ym' ? 'Яндекс' : '—'}</span>
         ${!t.own && !t.mine && html`<button class="ib sm" title="Добавить в мою музыку" onClick=${() => rpc('music.save', { id: t.id }).then(() => { patch(t, { mine: true }); toast('Добавлено в вашу музыку'); }).catch(err)}><${Icon} n="plus" s=${17} /></button>`}
         <button class="ib sm" title="Ещё" onClick=${e => menu(e, t)}><${Icon} n="ellipsis" s=${17} /></button></div>`; })}</div>
-      <p class="hint center">${d.total} ${plural(d.total, ['трек', 'трека', 'треков'])}${tab === 'my' ? ` из ${d.max} возможных` : ''}. Загружайте только то, на что у вас есть права.</p>`}
+      <p class="hint center">${artistF ? `${shown.length} из ${d.total}` : d.total} ${plural(d.total, ['трек', 'трека', 'треков'])}${tab === 'my' ? ` из ${d.max} возможных` : ''}. Загружайте только то, на что у вас есть права.</p>`}
   </div>`;
 }
 
@@ -428,11 +482,11 @@ function AppFrame({ id, app, chat, duel }) {
   const together = () => { const c = S.chats[chat || S.ui.chat], peer = c && c.type === 'dm' ? c.peer : null; closeModal(id); openLobby(app.id, peer); };
   const mineB = dv && dv.mine === 'b', won = dv && dv.done && (dv.sb === dv.sa ? 0 : (dv.sb > dv.sa) === mineB ? 1 : -1);
   const bar = !D ? null
-    : dv && !dv.done && mineB ? html`<div class="duel-bar go"><span>⚔️ <b>${dv.an}</b>: ${n2(dv.sa, D[1])} ${D[0]}. У вас одна попытка — первая партия идёт в зачёт.</span></div>`
-    : dv && !dv.done ? html`<div class="duel-bar"><span>⚔️ Вызов отправлен: <b>${dv.bn}</b> ещё не ответил(а). Ваш результат — ${n2(dv.sa, D[1])} ${D[0]}.</span></div>`
-    : dv && res == null ? html`<div class=${cx('duel-bar', won > 0 ? 'win' : won < 0 ? 'lose' : '')}><span>${won > 0 ? '🏆 Победа!' : won < 0 ? '🥲 Поражение.' : '🤝 Ничья.'} ${mineB ? dv.sb : dv.sa} против ${mineB ? dv.sa : dv.sb} ${D[0]}</span>${mineB && html`<button class="btn sm" disabled=${busy} onClick=${() => challenge(dv.a, dv.sb)}>Реванш</button>`}</div>`
-    : res != null ? html`<div class="duel-bar two"><span>Ваш результат: <b>${n2(res, D[1])}</b> ${D[0]}</span><button class="btn sm" onClick=${together}>🎮 С другом</button><button class="btn sm ghost" disabled=${busy} title="Друг сыграет позже и попробует побить ваш результат" onClick=${() => challenge(null, res)}>⚔️ Вызов</button></div>`
-    : html`<div class="duel-bar two"><span>Вдвоём веселее</span>${BOARD.includes(app.id) && html`<button class="btn sm ghost" title="Рекорды недели" aria-label="Рекорды недели" onClick=${() => openModal(Records, { app })}>🏆</button>`}<button class="btn sm" onClick=${together}>🎮 Играть с другом</button></div>`;
+    : dv && !dv.done && mineB ? html`<div class="duel-bar go"><span><${Icon} n="shield" s=${14} /> <b>${dv.an}</b>: ${n2(dv.sa, D[1])} ${D[0]}. У вас одна попытка — первая партия идёт в зачёт.</span></div>`
+    : dv && !dv.done ? html`<div class="duel-bar"><span><${Icon} n="shield" s=${14} /> Вызов отправлен: <b>${dv.bn}</b> ещё не ответил(а). Ваш результат — ${n2(dv.sa, D[1])} ${D[0]}.</span></div>`
+    : dv && res == null ? html`<div class=${cx('duel-bar', won > 0 ? 'win' : won < 0 ? 'lose' : '')}><span>${won > 0 ? html`<${Icon} n="crown" s=${14} /> Победа!` : won < 0 ? 'Поражение.' : 'Ничья.'} ${mineB ? dv.sb : dv.sa} против ${mineB ? dv.sa : dv.sb} ${D[0]}</span>${mineB && html`<button class="btn sm" disabled=${busy} onClick=${() => challenge(dv.a, dv.sb)}>Реванш</button>`}</div>`
+    : res != null ? html`<div class="duel-bar two"><span>Ваш результат: <b>${n2(res, D[1])}</b> ${D[0]}</span><button class="btn sm" onClick=${together}><${Icon} n="gamepad-2" s=${14} /> С другом</button><button class="btn sm ghost" disabled=${busy} title="Друг сыграет позже и попробует побить ваш результат" onClick=${() => challenge(null, res)}><${Icon} n="shield" s=${13} /> Вызов</button></div>`
+    : html`<div class="duel-bar two"><span>Вдвоём веселее</span>${BOARD.includes(app.id) && html`<button class="btn sm ghost" title="Рекорды недели" aria-label="Рекорды недели" onClick=${() => openModal(Records, { app })}><${Icon} n="crown" s=${15} /></button>`}<button class="btn sm" onClick=${together}><${Icon} n="gamepad-2" s=${14} /> Играть с другом</button></div>`;
   return html`<${Modal} id=${id} title=${app.title} icon="app-window" cls="miniapp nopad"><div class="miniapp-col"><iframe ref=${fr} title=${app.title} src=${app.url} sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer"></iframe>${bar}</div><//>`;
 }
 // Каталог: и вкладка, и окно из «скрепки» в чате.
@@ -445,7 +499,7 @@ export function AppsCatalog({ chat, onPick }) {
   const tile = a => html`<button class=${cx('app-tile', a.ev && 'ev')} key=${a.id} onClick=${() => run(a)}><span class="app-ic" style=${a.emoji ? `background:${TILE[a.id] || '#0078D7'}` : ''}>${a.art ? html`<${Leafy} />` : a.emoji || html`<${Avatar} src=${a.avatar} name=${a.title} color=${a.color} s=${52} square />`}</span><span class="app-m"><b>${a.title}</b><small>${a.about}</small></span></button>`;
   return html`<div class="apps">
     <div class="hub-bar"><h2 class="hub-t">Приложения</h2><${EnergyPill} /><label class="search"><${Icon} n="search" s=${16} /><input value=${q} placeholder="Игра или утилита" onInput=${e => setQ(e.target.value)} /></label></div>
-    ${!s && html`<button class="lobby-tile" onClick=${() => { const c = S.chats[chat || S.ui.chat], peer = c && c.type === 'dm' ? c.peer : null; if (onPick) onPick(); openLobby(null, peer); }}><span aria-hidden="true">🎮</span><span><b>Играть с другом</b><small>Лобби на двоих: зовёте друга, выбираете игру и стартуете одновременно</small></span><${Icon} n="chevron-right" s=${18} /></button>`}
+    ${!s && html`<button class="lobby-tile" onClick=${() => { const c = S.chats[chat || S.ui.chat], peer = c && c.type === 'dm' ? c.peer : null; if (onPick) onPick(); openLobby(null, peer); }}><${Icon} n="gamepad-2" s=${22} aria-hidden="true" /><span><b>Играть с другом</b><small>Лобби на двоих: зовёте друга, выбираете игру и стартуете одновременно</small></span><${Icon} n="chevron-right" s=${18} /></button>`}
     ${recent.length > 0 && html`<h5>Недавние</h5><div class="app-grid">${recent.map(tile)}</div>`}
     ${CATS.map(([k, name, ic]) => { const l = found.filter(a => a.cat === k); return l.length > 0 && html`<h5><${Icon} n=${ic} s=${14} /> ${name}</h5><div class="app-grid">${l.map(tile)}</div>`; })}
     ${!found.length && html`<${Empty} icon="layout-grid" text="Такого приложения нет. Пока." />`}
