@@ -1,19 +1,19 @@
 'use strict';
-// «Редакция сообщества»: робот, который каждый день ведёт «Сообщество Нудист» (nudist_community) без участия человека.
-//   09:00 — вопрос дня (ротация из 48 тем, ничего не повторяется ~7 недель)
-//   17:00 пятница — старт мем-батла (призовой фонд 50 🍃)
-//   10:00, 1–25 декабря — адвент-напоминание
-//   первый день события из календаря года — анонс события
-//   20:00 воскресенье — итоги недели + авто-вручение 50 🍃 победителю мем-батла
-//   22:00 — «итог дня» (ротация из 24 золотых линий)
+// «Редакция сообщества»: робот, который каждый день ведёт общую беседу «Весь Нудист» (db.meta.common — там все зарегистрированные),
+// или «Сообщество Нудист» (nudist_community), если общей беседы нет. Куда писать, решает COMMUNITY_CHAT:
+//   auto (по умолчанию) — «Весь Нудист», если есть, иначе «Сообщество»;  both — в оба;  common | community — только один.
+// Расписание (МСК): 09:00 вопрос дня · вторник 19:00 факт дня · среда 18:00 опрос недели · четверг 20:00 «позовите друга» ·
+//   пятница 17:00 мем-батл · суббота 12:00 челлендж · 10:00, 1–25 декабря адвент · первый день события — анонс ·
+//   20:00 воскресенье — итоги недели + авто-вручение 50 🍃 победителю мем-батла · 22:00 итог дня.
 // Все сообщения silent: уведомлений они не рассылают — их видят, когда заходят в чат (иначе ежедневный шум съест доверие к пушу).
 // Выключатель: COMMUNITY_AUTO=off. Метка публикации и исторические отметки лежат в db.meta.community.marks.
 const C = require('./core');
 const R = require('./rpc');
 const Ev = require('./events');
+const B = require('./bots');
 const { db, save } = C;
 const MSK = 3 * 3600e3, DAY = 864e5;
-const BATTLE_PRIZE = 50, BATTLE_HOUR = 17, WEEK_HOUR = 20, WRAP_HOUR = 22, Q_HOUR = 9, ADVENT_HOUR = 10;
+const BATTLE_PRIZE = 50, BATTLE_HOUR = 17, WEEK_HOUR = 20, WRAP_HOUR = 22, Q_HOUR = 9, ADVENT_HOUR = 10, FACT_HOUR = 19, POLL_HOUR = 18, INVITE_HOUR = 20, CHALLENGE_HOUR = 12;
 
 const QUESTIONS = [
   'Ананас на пицце: за или против — и почему вообще спорим?',
@@ -87,6 +87,30 @@ const WRAPS = [
   'Что отложили на завтра — и легче ли с этим спать?',
   'Одна вещь, которую вы сделали ради себя, а не ради дел.',
 ];
+const POLLS = [
+  { q: 'Когда вы чаще всего в «Нудисте»?', opts: ['Утром с кофе', 'Днём', 'Вечером после дел', 'Глубокой ночью'] },
+  { q: 'Зачем вы здесь прежде всего?', opts: ['Общаться', 'Читать ленту', 'Играть и события', 'Мемить и смеяться'] },
+  { q: 'Идеальное сообщество: что добавить?', opts: ['Больше мини-игр', 'Турниры и призы', 'Больше событий по календарю', 'Листай, что есть'] },
+  { q: 'Ананас на пицце — это…', opts: ['Высокая кухня', 'Преступление', 'Личные предпочтения', 'Я пришёл за другим'] },
+  { q: 'Чем чаще делитесь в чатах?', opts: ['Голосовыми', 'Текстом', 'Фото и видео', 'Стикерами — стикеры наше всё'] },
+  { q: 'Ваш любимый ритуал тут?', opts: ['Вопрос дня утром', 'Итоги недели', 'Мем-батл по пятницам', 'У меня нет ритуалов, я свободный человек'] },
+  { q: 'Куда вас заманили бы события «Нудиста»?', opts: ['Адвент-календарь', 'Мандариновый дождь', 'Хэллоуин-марафон', 'Новый год на пляже'] },
+  { q: 'Огонёк кому важнее?', opts: ['Личный — с конкретным человеком', 'В группе — там все свои', 'Мне нужен +1 день, а кому — всё равно', 'Огоньки мой кошмар, я сапёр'] },
+];
+const CHALLENGES = [
+  'Напишите сегодня троим, кому давно не писали, «как день?» — просто так.',
+  'Скажите в чате одну маленькую победу этой недели.',
+  'Спросите то, что стеснялись спросить. Скорее всего, ответ облегчит вам жизнь.',
+  'Отправьте кому-нибудь мем без слов — одним стикером.',
+  'Узнайте у двух человек, чем им нравится «Нудист».',
+  'Сделайте один звонок, который откладывали больше недели.',
+  'Придумайте одно желание для общего чата и напишите его.',
+  'Отблагодарите репликой того, с кем обычно спорите.',
+  'Расскажите шутку недели — пусть честно скажут «не смешно».',
+  'Замените одно голосовое текстом — и послушайте, легче ли без него?',
+  'Напишите: «Я сегодня такой-то, и это нормально».',
+  'Похвалите первое, что заметили в человеке над вами в чате.',
+];
 const BATTLES = [
   '🖼 **Мем-батл недели открыт.** Кидайте сюда лучшие мемы до воскресенья 20:00 — победителю (по реакциям) 50 🍃 на счёт.',
   '🖼 **Батл мемов.** Правила простые: мем — в чат, реакция 🍀 решает. Воскресенье, 20:00 — объявим короля и вручим 50 🍃.',
@@ -102,13 +126,25 @@ const marksOf = () => (db.meta.community = db.meta.community || { marks: {} }).m
 const markGet = k => marksOf()[k];
 const markSet = (k, day, tNow) => { marksOf()[k] = day || (tNow ? dayStr(tNow) : dayStr(Ev.T())); };
 const pruneMarks = tNow => { const m = marksOf(), lim = dayStr(tNow - 45 * DAY); for (const k of Object.keys(m)) { const v = m[k]; if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) continue; if (v < lim) delete m[k]; } };
-const communityChat = () => { const id = C.chatNames && C.chatNames.get('nudist_community'); const ch = id && db.chats[id]; return ch || null; };
+const communityChats = () => {
+  const ov = String(process.env.COMMUNITY_CHAT || '').toLowerCase();
+  const common = db.meta.common && db.chats[db.meta.common] ? db.chats[db.meta.common] : null;
+  const id = C.chatNames && C.chatNames.get('nudist_community'); const community = (id && db.chats[id]) || null;
+  if (ov === 'common') return common ? [common] : [];
+  if (ov === 'community') return community ? [community] : [];
+  if (ov === 'both') return [common, community].filter(Boolean);
+  return common ? [common] : community ? [community] : [];      // auto: все в «Весь Нудист», иначе клуб
+};
 
 // План публикаций на момент времени t: массив { key, kind } — чистая функция, ничего не меняет.
 function planTasks(t) {
   const out = [], d = msk(t), wd = d.getUTCDay(), h = d.getUTCHours(), day = d.toISOString().slice(0, 10);
   if (h >= Q_HOUR && h < 21) out.push({ key: 'q-' + day, kind: 'question' });
+  if (wd === 2 && h >= FACT_HOUR) out.push({ key: 'fact-' + day, kind: 'fact' });
+  if (wd === 3 && h >= POLL_HOUR) out.push({ key: 'poll-' + day, kind: 'poll' });
+  if (wd === 4 && h >= INVITE_HOUR) out.push({ key: 'invite-' + day, kind: 'invite' });
   if (wd === 5 && h >= BATTLE_HOUR && h < 23) out.push({ key: 'battle-' + day, kind: 'battle' });
+  if (wd === 6 && h >= CHALLENGE_HOUR) out.push({ key: 'ch-' + day, kind: 'challenge' });
   if (d.getUTCMonth() === 11 && d.getUTCDate() >= 1 && d.getUTCDate() <= 25 && h >= ADVENT_HOUR) out.push({ key: 'advent-' + day, kind: 'advent' });
   // анонсы стартов событий из календаря года (адвент уже покрыт ежедневным пушем)
   const seasonYear = new Date(t + MSK - 15 * DAY).getUTCFullYear();
@@ -122,6 +158,9 @@ function planTasks(t) {
   return out;
 }
 const qText = t => '❓ **Вопрос дня.** ' + QUESTIONS[dayIdx(t) % QUESTIONS.length];
+const factText = t => '🍃 **Факт дня.** ' + ((B.FACTS || [])[dayIdx(t) % (B.FACTS || ['']).length] || '');
+const inviteText = () => '🤝 **Позовите друга.** ☰ → «Позвать друзей» — отправьте ссылку тому, с кем давно хотели наладить переписку. Обоим по 100 🍃.';
+const challengeText = t => '🎯 **Субботний челлендж.** ' + CHALLENGES[dayIdx(t) % CHALLENGES.length];
 const wrapText = t => '🌙 **Итог дня.** ' + WRAPS[dayIdx(t) % WRAPS.length];
 const battleText = t => BATTLES[dayIdx(t) % BATTLES.length];
 const weekStats = (ch, t) => {
@@ -140,30 +179,39 @@ const tell = (ch, text) => { try { C.postMessage(ch, db.meta.sys, { text, silent
 
 function tick() {
   if (process.env.COMMUNITY_AUTO === 'off') return;
-  const ch = communityChat(); if (!ch || !db.meta.sys || !db.users[db.meta.sys]) return;
+  const targets = communityChats(); if (!targets.length || !db.meta.sys || !db.users[db.meta.sys]) return;
   const t = Ev.T ? Ev.T() : Date.now(); pruneMarks(t);
+  const tellAll = text => { let ok = false; for (const ch of targets) { ok = tell(ch, text) || ok; } return ok; };
   for (const task of planTasks(t)) {
     if (markGet(task.key)) continue;
     let ok = false;
-    if (task.kind === 'question') ok = tell(ch, qText(t));
-    else if (task.kind === 'wrap') ok = tell(ch, wrapText(t));
-    else if (task.kind === 'battle') { ok = tell(ch, battleText(t)); if (ok) { const since = dayMs(t) - MSK + BATTLE_HOUR * 3600e3; db.meta.community.battle = { since, day: task.key.slice(7) }; } }
-    else if (task.kind === 'advent') { const d = msk(t).getUTCDate(); ok = tell(ch, `🎁 **Адвент, день ${d}.** Окошко дня открыто: «Хаб» → «События» → «Адвент-календарь». Кто открыл — отмечайте сообщение реакцией 🎁`); }
-    else if (task.kind === 'event' && task.event) { const e = task.event; ok = tell(ch, `🎉 **Началось: ${e.e} «${e.name}».** ${e.about}\nЗадания и игру — в «Хаб» → «События».`); }
+    if (task.kind === 'question') ok = tellAll(qText(t));
+    else if (task.kind === 'fact') ok = tellAll(factText(t));
+    else if (task.kind === 'invite') ok = tellAll(inviteText());
+    else if (task.kind === 'challenge') ok = tellAll(challengeText(t));
+    else if (task.kind === 'wrap') ok = tellAll(wrapText(t));
+    else if (task.kind === 'poll') { const p = POLLS[dayIdx(t) % POLLS.length]; for (const ch of targets) { try { C.postMessage(ch, db.meta.sys, { type: 'poll', poll: { q: p.q, opts: p.opts, anon: true, votes: {} }, silent: true }, { quiet: true }); ok = true; } catch (e) { console.error('[community]', e.message); } } }
+    else if (task.kind === 'battle') { ok = tellAll(battleText(t)); if (ok) db.meta.community.battle = { since: dayMs(t) - MSK + BATTLE_HOUR * 3600e3, day: task.key.slice(7), pending: targets.map(x => x.id) }; }
+    else if (task.kind === 'advent') { const d = msk(t).getUTCDate(); ok = tellAll(`🎁 **Адвент, день ${d}.** Окошко дня открыто: «Хаб» → «События» → «Адвент-календарь». Кто открыл — отмечайте сообщение реакцией 🎁`); }
+    else if (task.kind === 'event' && task.event) { const e = task.event; ok = tellAll(`🎉 **Началось: ${e.e} «${e.name}».** ${e.about}\nЗадания и игру — в «Хаб» → «События».`); }
     else if (task.kind === 'week') {
-      const s = weekStats(ch, t); let extra = '';
-      const b = db.meta.community.battle;
-      if (b && b.since && markGet(b.day ? 'bdone-' + b.day : '') !== '1') {
-        const w = battleWinner(ch, b.since);
-        if (w) { const u = db.users[w.m.from]; u.stars = (u.stars || 0) + BATTLE_PRIZE; try { R.selfUpdate(u); } catch (e) { /* обновится при следующем действии */ } extra = `\n🖼 Мем-батл выиграл(а) **${R.uname ? R.uname(u) : (u.name || 'кто-то')}** — +${BATTLE_PRIZE} 🍃 (${w.n} ${plural(w.n, 'реакция', 'реакции', 'реакций')}).`; markSet('bdone-' + b.day, '1'); }
-        else extra = '\n🖼 Мем-батл провалился тихо — в пятницу слышим реванш.';
-        delete db.meta.community.battle;
+      ok = true;
+      for (const ch of targets) {                       // итоги и батл — отдельно для каждой цели
+        const s = weekStats(ch, t); let extra = '';
+        const b = db.meta.community.battle;
+        if (b && b.since && (b.pending || []).includes(ch.id)) {
+          const w = battleWinner(ch, b.since);
+          if (w) { const u = db.users[w.m.from]; u.stars = (u.stars || 0) + BATTLE_PRIZE; try { R.selfUpdate(u); } catch (e) { /* обновится при следующем действии */ } extra = `\n🖼 Мем-батл выиграл(а) **${R.uname ? R.uname(u) : (u.name || 'кто-то')}** — +${BATTLE_PRIZE} 🍃 (${w.n} ${plural(w.n, 'реакция', 'реакции', 'реакций')}).`; }
+          else extra = '\n🖼 Мем-батл тихо не случился — в пятницу реванш.';
+          b.pending = (b.pending || []).filter(id => id !== ch.id);
+          if (!b.pending.length) delete db.meta.community.battle;
+        }
+        if (!tell(ch, `🏁 **Итоги недели под одной крышей.**\nЗа 7 дней: **${s.n}** ${plural(s.n, 'сообщение', 'сообщения', 'сообщений')} от **${s.authors}** ${plural(s.authors, 'человека', 'людей', 'человек')}. Спасибо, что вы тут.${extra}\nДальше: завтра вопрос дня в 09:00, в среду — опрос, в пятницу — новый мем-батл.`)) ok = false;
       }
-      ok = tell(ch, `🏁 **Итоги недели в сообществе.**\nЗа 7 дней: **${s.n}** ${plural(s.n, 'сообщение', 'сообщения', 'сообщений')} от **${s.authors}** ${plural(s.authors, 'человека', 'людей', 'человек')}. Спасибо, что вы тут.${extra}\nДальше: завтра 1+ вопрос дня, пятница — новый мем-батл, декабрь — мандарины.`);
     }
     if (ok) markSet(task.key, dayStr(t), t);
   }
   // одиночный вызов save() для всех меток и призов
   try { save(); } catch (e) { console.error('[community]', e.message); }
 }
-module.exports = { tick, planTasks, QUESTIONS, WRAPS, BATTLES };
+module.exports = { tick, planTasks, QUESTIONS, WRAPS, BATTLES, POLLS, CHALLENGES };

@@ -8,7 +8,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ROOT = path.join(__dirname, '..');
 const ck = (name, ok, extra) => { if (!ok) { console.error('  ✗ ПРОВАЛ:', name, extra === undefined ? '' : String(extra).slice(0, 300)); process.exitCode = 1; } else console.log('  ✓', name); };
 const bootOnce = (dir, at) => new Promise((res, rej) => {
-  const env = { ...process.env, PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, KEEP_AWAKE: 'off', EVENTS_NOW: at };
+  const env = { ...process.env, PORT: '0', HOST: '127.0.0.1', DATA_DIR: dir, KEEP_AWAKE: 'off', EVENTS_NOW: at, COMMUNITY_CHAT: 'community' };
   for (const k of Object.keys(env)) if (/^(SUPABASE_|S3_|OWNERS|LEAF_ADMINS|TG_|YOOKASSA|NODE_ENV|SITE_URL|MOVED_TO)/.test(k)) delete env[k];
   const srv = spawn(process.execPath, [path.join(ROOT, 'server', 'boot.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; srv.stdout.on('data', d => log += d); srv.stderr.on('data', d => log += d);
@@ -38,7 +38,7 @@ const dbOf = dir => JSON.parse(fs.readFileSync(path.join(dir, 'db.json'), 'utf8'
   fs.rmSync(dir, { recursive: true, force: true });
   const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'nudist-comm2-'));
   console.log('База (полная):', dir2);
-  const env1 = { ...process.env, PORT: '39917', HOST: '127.0.0.1', DATA_DIR: dir2, KEEP_AWAKE: 'off', EVENTS_NOW: '2026-11-20T14:30:00+00:00' };
+  const env1 = { ...process.env, PORT: '39917', HOST: '127.0.0.1', DATA_DIR: dir2, KEEP_AWAKE: 'off', EVENTS_NOW: '2026-11-20T14:30:00+00:00', COMMUNITY_CHAT: 'community' };
   for (const k of Object.keys(env1)) if (/^(SUPABASE_|S3_|OWNERS|LEAF_ADMINS|TG_|YOOKASSA|NODE_ENV|SITE_URL|MOVED_TO)/.test(k)) delete env1[k];
   const srv1 = spawn(process.execPath, [path.join(ROOT, 'server', 'boot.js')], { env: env1, stdio: ['ignore', 'pipe', 'pipe'] });
   let log1 = ''; srv1.stdout.on('data', d => log1 += d); srv1.stderr.on('data', d => log1 += d);
@@ -71,7 +71,7 @@ const dbOf = dir => JSON.parse(fs.readFileSync(path.join(dir, 'db.json'), 'utf8'
   ck('воскресенье: победителю начислены 50 🍃 (было 500 стартовых)', winnerRec.stars === 550, winnerRec.stars);
   const marks3 = (d3.meta.community && d3.meta.community.marks) || {};
   ck('воскресенье: метка итогов записана', Object.keys(marks3).some(k => k.startsWith('week-')));
-  ck('воскресенье: метка вручения батла записана', Object.keys(marks3).some(k => k.startsWith('bdone-')));
+  ck('воскресенье: батл доведён до конца и выгружен (pending пуст)', !d3.meta.community.battle);
   if (process.exitCode) console.log('--- журнал фазы 2 (хвост) ---\n' + log2.slice(-800));
   fs.rmSync(dir, { recursive: true, force: true }); fs.rmSync(dir2, { recursive: true, force: true });
   console.log(process.exitCode ? '[community-e2e] ПРОВАЛЕНО' : '[community-e2e] всё работает');
