@@ -177,7 +177,7 @@ function Auth() {
     <section class="auth-form">
       <form class="card" onSubmit=${submit}>
         <div class="tabs auth-tabs"><button type="button" class=${cx((mode === 'login' || mode === 'register' || mode === 'recover') && 'on')} onClick=${() => sw('login')}>Username</button><button type="button" class=${cx(mode === 'qr' && 'on')} onClick=${() => sw('qr')}>QR-код</button></div>
-        ${ref && html`<div class="ref-note"><${Icon} n="gift" s=${18} /><span>Вас зовёт <b>@${ref}</b>. Зарегистрируйтесь — и вы сразу окажетесь у него в контактах, а обоим дадут по 100 🍃.</span></div>`}
+        ${ref && html`<div class="ref-note"><${Icon} n="gift" s=${18} /><span>Вас зовёт <b>@${ref}</b>. Зарегистрируйтесь — и вы сразу окажетесь у него в контактах, а обоим дадут по 100<${Icon} n="leaf" s=${12} cls="tx-leaf" />.</span></div>`}
         ${mode === 'qr' ? html`<${QrLogin} onToken=${t => done({ token: t })} />` : html`
           <h2>${mode === 'register' ? 'Регистрация' : mode === 'recover' ? 'Восстановление доступа' : 'С возвращением'}</h2>
           ${(mode === 'login' || mode === 'register' || mode === 'recover') && html`

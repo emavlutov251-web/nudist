@@ -250,7 +250,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const onPC = () => { const d = drag.current; drag.current = null; if (d && d.on) resetRow(); };
   if (m.type === 'service' && m.present) return html`<${GiftCard} m=${m} />`;
   if (m.type === 'service' && m.gift) { const mine = m.from === S.me.id, who = userName(S.users[m.from]); return html`<div class="leafgift" data-mid=${m.id}><div class=${cx('lg-card', mine && 'mine')}>
-    <span class="lg-e" aria-hidden="true">🍃</span><div class="lg-m"><b>${mine ? '−' : '+'}${fmtNum(m.gift)} ${plural(m.gift, ['листик', 'листика', 'листиков'])}</b><span>${mine ? 'Вы поделились листиками' : who + ' делится с вами'} · ${fmtTime(m.ts)}</span>${m.note && html`<q>${m.note}</q>`}</div>
+    <span class="lg-e" aria-hidden="true"><${Icon} n="leaf" s=${17} /></span><div class="lg-m"><b>${mine ? '−' : '+'}${fmtNum(m.gift)} ${plural(m.gift, ['листик', 'листика', 'листиков'])}</b><span>${mine ? 'Вы поделились листиками' : who + ' делится с вами'} · ${fmtTime(m.ts)}</span>${m.note && html`<q>${m.note}</q>`}</div>
     ${!mine && S.flags.stars && html`<button class="btn sm" onClick=${() => shareLeaves(m.from)}>Ответить тем же</button>`}</div></div>`; }
   if (m.type === 'service') return html`<div class="svc" data-mid=${m.id}><span>${svcText(m)}</span></div>`;
   const chan = m.as === 'chan', out = mine && !flat && !chan && chat.type !== 'channel';
@@ -291,7 +291,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
       ${m.lobby && html`<${LobbyCard} m=${m} chat=${chat} />`}
       ${m.cap && html`<${CapCard} m=${m} chat=${chat} />`}
       ${m.ask && m.from !== S.me.id && html`<div class="bub-ask">${m.answer && html`<p>${m.answer.text}</p>`}<button class="btn sm ghost" onClick=${ev => { ev.stopPropagation(); answerAsk({ id: m.id, text: String(m.text || '').replace(/^🍃 \*\*Анонимный вопрос\*\*\n\n/, ''), answer: m.answer && m.answer.text }); }}><${Icon} n=${m.answer ? 'pencil' : 'reply'} s=${14} /> ${m.answer ? 'Изменить ответ' : 'Ответить в историях'}</button></div>`}
-      ${m.tips > 0 && html`<div class="tipchip" title=${`Чаевые автору: ${m.tipc || 1} раз`}>💰 ${m.tips} 🍃</div>`}
+      ${m.tips > 0 && html`<div class="tipchip" title=${`Чаевые автору: ${m.tipc || 1} раз`}><${Icon} n="coins" s=${13} /> ${m.tips} <${Icon} n="leaf" s=${12} /></div>`}
       ${canThread && html`<button class="thr" onClick=${e => { e.stopPropagation(); openChat(chat.id, { thread: m.id, keepServer: true }); }}><${Icon} n="message-square-text" s=${15} /> ${m.tcount ? `${m.tcount} ${chat.type === 'channel' ? plural(m.tcount, ['комментарий', 'комментария', 'комментариев']) : plural(m.tcount, ['ответ', 'ответа', 'ответов'])}` : 'Прокомментировать'}<${Icon} n="chevron-right" s=${15} /></button>`}
       ${m.failed && html`<button class="retry" onClick=${() => retryMsg(chat.id, m)}><${Icon} n="circle-alert" s=${14} /> Не отправлено: ${m.failed}. Повторить</button>`}
     </div>

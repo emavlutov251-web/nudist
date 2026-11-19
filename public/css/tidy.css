@@ -227,3 +227,48 @@ button.col-i.gi { font: inherit; color: inherit; cursor: pointer; } button.col-i
 .cap-row, .ord { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); } .cap-row > span, .ord > span { min-width: 0; display: flex; flex-direction: column; } .cap-row small, .ord small { color: var(--ink2); font-size: .8em; } .cap-row b, .ord b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .orders { margin-bottom: 8px; } .ord em { flex: none; font-style: normal; font-size: .88em; font-variant-numeric: tabular-nums; }
 .rec-list { display: flex; flex-direction: column; gap: 2px; } .rec-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 10px; } .rec-row.me { background: color-mix(in srgb, var(--accent) 14%, transparent); } .rec-row i { flex: none; width: 20px; text-align: center; font-style: normal; color: var(--ink2); font-variant-numeric: tabular-nums; } .rec-row b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .rec-row em { flex: none; font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ───── Свайп-ответ по сообщению: корень сообщения отслеживает горизонтальный жест, пузырь плавно уезжает вправо */
+.msg { --sw: 0; touch-action: pan-y; }
+.msg .bubble { transform: translateX(calc(var(--sw, 0) * 1px)); transition: transform .24s var(--ease); will-change: transform; }
+.msg.swiping .bubble { transition: none; }
+.msg-swipe { position: absolute; left: 2px; top: 50%; z-index: 0; width: 34px; height: 34px; margin-top: -17px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-ink, #fff); box-shadow: var(--shadow); opacity: 0; transform: scale(.4); transition: opacity .14s linear, transform .18s var(--ease); pointer-events: none; }
+.msg .msg-swipe { opacity: calc(min(var(--sw, 0) / 60, 1)); transform: scale(calc(.4 + min(var(--sw, 0) / 60, 1) * .6)); }
+.msg.can .msg-swipe { background: var(--leaf); color: #062e18; }
+.msg.out .msg-swipe { left: auto; right: 2px; }
+
+/* ───── Плавные анимации на всё: нажатия, наведения, появление сообщений */
+.btn, .ib, .chip, .mi, .ci, .gs-i, .gift-cell, .gmk-e, .gmk-i, .rxs button, .thr, .txt-more, .menu .mi, .nav, .hub-tabs button, .app-tile, .em-grid button, .pick-list .li, .row-item, .list-item, .qa, .gift-cell .gc-e { transition: transform .16s var(--ease), box-shadow .22s var(--ease), background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease), opacity .18s var(--ease), filter .2s var(--ease); }
+.btn:active:not(:disabled), .ib:active:not(:disabled), .chip:active, .mi:active:not(:disabled), .ci:active, .ib:active, .em-grid button:active, .hub-tabs button:active { transform: scale(.96); }
+.btn { box-shadow: 0 1px 2px rgba(13, 34, 22, .16); }
+.btn:hover:not(:disabled) { box-shadow: 0 4px 14px rgba(13, 34, 22, .22); transform: translateY(-1px); }
+.btn:active:not(:disabled) { box-shadow: 0 1px 2px rgba(13, 34, 22, .16); transform: translateY(0) scale(.965); }
+.btn.ghost { box-shadow: none; } .btn.ghost:hover { box-shadow: 0 2px 10px rgba(13, 34, 22, .12); }
+.gift-cell:hover:not(:disabled), .gmk-e:hover, .gmk-i:hover, .gs-i:hover, .app-tile:hover, .pick-list .li:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow); }
+.gift-cell:active:not(:disabled), .gs-i:active, .app-tile:active { transform: translateY(0) scale(.97); }
+.ic { transition: transform .22s var(--ease), opacity .18s var(--ease), color .18s var(--ease); }
+@keyframes msg-in { from { opacity: 0; transform: translateY(7px) scale(.97); } }
+.msg { animation: msg-in .26s var(--ease) both; }
+.modal { animation: pop .22s var(--ease); }
+.nice-toggle, .check input, .toggle input { transition: all .2s var(--ease); }
+.fld input, .fld select, .fld textarea { transition: border-color .18s var(--ease), box-shadow .18s var(--ease), background .18s var(--ease); }
+.fld input:focus, .fld select:focus, .fld textarea:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+::selection { background: color-mix(in srgb, var(--leaf) 32%, transparent); }
+
+/* ───── Текст и кнопки не вылезают за экран ни на одном пляже */
+.btn { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.txt, .txt * { overflow-wrap: anywhere; }
+code.mono, .code, .code code, pre { max-width: 100%; overflow-x: auto; }
+.msg-n, .row, .modal-f, .c-row, .fld { min-width: 0; }
+.modal-f .btn { flex: 0 1 auto; }
+.mi span, .row-item, .pick-list .li span, .menu .mi span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.h1, .h2, h1, h2, h3 { overflow-wrap: anywhere; }
+.modal, .menu, .toast { max-width: calc(100vw - 16px); }
+.att { max-width: 100%; } .att img, .lp, .yt { max-width: 100%; }
+.txt a, .lp b, .lp span { max-width: 100%; }
+.bubble { min-width: 0; }
+
+/* Оверфлоу-hold: длинные слова и иконки не ломают вёрстку */
+.gift-art, .ev-art, .mi-ic, .gc-art, .pres-art { max-width: 100%; }
+.gc-n, .gv-no, .pres-s, .gv-ask, .gmk-i b, .gmk-i small { overflow-wrap: anywhere; }
+.tx-leaf { vertical-align: -0.16em; }

@@ -2,13 +2,14 @@
 import { ready, share, $, store, earn, result, live } from '/miniapps/kit.js';
 import { leafy, item } from '/miniapps/art.js';
 import { stage, loop, text, rnd, pick, clamp, dist, sticks, drawStick, axis } from '/miniapps/game.js';
+import { MI } from '/miniapps/mini-icons.js';
 const W = 360, H = 520, cv = $('#cv'), { ctx, pos } = stage(cv, W, H), [mv, aim] = sticks(cv, pos, [p => p.x < W / 2, p => p.x >= W / 2]);
 const KIND = { kom: { e: 'mosquito', hp: 1, sp: 58, r: 10 }, ovod: { e: 'fly', hp: 3, sp: 36, r: 13 }, osa: { e: 'wasp', hp: 2, sp: 44, r: 11, shoot: true }, boss: { e: 'beetle', hp: 26, sp: 26, r: 24, boss: true } };
 let G = null, mouse = null;
 cv.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') mouse = pos(e); }); cv.addEventListener('pointerleave', () => { mouse = null; });      // мышь — прицел; у пальца прицел свой, правым джойстиком
 function reset() { G = { p: { x: W / 2, y: H / 2, hp: 5, inv: 0, cd: 0, rapid: 0, dir: -Math.PI / 2 }, foes: [], shots: [], stings: [], drops: [], fx: [], wave: 0, queue: [], spawn: 0, score: 0, over: false, pause: 1.2 }; window.__g = G; hud(); }
 function nextWave() { G.wave++; const n = G.wave, q = []; for (let i = 0; i < 4 + n * 2; i++) q.push(n > 2 && Math.random() < .25 ? 'ovod' : n > 3 && Math.random() < .22 ? 'osa' : 'kom'); if (n % 5 === 0) q.push('boss'); G.queue = q; G.spawn = 0; G.banner = 1.6; if (n === 6) earn('w5'); if (n === 11) earn('w10'); hud(); }
-function hud() { $('#hp').textContent = '❤️'.repeat(Math.max(0, G.p.hp)) + '🖤'.repeat(Math.max(0, 5 - G.p.hp)); $('#wave').textContent = Math.max(1, G.wave); $('#score').textContent = G.score; }
+function hud() { $('#hp').innerHTML = MI.heart.repeat(Math.max(0, G.p.hp)) + MI.heartOff.repeat(Math.max(0, 5 - G.p.hp)); $('#wave').textContent = Math.max(1, G.wave); $('#score').textContent = G.score; }
 function edge() { const s = Math.floor(Math.random() * 4); return s === 0 ? { x: rnd(0, W), y: -20 } : s === 1 ? { x: W + 20, y: rnd(0, H) } : s === 2 ? { x: rnd(0, W), y: H + 20 } : { x: -20, y: rnd(0, H) }; }
 function hurt() { const p = G.p; if (p.inv > 0) return; p.hp--; p.inv = 1.1; G.fx.push({ x: p.x, y: p.y, t: .4, e: 'ouch' }); hud(); if (p.hp <= 0) end(); }
 function step(dt) {
@@ -32,7 +33,7 @@ function step(dt) {
   }
   if (G) { for (const f of G.fx) f.t -= dt; G.fx = G.fx.filter(f => f.t > 0); } draw();
 }
-function end() { G.over = true; result(G.wave); const best = Math.max(store.get('shooter.best', 0), G.score); store.set('shooter.best', best); $('#ovE').textContent = '🩹'; $('#ovT').textContent = 'Закусали'; $('#ovP').textContent = `Волна ${G.wave}, сбито: ${G.score}. Рекорд: ${best}.`; $('#go').textContent = 'Ещё раз'; $('#share').hidden = false; $('#ov').hidden = false; }
+function end() { G.over = true; result(G.wave); const best = Math.max(store.get('shooter.best', 0), G.score); store.set('shooter.best', best); $('#ovE').innerHTML = MI.bandage; $('#ovT').textContent = 'Закусали'; $('#ovP').textContent = `Волна ${G.wave}, сбито: ${G.score}. Рекорд: ${best}.`; $('#go').textContent = 'Ещё раз'; $('#share').hidden = false; $('#ov').hidden = false; }
 function draw() {
   ctx.fillStyle = '#e9d6a3'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#dfc98f'; for (let i = 0; i < 40; i++) ctx.fillRect((i * 97) % W, (i * 61) % H, 5, 3); ctx.fillStyle = '#58b7e0'; ctx.fillRect(0, 0, W, 26); ctx.fillStyle = '#8fd3ee'; ctx.fillRect(0, 22, W, 6); item(ctx, 'parasol', 44, 92, 18, performance.now() / 1000); item(ctx, 'palm', 318, 430, 20, performance.now() / 1000);
   if (!G) return; const p = G.p;
@@ -47,5 +48,8 @@ function draw() {
 }
 $('#go').onclick = () => { reset(); $('#ov').hidden = true; };
 $('#share').onclick = () => share(`🦟 Комариный спецназ: дошёл до волны ${G.wave}, сбил ${G.score}. Рекорд: ${store.get('shooter.best', 0)}. Кто больше?`);
+$('#hp').innerHTML = MI.heart.repeat(5);
+const sc = document.querySelector('.score-ic'); if (sc) sc.insertAdjacentHTML('afterbegin', MI.mosquito);
+const ovE = $('#ovE'); if (ovE && !ovE.innerHTML) ovE.innerHTML = MI.mosquito;
 live(() => (G ? G.wave : 0));
 ready(); loop(step);

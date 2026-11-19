@@ -149,7 +149,7 @@ input.share-n { font: 800 1.9em/1.2 var(--display); text-align: center; letter-s
 .leafgift { display: flex; justify-content: center; margin: 8px 0; flex: none; }
 .lg-card { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; max-width: min(92%, 420px); padding: 10px 14px; border-radius: var(--r-l); color: #fff; background: linear-gradient(150deg, #48CC82, #12733F); box-shadow: 0 4px 14px rgba(18, 115, 63, .22); }
 .lg-card.mine { background: linear-gradient(150deg, #5B6B62, #2F3B35); box-shadow: none; }
-.lg-e { font-size: 1.9em; line-height: 1; } .lg-m { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 150px; }
+.lg-e { line-height: 1; display: inline-flex; } .lg-e .ic { color: #3DB96A; } .lg-m { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 150px; }
 .lg-m b { font: 800 1.15em/1.2 var(--display); } .lg-m span { font-size: .84em; color: rgba(255, 255, 255, .86); }
 .lg-m q { margin-top: 4px; font-size: .95em; overflow-wrap: anywhere; quotes: '«' '»'; }
 .lg-card .btn { background: #fff; color: #12733F; flex: none; }
@@ -320,3 +320,19 @@ div.val-card { cursor: default; } .val-card.on { border-color: var(--ink); box-s
 /* ── люди рядом и быстрые ответы ─────────── */
 .near-list{display:flex;flex-direction:column}
 .qrep{margin:0 0 2px}
+
+/* «Рисованные» подарки (public/js/giftart.js): SVG на месте прежних эмодзи */
+.gift-art { display: inline-block; vertical-align: middle; line-height: 0; flex: none; }
+.gift-art-emoji { display: inline-block; line-height: 1; }
+.gc-art, .gmk-art { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .2)); }
+.pres-art { animation: pres-pop .55s cubic-bezier(.2, 1.4, .4, 1) both; }
+.santa-art { margin: 0 auto; }
+.gift-cell.lim .gc-art { margin-top: 6px; }
+@media (prefers-reduced-motion: reduce) { .pres-art { animation: none; } }
+
+/* Иконки событий (public/js/eventart.js) */
+.ev-art-wrap, .ev-art { display: inline-block; vertical-align: middle; }
+.ev-strip-art { margin-right: 4px; }
+.ev-stamp-art { filter: drop-shadow(0 1px 2px rgba(0,0,0,.25)); }
+.stamp:not(.got) .ev-art { filter: grayscale(1) brightness(.4); opacity: .45; }
+.stamp:not(.got) .ev-art-emoji { opacity: .35; filter: grayscale(1); }

@@ -78,7 +78,7 @@ function ShopModal({ id, tab: tab0 }) {
             <button class="shop-pv" onClick=${() => tryOn(it)} title="Примерить" aria-label=${'Примерить: ' + it.name}><${Preview} it=${it} /></button>
             <b>${it.name}</b><small class="shop-r">${RARITY[it.tier]}${it.count ? ` · ${it.count} шт.` : ''}</small>
             ${mine ? html`<button class=${cx('btn sm', onNow ? 'ghost' : '')} disabled=${busy || it.kind === 'stickers'} onClick=${() => wear(it)}>${it.kind === 'stickers' ? 'В панели стикеров' : onNow ? (it.kind === 'theme' ? 'Выключить' : 'Снять') : (it.kind === 'theme' ? 'Включить' : 'Надеть')}</button>${!it.owned && html`<small class="shop-inc">входит в тариф</small>`}`
-              : it.tier === 'season' ? html`<button class="btn sm ghost" onClick=${() => setTab('season')}>В пропуске сезона</button>` : html`<button class="btn sm" disabled=${busy} onClick=${() => buy(it)}>${it.off ? html`<s>${num(it.base)}</s> ` : ''}${num(it.price)} 🍃</button>`}
+              : it.tier === 'season' ? html`<button class="btn sm ghost" onClick=${() => setTab('season')}>В пропуске сезона</button>` : html`<button class="btn sm" disabled=${busy} onClick=${() => buy(it)}>${it.off ? html`<s>${num(it.base)}</s> ` : ''}${num(it.price)} <${Icon} n="leaf" s=${13} cls="tx-leaf" /></button>`}
             <div class="shop-links"><a onClick=${() => tryOn(it)}>Примерить</a>${canGift(it) && html`<a onClick=${() => gift(it)}>Подарить</a>`}</div>
           </div>`; };
   const buyPlanLeaves = async p => {
@@ -113,7 +113,7 @@ function ShopModal({ id, tab: tab0 }) {
   const TABS = [['cosmetics', 'Украшения'], ['plans', 'Подписка'], ['bundles', 'Наборы'], ['leaves', 'Листики'], ['season', 'Сезон'], ['gifts', 'Подарки']];
   const byName = idx => (d.items.find(i => i.id === idx) || {}).name;
   return html`<${Modal} id=${id} title="Магазин" icon="store" wide cls="shop">
-    <div class="shop-top"><span class="shop-bal"><b>${num(me.stars || 0)} 🍃</b>${me.tier && html`<i class=${'shop-tier t-' + me.tier}>${TIER[me.tier]}${me.trialUntil && !me.paidTier ? ' · пробный' : ''}</i>`}</span>
+    <div class="shop-top"><span class="shop-bal"><b>${num(me.stars || 0)}<${Icon} n="leaf" s=${17} cls="tx-leaf" /></b>${me.tier && html`<i class=${'shop-tier t-' + me.tier}>${TIER[me.tier]}${me.trialUntil && !me.paidTier ? ' · пробный' : ''}</i>`}</span>
       <div class="shop-tabs" role="tablist">${TABS.map(([k, l]) => html`<button role="tab" aria-selected=${tab === k} class=${cx(tab === k && 'on')} onClick=${() => setTab(k)}>${l}</button>`)}</div></div>
     ${!d ? html`<${Spinner} />` : html`<div class="shop-body">
       ${tab === 'cosmetics' && html`
@@ -130,7 +130,7 @@ function ShopModal({ id, tab: tab0 }) {
           <h3><span>${p.emoji}</span> ${p.name}${me.tier === p.id && html`<i>ваш</i>`}</h3>
           <ul>${(allPerks[p.id] ? p.perks : p.perks.slice(0, 4)).map(x => html`<li><${Icon} n="check" s=${14} /> ${x}</li>`)}</ul>
           ${p.perks.length > 4 && html`<a class="shop-more" aria-expanded=${!!allPerks[p.id]} onClick=${() => setAllPerks({ ...allPerks, [p.id]: !allPerks[p.id] })}>${allPerks[p.id] ? 'Свернуть' : `Показать все ${p.perks.length}`}</a>`}
-          <div class="shop-plan-b"><button class="btn" disabled=${busy} onClick=${() => buyPlanLeaves(p)}>${p.off ? html`<s>${num(p.full)}</s> ` : ''}${num(p.stars)} 🍃</button><button class="btn ghost" onClick=${() => buyItem('plan_' + p.id)}>${p.rub} ₽</button></div>${p.off > 0 && html`<i class="shop-save">продление за листики −${p.off} % до конца срока</i>`}
+          <div class="shop-plan-b"><button class="btn" disabled=${busy} onClick=${() => buyPlanLeaves(p)}>${p.off ? html`<s>${num(p.full)}</s> ` : ''}${num(p.stars)} <${Icon} n="leaf" s=${13} cls="tx-leaf" /></button><button class="btn ghost" onClick=${() => buyItem('plan_' + p.id)}>${p.rub} ₽</button></div>${p.off > 0 && html`<i class="shop-save">продление за листики −${p.off} % до конца срока</i>`}
           <a class="shop-gift" onClick=${() => giftPlan(p)}><${Icon} n="gift" s=${14} /> Подарить другу</a>
           <small>${p.days} дней, разовый платёж</small></div>`)}</div>
         <p class="hint">Тот же тариф продлевает срок. Если взять тариф выше, остаток прежнего пересчитается в дни нового по цене — оплаченное не сгорает. Автопродления нет.</p>`}
@@ -138,10 +138,10 @@ function ShopModal({ id, tab: tab0 }) {
           <h3><span>${b.emoji}</span> ${b.name}</h3>
           <div class="bn-pv">${b.items.map(i => d.items.find(x => x.id === i)).filter(Boolean).map(x => html`<button key=${x.id} title=${'Примерить: ' + x.name} onClick=${() => tryOn(x)}><${Preview} it=${x} /></button>`)}</div>
           <p>${b.items.map(byName).join(' · ')}</p>
-          ${b.fresh ? html`<div class="shop-plan-b"><button class="btn" disabled=${busy} onClick=${() => buyBundle(b)}>${b.price < b.full ? html`<s>${num(b.full)}</s> ` : ''}${num(b.price)} 🍃</button>${b.price < b.full && html`<i class="shop-save">выгода ${Math.round(100 - b.price * 100 / b.full)} %</i>`}</div>` : html`<small class="shop-inc">всё уже есть</small>`}
+          ${b.fresh ? html`<div class="shop-plan-b"><button class="btn" disabled=${busy} onClick=${() => buyBundle(b)}>${b.price < b.full ? html`<s>${num(b.full)}</s> ` : ''}${num(b.price)} <${Icon} n="leaf" s=${13} cls="tx-leaf" /></button>${b.price < b.full && html`<i class="shop-save">выгода ${Math.round(100 - b.price * 100 / b.full)} %</i>`}</div>` : html`<small class="shop-inc">всё уже есть</small>`}
         </div>`)}</div><p class="hint">Вещи из набора остаются навсегда. За то, что у вас уже есть, второй раз не берём.</p>`}
       ${tab === 'leaves' && html`
-        <div class="shop-packs">${d.packs.map(p => { const best = p.bonus > 0 && p.bonus === Math.max(...d.packs.map(x => x.bonus)); return html`<button class=${cx('shop-pack', best && 'best')} key=${p.id} onClick=${() => buyItem(p.id)}>${best && html`<em>выгоднее всего</em>`}<b>${num(p.stars)} 🍃</b><span>${p.rub} ₽</span>${p.bonus > 0 && html`<i title="Листиков за рубль больше, чем в самом маленьком наборе">+${p.bonus} %</i>`}</button>`; })}</div>
+        <div class="shop-packs">${d.packs.map(p => { const best = p.bonus > 0 && p.bonus === Math.max(...d.packs.map(x => x.bonus)); return html`<button class=${cx('shop-pack', best && 'best')} key=${p.id} onClick=${() => buyItem(p.id)}>${best && html`<em>выгоднее всего</em>`}<b>${num(p.stars)}<${Icon} n="leaf" s=${13} cls="tx-leaf" /></b><span>${p.rub} ₽</span>${p.bonus > 0 && html`<i title="Листиков за рубль больше, чем в самом маленьком наборе">+${p.bonus} %</i>`}</button>`; })}</div>
         <p class="hint">Оплата через ЮKassa: карты, СБП. Листики тратятся только внутри «Нудиста» и обратно на рубли не меняются. <a href="/pay" target="_blank" rel="noopener">Цены и условия</a> · <a href="/offer" target="_blank" rel="noopener">Оферта</a></p>
         <${Orders} />
         <h4 class="shop-h">Бесплатно</h4>
@@ -151,7 +151,7 @@ function ShopModal({ id, tab: tab0 }) {
         <div class="pass-h"><div class="pass-l"><b>Уровень ${season.pass.level}</b><small>из ${season.pass.levels}</small></div>
           <div class="pass-x"><div class="st-bar"><i style=${`width:${season.pass.level >= season.pass.levels ? 100 : season.pass.xp % season.pass.per}%`}></i></div><small>${season.pass.level >= season.pass.levels ? 'пропуск пройден' : `${season.pass.xp % season.pass.per} из ${season.pass.per} опыта до следующего уровня`}</small></div>
           ${season.pass.ready > 0 && html`<button class="btn sm" onClick=${() => claimPass()}>Забрать всё</button>`}</div>
-        ${season.pass.premium ? html`<p class="shop-note">Премиум-дорожка открыта${season.pass.auto ? ' — входит в тариф Max' : ''}.</p>` : html`<div class="shop-trial"><div><b>Премиум-дорожка</b><small>Вторая награда на каждом уровне: листики, четыре сезонных украшения и 3 дня Pro. В тарифе Max открыта бесплатно.</small></div><button class="btn" onClick=${buyPass}>${num(season.pass.price)} 🍃</button></div>`}
+        ${season.pass.premium ? html`<p class="shop-note">Премиум-дорожка открыта${season.pass.auto ? ' — входит в тариф Max' : ''}.</p>` : html`<div class="shop-trial"><div><b>Премиум-дорожка</b><small>Вторая награда на каждом уровне: листики, четыре сезонных украшения и 3 дня Pro. В тарифе Max открыта бесплатно.</small></div><button class="btn" onClick=${buyPass}>${num(season.pass.price)}<${Icon} n="leaf" s=${13} cls="tx-leaf" /></button></div>`}
         <div class="pass-t" role="list">${season.pass.track.map(t => { const open = t.lvl <= season.pass.level; return html`<div role="listitem" class=${cx('pass-r', open && 'open', t.lvl % 10 === 0 && 'big')} key=${t.lvl}>
           <b class="pass-n">${t.lvl}</b>
           ${t.gotF ? html`<span class="pass-c got"><${Icon} n="check" s=${13} /> ${rw(t.free)}</span>` : html`<button class="pass-c" disabled=${!open} onClick=${() => claimPass(t.lvl, false)}>${rw(t.free)}</button>`}
@@ -162,7 +162,7 @@ function ShopModal({ id, tab: tab0 }) {
         <p class="shop-note">Сезон — это месяц. Задания считаются сами, награду забираете кнопкой. До конца сезона ${Math.max(1, Math.ceil((season.end - Date.now()) / 864e5))} дн.${season.mult > 1 ? ` С вашим тарифом награды ×${String(season.mult).replace('.', ',')}.` : ' С тарифом Pro награды в полтора раза больше, с Max — вдвое.'}</p>
         <div class="shop-tasks">${season.tasks.map(t => html`<div class=${cx('shop-task', t.done && 'done', t.claimed && 'got')} key=${t.id}>
           <div class="st-m"><b>${t.text}</b><div class="st-bar"><i style=${`width:${Math.round(t.progress * 100 / t.n)}%`}></i></div><small>${num(t.progress)} из ${num(t.n)}</small></div>
-          ${t.claimed ? html`<span class="st-ok"><${Icon} n="check" s=${16} /> получено</span>` : html`<button class="btn sm" disabled=${!t.done} onClick=${() => claim(t)}>+${num(t.stars)} 🍃</button>`}</div>`)}</div>
+          ${t.claimed ? html`<span class="st-ok"><${Icon} n="check" s=${16} /> получено</span>` : html`<button class="btn sm" disabled=${!t.done} onClick=${() => claim(t)}>+${num(t.stars)}<${Icon} n="leaf" s=${13} cls="tx-leaf" /></button>`}</div>`)}</div>
         <p class="hint">В зачёт идёт не больше 100 сообщений и 40 реакций в день, переписка с ботами не считается — так задания не превращаются в спам.</p>`)}
     </div>`}<//>`;
 }
@@ -174,8 +174,8 @@ function TipDlg({ id, chat, m }) {
   const [T, setT] = useState(TIP); useEffect(() => { rpc('tip.info').then(r => { Object.assign(TIP, r); setT({ ...TIP }); }).catch(() => {}); }, []);
   const [n, setN] = useState(50), [busy, setBusy] = useState(false), u = S.users[m.from] || {}, have = S.me.stars || 0, v = Math.floor(Number(n) || 0), fee = Math.ceil(v * T.fee / 100), pct = T.fee;
   const send = async () => { if (busy) return; setBusy(true); try { const r = await rpc('tip.send', { chat: chat.id, id: m.id, n: v }); toast(`Чаевые отправлены: ${userName(u)} получит ${num(r.got)} 🍃`); sfx('coin'); closeModal(id); } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); } };
-  return html`<${Modal} id=${id} title="Чаевые автору" icon="coins" cls="small" footer=${html`<button class="btn ghost" onClick=${() => closeModal(id)}>Отмена</button><button class="btn" disabled=${busy || v < T.min || v > T.max || v > have} onClick=${send}>Отправить ${num(v)} 🍃</button>`}>
-    <div class="gift-to"><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${36} /><span>Поддержать: <b>${userName(u)}</b></span><em>у вас ${num(have)} 🍃</em></div>
+  return html`<${Modal} id=${id} title="Чаевые автору" icon="coins" cls="small" footer=${html`<button class="btn ghost" onClick=${() => closeModal(id)}>Отмена</button><button class="btn" disabled=${busy || v < T.min || v > T.max || v > have} onClick=${send}>Отправить ${num(v)}<${Icon} n="leaf" s=${13} cls="tx-leaf" /></button>`}>
+    <div class="gift-to"><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${36} /><span>Поддержать: <b>${userName(u)}</b></span><em>у вас ${num(have)}<${Icon} n="leaf" s=${12} cls="tx-leaf" /></em></div>
     <div class="tip-a">${T.amounts.map(x => html`<button class=${cx(v === x && 'on')} onClick=${() => setN(x)}>${num(x)}</button>`)}</div>
     <label class="fld"><span>Своя сумма</span><input type="number" min=${T.min} max=${T.max} value=${n} onInput=${e => setN(e.target.value)} /></label>
     <p class=${cx('hint', v > have && 'err')}>${v > have ? `Не хватает ${num(v - have)} 🍃.` : v < T.min ? `Чаевые — от ${T.min} 🍃.` : v > T.max ? `Не больше ${num(T.max)} 🍃 за раз.` : `Автор получит ${num(v - fee)} 🍃, комиссия ${String(pct).replace('.', ',')} % — ${num(fee)} 🍃. На сообщении появится отметка 💰, в чат ничего не напишется.`}</p><//>`;
@@ -193,7 +193,7 @@ function TipTop() {
   useEffect(() => { rpc('tip.top').then(r => { for (const k in r.users) S.users[k] = { ...S.users[k], ...r.users[k] }; setD(r); }).catch(() => setD({ list: [] })); }, []);
   if (!d) return null;
   return html`<h4 class="shop-h">Чаевые: кого поддержали в этом месяце</h4>
-    ${d.list.length ? html`<div class="gmk-list">${d.list.map((x, i) => { const u = S.users[x.u] || {}; return html`<div class="gmk-i" key=${x.u}><b class="tip-n">${i + 1}</b><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${32} /><div><b><${Nm} u=${u} /></b><small>${x.c} раз</small></div><span class="tip-s">${num(x.n)} 🍃</span></div>`; })}</div>` : html`<p class="dim">Пока никого. Чаевые оставляются из меню сообщения: «Чаевые автору».</p>`}`;
+    ${d.list.length ? html`<div class="gmk-list">${d.list.map((x, i) => { const u = S.users[x.u] || {}; return html`<div class="gmk-i" key=${x.u}><b class="tip-n">${i + 1}</b><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${32} /><div><b><${Nm} u=${u} /></b><small>${x.c} раз</small></div><span class="tip-s">${num(x.n)}<${Icon} n="leaf" s=${12} cls="tx-leaf" /></span></div>`; })}</div>` : html`<p class="dim">Пока никого. Чаевые оставляются из меню сообщения: «Чаевые автору».</p>`}`;
 }
 on('tip', d => { toast(`${d.name} оставил(а) вам чаевые: +${num(d.n)} 🍃`); sfx('coin'); });
 on('season.level', d => toast(`Пропуск сезона: уровень ${d.level}. Награда ждёт в магазине, вкладка «Сезон».`));
