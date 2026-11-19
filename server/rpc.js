@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const C = require('./core');
 const A = require('./auth');
 const { db, save, now, id, token, fail, need, str, int, emit, st, can, isMember, membersOf, chatView, msgView, pubUser, postMessage, service, audit, isUpload, today } = C;
+const Funnel = require('./funnel');
 
 const H = {};
 const user = c => db.users[c.uid];
@@ -651,6 +652,7 @@ H['msg.send'] = (c, p) => {
     return { scheduled: item };
   }
   const m = postMessage(chat, c.uid, payload);
+  try { Funnel.activate(c.uid); } catch (e) { /* воронка не должна ломать отправку */ }
   if (hook.sent) { try { hook.sent(c.uid, chat, m); } catch (e) { console.warn('[shop]', e.message); } }
   return { msg: msgView(m, c.uid), tmp: p.tmp };
 };

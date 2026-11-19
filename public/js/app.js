@@ -13,7 +13,7 @@ import { hashFromHistory } from './back.js';
 import './fluent.js';
 import { Hub, openHub, openApps } from './hub.js';
 import { Dock, foldDock } from './dock.js';
-import { takeRef, pendingRef, clearRef, offerSiteUpdate, StartCards } from './growth.js';
+import { takeRef, pendingRef, clearRef, pendingUtm, clearUtm, offerSiteUpdate, StartCards } from './growth.js';
 import './i18n.js';
 takeRef();
 // Офлайн-кеш оболочки: со второго захода приложение открывается с диска. Вышла новая версия — докачается в фоне и предложит обновиться.
@@ -159,7 +159,7 @@ function Auth() {
   const submit = e => {
     e.preventDefault();
     go(async () => {
-      if (mode === 'register') { if (!agree) throw new Error('Чтобы зарегистрироваться, примите политику конфиденциальности'); if (done(await http('register', { username: f.username, password: f.password, name: f.name, agree: true, setup: f.setup || undefined, ref: pendingRef() || undefined }))) clearRef(); }
+      if (mode === 'register') { if (!agree) throw new Error('Чтобы зарегистрироваться, примите политику конфиденциальности'); if (done(await http('register', { username: f.username, password: f.password, name: f.name, agree: true, setup: f.setup || undefined, ref: pendingRef() || undefined, utm: pendingUtm() }))) { clearRef(); clearUtm(); } }
       else if (mode === 'login') { const r = await http('login', { username: f.username, password: f.password, code: f.totp || undefined }); if (!done(r) && r.need === 'totp') setStep('totp'); }
       else if (mode === 'recover') done(await http('recover', { username: f.username, code: f.rec, password: f.password }));
     });
@@ -192,7 +192,7 @@ function Auth() {
           ${cfg && cfg.tg && (mode === 'login' || mode === 'register') && html`<a class="btn big ghost tg-btn" href=${tg ? tg.url : 'https://t.me/' + cfg.tg} target="_blank" rel="noopener" onClick=${tgGo}><${Icon} n="send" s=${18} /> ${mode === 'register' ? 'Через Telegram — без пароля' : 'Войти через Telegram'}</a>`}
           ${mode === 'login' && html`<p class="auth-alt">Впервые здесь? <a onClick=${() => sw('register')}>Создать аккаунт</a> · <a onClick=${() => sw('recover')}>Забыли пароль?</a></p>`}
           ${(mode === 'login' || mode === 'register') && html`<p class="auth-alt"><a class="apk-dl" href="/nudist.apk" download="nudist.apk"><${Icon} n="download" s=${15} /> Скачать приложение для Android</a></p>`}
-          ${mode === 'register' && html`<p class="auth-alt">Уже есть аккаунт? <a onClick=${() => sw('login')}>Войти</a></p><p class="hint">${cfg && cfg.setup ? 'Сервер новый: первым регистрируется владелец, он же станет администратором. Остальные смогут зарегистрироваться после него.' : 'Номер телефона и почта не нужны.'}</p>`}
+          ${mode === 'register' && html`<p class="auth-alt">Уже есть аккаунт? <a onClick=${() => sw('login')}>Войти</a></p><p class="hint">${cfg && cfg.setup ? 'Сервер новый: первым регистрируется владелец, он же станет администратором. Остальные смогут зарегистрироваться после него.' : 'Номер и почта не нужны. 500 🍃 приветственный бонус — уже на вашем счету.'}</p>`}
           ${mode === 'recover' && html`<p class="auth-alt"><a onClick=${() => sw('login')}>Вспомнил пароль</a></p><p class="hint">Код восстановления — один из тех, что вы сохранили в «Настройки → Аккаунт». <b>Нет кода?</b> Напишите администратору: он пришлёт одноразовую ссылку для сброса. <a href="/contacts" target="_blank" rel="noopener">Как связаться</a>. Сам пароль не знаем даже мы.</p>`}`}
         <p class="auth-legal"><a href="/pay" target="_blank" rel="noopener">Цены и оплата</a> · <a href="/offer" target="_blank" rel="noopener">Оферта</a> · <a href="/contacts" target="_blank" rel="noopener">Контакты и реквизиты</a></p>
         ${S.adding && acc.length > 0 && html`<p class="auth-alt"><a onClick=${() => { S.adding = false; login(acc[0].token); }}>← Вернуться в аккаунт ${acc[0].name}</a></p>`}

@@ -175,10 +175,31 @@ function Api() {
     ${fresh && html`<div class="akey"><b>Новый ключ — сохраните сейчас:</b><code>${fresh}</code><button class="btn sm" onClick=${() => { navigator.clipboard && navigator.clipboard.writeText(fresh); toast('Скопировано'); }}>Копировать</button></div>`}
     <ul class="comps">${d.list.map(k => html`<li><i class="dot ok"></i><b>${k.name}</b><span>создан ${fmtDate(k.at)}</span><button class="btn sm danger" onClick=${async () => { if (!confirm('Отозвать ключ «' + k.name + '»?')) return; const r = await run(() => rpc('admin.apikeys', { del: k.id }), 'Ключ отозван'); if (r) setD(r); }}>Отозвать</button></li>`)}${!d.list.length && html`<li class="dim">Ключей нет.</li>`}</ul>
     <button class="btn" onClick=${async () => { const name = prompt('Название ключа:', 'grafana'); if (!name) return; const r = await run(() => rpc('admin.apikeys', { new: name })); if (r) { setFresh(r.key); setD(r); } }}><${Icon} n="key-round" s=${16} /> Выпустить ключ</button></section>
-    <section class="apanel"><h3>Как пользоваться</h3><pre>${`curl -H "Authorization: Bearer nud_…" \\\n  ${location.origin}/api/admin/stats\n\nGET /api/admin/stats    — пользователи, DAU/MAU, сообщения\nGET /api/admin/monitor  — аптайм, память, соединения\nGET /api/admin/flags    — фича-флаги`}</pre></section></div>`;
+    <section class="apanel"><h3>Как пользоваться</h3><pre>${`curl -H "Authorization: Bearer nud_…" \\\n  ${location.origin}/api/admin/stats\n\nGET /api/admin/stats    — пользователи, DAU/MAU, сообщения\nGET /api/admin/monitor  — аптайм, память, соединения\nGET /api/admin/flags    — фича-флаги\nGET /api/admin/funnel  — воронка: визит → APK → регистрация → активация`}</pre></section></div>`;
 }
 
-const TABS = [['dash', 'Сводка', 'layout-dashboard', 'viewer', Dash], ['users', 'Пользователи', 'users', 'viewer', Users], ['reports', 'Жалобы', 'flag', 'moderator', Reports], ['chats', 'Сообщества', 'messages-square', 'viewer', Chats], ['monitor', 'Мониторинг', 'activity', 'viewer', Monitor], ['flags', 'Флаги и объявления', 'toggle-right', 'viewer', Flags], ['audit', 'Журнал действий', 'scroll-text', 'admin', Audit], ['api', 'API-ключи', 'key-round', 'superadmin', Api]];
+// ───── воронка: посадочная → APK → регистрация → первое сообщение
+function FunnelC() {
+  const [d] = useLoad(() => rpc('admin.funnel'), [], 30000);
+  if (!d) return html`<${Spin} />`;
+  const t = d.totals, pct = (a, b) => b ? Math.round(a / b * 1000) / 10 + '%' : '—';
+  const K = (v, l, i) => html`<div class="kpi"><${Icon} n=${i} /><b>${v}</b><span>${l}</span></div>`;
+  return html`<div>
+    <div class="akpis">${K(num(t.visits), 'визитов на посадочную', 'smartphone')}${K(num(t.apk), 'скачиваний APK', 'download')}${K(num(t.open), 'открытий в браузере', 'arrow-right')}${K(num(t.regs), 'регистраций', 'user-plus')}${K(num(t.acts), 'первых сообщений', 'message-circle')}${K(pct(t.regs, t.visits), 'визит → регистрация', 'trending-up')}${K(pct(t.acts, t.regs), 'регистрация → активация', 'zap')}${K(num(d.referred), 'по реферальным ссылкам', 'users')}</div>
+    <div class="acols"><section class="apanel"><h3>Визиты, 30 дней</h3><${Bars} days=${d.days} k="visits" /></section>
+      <section class="apanel"><h3>Регистрации, 30 дней</h3><${Bars} days=${d.days} k="regs" cls="b3" /></section>
+      <section class="apanel"><h3>Активации, 30 дней</h3><${Bars} days=${d.days} k="acts" cls="b2" /></section></div>
+    <section class="apanel" style="margin-top:14px"><h3>Кампании</h3>
+      ${d.camps.length ? html`<div class="atable-wrap"><table class="atable"><thead><tr><th>Кампания (utm_source / medium / campaign)</th><th>Визиты</th><th>APK</th><th>Веб</th><th>Регистрации</th><th>Активации</th><th>Реф.</th><th>В→Р</th></tr></thead><tbody>
+        ${d.camps.map(c => html`<tr><td><code>${c.k}</code></td><td>${num(c.visits)}</td><td>${num(c.apk)}</td><td>${num(c.open)}</td><td><b>${num(c.regs)}</b></td><td>${num(c.acts)}</td><td>${num(c.refs)}</td><td>${c.conv === null ? '—' : c.conv + '%'}</td></tr>`)}
+      </tbody></table></div>` : html`<p class="hint">Пока пусто: метки utm_* с посадочной ещё никуда не вели трафика. Разместите в постах ссылки вида <code>/start?utm_source=t.me&utm_medium=post&utm_campaign=launch</code> — и цифры появятся здесь.</p>`}
+    </section>
+    <section class="apanel" style="margin-top:14px"><h3>Кто зовёт друзей</h3>
+      ${d.refs.length ? html`<div class="atable-wrap"><table class="atable"><thead><tr><th>Человек</th><th>Username</th><th>Приглашено</th></tr></thead><tbody>${d.refs.map(r => html`<tr><td>${r.name}</td><td>${r.username ? '@' + r.username : '—'}</td><td><b>${num(r.invited)}</b></td></tr>`)}</tbody></table></div>` : html`<p class="hint">Пока никто никого не пригласил. Доска почёта ждёт своего героя — кнопка «Позвать друзей» уже в сайдбаре.</p>`}
+    </section></div>`;
+}
+
+const TABS = [['dash', 'Сводка', 'layout-dashboard', 'viewer', Dash], ['funnel', 'Воронка', 'trending-up', 'viewer', FunnelC], ['users', 'Пользователи', 'users', 'viewer', Users], ['reports', 'Жалобы', 'flag', 'moderator', Reports], ['chats', 'Сообщества', 'messages-square', 'viewer', Chats], ['monitor', 'Мониторинг', 'activity', 'viewer', Monitor], ['flags', 'Флаги и объявления', 'toggle-right', 'viewer', Flags], ['audit', 'Журнал действий', 'scroll-text', 'admin', Audit], ['api', 'API-ключи', 'key-round', 'superadmin', Api]];
 
 function App() {
   const [st, setSt] = useState({ phase: getToken() ? 'load' : 'login' }), [tab, setTab] = useState((location.hash.slice(1) || 'dash')), [t, setT] = useState(null); const timer = useRef();
