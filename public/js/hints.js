@@ -113,6 +113,6 @@ export function appEntryHints() {
   remindNotif();
 }
 // ─── Открытие чего-либо ───
-export const chatFirstHint = () => hint('chat-first', 'Двойной щелчок по сообщению — быстрый ответ. Правая кнопка (или удержание) — меню: ответить, выбрать, удалить.', { icon: '💬', delay: 1200, per: 2, gap: 0 });
+export const chatFirstHint = () => hint('chat-first', 'Свайп вправо по сообщению — ответить. Двойной щелчок — быстрый ответ, правая кнопка — меню.', { icon: '💬', delay: 1200, per: 2, gap: 0 });
 export const hubFirstHint = () => hint('hub-first', 'Здесь живут события, музыка, мини-игры и поддержка. Обещанные призы сезонов — тоже тут.', { icon: '✨', delay: 600, per: 2, gap: 0 });
 export const shopFirstHint = () => hint('shop-first', 'Листики 🍃 тратятся на Премиум, рамки и бусты вашей группы. Ежедневный бонус — на вкладке магазина, маленькая точка внизу.', { icon: '🛍️', delay: 1400, per: 2, gap: 0, force: true });

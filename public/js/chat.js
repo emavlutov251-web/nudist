@@ -1,6 +1,19 @@
 // Окно чата: шапка, закрепы, поиск, лента сообщений, треды, форум.
 import { svcText, html, useState, useEffect, useRef, useLayoutEffect, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, Badges, cx, showMenu, closeMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtTime, fmtDay, fmtFull, fmtShort, sameDay, userName, lastSeen, kindIcon, md, copyText, confirmDlg, promptDlg, addUsers, Empty, Spinner, plural, fmtNum, fmtDur, ttlLabel, isMuted, setSetting, debounce , hitTrigger } from './lib.js';
 import { chatFirstHint } from './hints.js';
+// ─── Ответ свайпом вправо (только касание; мышью — двойной щелчок или правая кнопка) ───
+let swipeInd = null;
+const SWIPE_TRIGGER = 56, SWIPE_MAX = 84;
+const swipeIndicator = () => {
+  if (!swipeInd) {
+    swipeInd = document.createElement('div');
+    swipeInd.className = 'swipe-ind'; swipeInd.setAttribute('aria-hidden', 'true');
+    swipeInd.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M9.5 7l-6 5 6 5v-3.5h3A6.5 6.5 0 0 1 20 19v-2a8 8 0 0 0-7.5-9.5h-3Z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+    document.body.appendChild(swipeInd);
+  }
+  return swipeInd;
+};
+const SWIPE_SKIP = e => !!(e.target && e.target.closest && e.target.closest('button,a,input,textarea,select,video,audio,iframe,.ph,.voice,.ytc,.poll,.rxs,.pack-chip'));
 import { msgKey, loadHistory, openChat, closeChat, openUser, markRead, retryMsg, secretIssue, ensureKey } from './store.js';
 import { Sticker, sfx } from './fun.js';
 import { OnceMsg, Streak, answerAsk } from './growth.js';
@@ -205,6 +218,36 @@ const readMin = t => { const n = Math.max(1, Math.round(t.length / 1200)); retur
 const ytTitle = text => String(text || '').split('\n').map(l => l.replace(/https?:\/\/\S+/g, '').replace(/\*\*|__|~~|`/g, '').replace(/^(?:▶️|🔴|⚡)\s*/, '').trim()).find(Boolean) || 'Видео с YouTube';
 function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const u = S.users[m.from], mine = m.from === S.me.id, sel = S.ui.sel;
+  const rowRef = useRef(null), drag = useRef(null);
+  const onPD = e => { if (e.pointerType !== 'touch' || sel || m.tmp || SWIPE_SKIP(e)) return; drag.current = { x: e.clientX, y: e.clientY, on: false, dx: 0 }; };
+  const resetRow = () => { const el = rowRef.current; if (el) { el.classList.add('swipe-snap'); el.style.transform = ''; setTimeout(() => el.classList.remove('swipe-snap'), 220); } if (swipeInd) swipeInd.classList.remove('on'); };
+  const onPM = e => {
+    const d = drag.current; if (!d) return;
+    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    if (!d.on) {
+      if (dx > 14 && dx > Math.abs(dy) * 1.3) { d.on = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) { /* не критично */ } const el = rowRef.current; if (el) el.classList.remove('swipe-snap'); }
+      else if (Math.abs(dy) > 10) { drag.current = null; return; }
+      else return;
+    }
+    e.preventDefault();
+    d.dx = dx <= SWIPE_MAX ? dx : SWIPE_MAX + (dx - SWIPE_MAX) * 0.18;
+    const el = rowRef.current; if (el) el.style.transform = 'translateX(' + d.dx + 'px)';
+    const ind = swipeIndicator(), r = el ? el.getBoundingClientRect() : null, p = Math.min(1, Math.max(0, d.dx / SWIPE_TRIGGER));
+    ind.style.top = (r ? (r.top + r.height / 2) : e.clientY) - 22 + 'px'; ind.style.left = '12px';
+    ind.style.opacity = String(0.25 + p * 0.75); ind.style.transform = 'scale(' + (0.55 + p * 0.45) + ')';
+    ind.classList.add('on');
+  };
+  const onPU = () => {
+    const d = drag.current; drag.current = null; if (!d || !d.on) return;
+    resetRow();
+    if (d.dx >= SWIPE_TRIGGER) {
+      if (navigator.vibrate) try { navigator.vibrate(12); } catch (x) { /* без вибрации */ }
+      S.ui.reply = { m }; S.ui.edit = null; bump();
+      const swallow = ev => { ev.stopPropagation(); ev.preventDefault(); document.removeEventListener('click', swallow, true); };
+      document.addEventListener('click', swallow, true); setTimeout(() => document.removeEventListener('click', swallow, true), 450);
+    }
+  };
+  const onPC = () => { const d = drag.current; drag.current = null; if (d && d.on) resetRow(); };
   if (m.type === 'service' && m.present) return html`<${GiftCard} m=${m} />`;
   if (m.type === 'service' && m.gift) { const mine = m.from === S.me.id, who = userName(S.users[m.from]); return html`<div class="leafgift" data-mid=${m.id}><div class=${cx('lg-card', mine && 'mine')}>
     <span class="lg-e" aria-hidden="true">🍃</span><div class="lg-m"><b>${mine ? '−' : '+'}${fmtNum(m.gift)} ${plural(m.gift, ['листик', 'листика', 'листиков'])}</b><span>${mine ? 'Вы поделились листиками' : who + ' делится с вами'} · ${fmtTime(m.ts)}</span>${m.note && html`<q>${m.note}</q>`}</div>
@@ -225,7 +268,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const menu = e => { if (e.target.closest('a[href],input,textarea') && !e.shiftKey) return; msgMenu(e, m, chat, { thread, onJump }); };
   const canThread = !thread && !m.tmp && (chat.type === 'channel' || m.tcount > 0);
   const meta = html`<span class="meta">${m.sig && html`<i>${m.sig}</i>`}${m.auto && html`<i title="Автоматический ответ бизнеса">автоответ</i>`}${m.views ? html`<i title="Просмотры"><${Icon} n="eye" s=${12} /> ${fmtNum(m.views)}</i>` : ''}${m.silent && html`<${Icon} n="bell-off" s=${11} />`}${m.exp && html`<i title=${'Исчезнет ' + fmtFull(m.exp)}><${Icon} n="flame" s=${11} /></i>`}${m.edited && html`<i>изм.</i>`}<time title=${fmtFull(m.ts)}>${fmtTime(m.ts)}</time>${out && html`<${TicksInline} chat=${chat} m=${m} />`}</span>`;
-  return html`<div class=${cx('msg', out && 'out', grouped && 'grp', bare && 'bare', sel && 'selmode', sel && sel.includes(m.id) && 'sel', m.tmp && 'tmp', m.failed && 'failed', root && 'root')} data-mid=${m.id} onClick=${onClick} onContextMenu=${menu} onDblClick=${e => { if (!sel && !m.tmp && !e.target.closest('.ph,.voice,.kbd,.poll,video,a')) { S.ui.reply = { m }; S.ui.edit = null; bump(); } }}>
+  return html`<div ref=${rowRef} class=${cx('msg', out && 'out', grouped && 'grp', bare && 'bare', sel && 'selmode', sel && sel.includes(m.id) && 'sel', m.tmp && 'tmp', m.failed && 'failed', root && 'root')} data-mid=${m.id} onPointerDown=${onPD} onPointerMove=${onPM} onPointerUp=${onPU} onPointerCancel=${onPC} onClick=${onClick} onContextMenu=${menu} onDblClick=${e => { if (!sel && !m.tmp && !e.target.closest('.ph,.voice,.kbd,.poll,video,a')) { S.ui.reply = { m }; S.ui.edit = null; bump(); } }}>
     ${sel && html`<span class="msg-chk"><${Icon} n=${sel.includes(m.id) ? 'circle-check' : 'circle'} s=${20} /></span>`}
     ${(flat || (multi && !out)) && html`<span class="msg-ava">${showAva && (m.hook ? html`<span class="ava" style="width:36px;height:36px;background:var(--sea);color:#fff"><${Icon} n="webhook" s=${18} /></span>` : chan ? html`<${ChatAvatar} chat=${chat} s=${36} />` : html`<${Avatar} u=${u} src=${u && u.avatar} name=${userName(u)} color=${u ? u.color : 0} s=${36} deleted=${u && u.deleted} onClick=${() => !sel && showProfile(m.from)} />`)}${flat && grouped && html`<time>${fmtTime(m.ts)}</time>`}</span>`}
     <div class="bubble">${m.fx && !m.tmp && html`<${MsgFx} m=${m} />`}
