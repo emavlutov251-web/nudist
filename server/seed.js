@@ -98,15 +98,18 @@ function ensureGuide() {
 // Принудительно на каждом старте: даже если кто-то выключил «вступление по заявке» в приложении, дверь снова становится заявкой.
 function lockTrueFriends() {
   const id = C.chatNames && C.chatNames.get('istinnie_druzya'); const ch = id && db.chats[id]; if (!ch) return;
-  if (ch.approval === true) return;
-  ch.approval = true; save();
-  console.log('[seed] «Истинные друзья»: дверь на заявке (был мгновенный вход)');
+  let changed = false;
+  if (ch.pub !== false) { ch.pub = false; changed = true; }          // не светится в поиске и подборках, не находится по username
+  if (ch.approval !== true) { ch.approval = true; changed = true; }  // даже по ссылке — сначала заявка, без одобрения не попасть
+  if (!changed) return;
+  save();
+  console.log('[seed] «Истинные друзья»: дверь только по пригласительной ссылке и заявке');
   try { C.emitChat(ch, Object.keys(ch.members)); } catch (e) { /* рассылка мягкая */ }
 }
 function ensureTrueFriends() {
   const sys = db.meta.sys; if (!sys) return;
   if (C.chatNames.get('istinnie_druzya')) return lockTrueFriends();
-  const g = C.newChat('group', { title: 'Истинные друзья', about: 'Закрытая группа для своих. Вход только по заявке и одобрению. Здесь новости «Нудиста» до релиза и разговоры без лишних глаз.', pub: true, approval: true, perms: { send: true, invite: true }, color: 6 });
+  const g = C.newChat('group', { title: 'Истинные друзья', about: 'Закрытая группа для своих. Вход только по заявке и одобрению. Здесь новости «Нудиста» до релиза и разговоры без лишних глаз.', pub: false, approval: true, perms: { send: true, invite: true }, color: 6 });
   g.username = 'istinnie_druzya'; C.chatNames.set('istinnie_druzya', g.id);
   C.addToChat(g, sys, 'owner');
   postMessage(g, sys, { text: FRIENDS_POST }, { quiet: true });

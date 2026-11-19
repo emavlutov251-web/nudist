@@ -21,8 +21,11 @@ const wantChannel = () => process.env.COMMON_TYPE === 'channel';
 function ensure() {
   if (process.env.COMMON === 'off') return null;
   if (db.meta.common !== undefined) return db.chats[db.meta.common] || null;      // владелец удалил беседу — заново не создаём
-  const owners = [...C.OWNERS].map(i => db.users[i]).filter(human); if (!owners.length) return null;
-  const boss = owners.find(u => u.id === process.env.COMMON_OWNER) || owners[0], type = wantChannel() ? 'channel' : 'group';
+  let owners = [...C.OWNERS].map(i => db.users[i]).filter(human);
+  if (!owners.length) owners = Object.values(db.users).filter(u => u.admin === 'superadmin' && human(u)).sort((a, b) => (a.created || 0) - (b.created || 0));   // запасной вариант: первый главный админ, если в окружении нет OWNERS
+  if (!owners.length) owners = Object.values(db.users).filter(human).sort((a, b) => (a.created || 0) - (b.created || 0));                                        // совсем запасной: самый первый зарегистрированный человек
+  if (!owners.length) return null;                                                        // людей ещё нет — создадим при первой регистрации
+  const boss = (process.env.COMMON_OWNER && owners.find(u => u.id === process.env.COMMON_OWNER)) || owners[0], type = wantChannel() ? 'channel' : 'group';
   const ch = C.newChat(type, { title: String(process.env.COMMON_TITLE || 'Весь Нудист').slice(0, 100), about: String(process.env.COMMON_ABOUT || ABOUT[type]).slice(0, 500),
     pub: true, verified: true, everyone: true, color: 3, perms: type === 'group' ? { ...PERMS } : undefined });
   C.addToChat(ch, boss.id, 'owner');
