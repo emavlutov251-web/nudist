@@ -235,7 +235,7 @@ export function Composer({ chat, thread }) {
     { icon: 'wand-sparkles', label: 'Приколы', hint: 'мемы, игры, листики', sub: [
       chat.type !== 'secret' && { icon: 'wand-sparkles', label: 'Мемогенератор', hint: 'и демотиваторы', run: () => openModal(MemeModal, { onSend: p => post(p) }) },
       { icon: 'layout-grid', label: 'Приложения', hint: 'игры и утилиты', run: () => import('./hub.js').then(h => h.openApps(chat.id)) },
-      peer && !peer.bot && S.flags.stars && { emoji: '🍃', label: 'Поделиться листиками', run: () => shareLeaves(peer.id) },
+      peer && !peer.bot && S.flags.stars && { icon: 'leaf', label: 'Поделиться листиками', run: () => shareLeaves(peer.id) },
     ].filter(Boolean) },
     '-', { icon: 'clock', label: 'Отложенные сообщения', run: () => openModal(ScheduledModal, { chat }) },
     chat.type === 'dm' && peer && !peer.bot && { icon: 'timer', label: 'Капсула времени', hint: 'откроется в выбранный день', run: () => import('./calm.js').then(M => M.openCapsule(chat)) },

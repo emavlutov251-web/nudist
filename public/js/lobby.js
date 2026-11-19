@@ -53,9 +53,9 @@ async function leaveLobby() { const L = S.lobby; S.lobby = null; bump(); if (L) 
 // ───── полоска над списком чатов: приглашение или «вы в лобби». Одна строка, не окно: её можно закрыть.
 export function LobbyStrip() {
   const inv = (S.lobbyInv || []).filter(x => Date.now() - x.at < 30 * 60e3)[0], L = S.lobby;
-  if (inv) return html`<div class="lobby-strip" role="status"><span aria-hidden="true">🎮</span><span><b>${inv.fromName}</b> зовёт в «${inv.name}»</span>
+  if (inv) return html`<div class="lobby-strip" role="status"><${Icon} n="gamepad-2" s=${18} aria-hidden="true" /><span><b>${inv.fromName}</b> зовёт в «${inv.name}»</span>
     <button class="btn sm" onClick=${() => joinLobby(inv)}>Войти</button><button class="ib sm" title="Скрыть" aria-label="Скрыть" onClick=${() => { S.lobbyInv = S.lobbyInv.filter(x => x.id !== inv.id); bump(); }}><${Icon} n="x" s=${15} /></button></div>`;
-  if (L && !isOpen()) return html`<div class="lobby-strip" role="status"><span aria-hidden="true">🎮</span><span><b>Вы в лобби</b> · ${gameOf(L.app).name}</span><button class="btn sm" onClick=${show}>Вернуться</button></div>`;
+  if (L && !isOpen()) return html`<div class="lobby-strip" role="status"><${Icon} n="gamepad-2" s=${18} aria-hidden="true" /><span><b>Вы в лобби</b> · ${gameOf(L.app).name}</span><button class="btn sm" onClick=${show}>Вернуться</button></div>`;
   return null;
 }
 /** Карточка приглашения в сообщении. */

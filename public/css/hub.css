@@ -246,3 +246,26 @@ article.post footer { font-size: inherit; color: inherit; }
 
 /* Хаб и лента занимают место справа от списка чатов; на телефоне — весь экран над нижними вкладками */
 @media (max-width: 800px) { .hub { left: 0; bottom: calc(58px + env(safe-area-inset-bottom, 0px)); } }
+
+/* ───── Музыка: сортировка, фильтр по исполнителю, «альбомы» ───── */
+.mus-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mus-view button { display: inline-flex; align-items: center; gap: 6px; }
+.fld.sel-ic { flex-direction: row; align-items: center; gap: 6px; padding: 0 4px 0 9px; border: 1px solid var(--line); background: var(--card); border-radius: var(--r); min-height: 34px; color: var(--ink2); cursor: pointer; }
+.fld.sel-ic select { border: 0; background: transparent; padding: 6px 2px; font-size: .92em; max-width: 220px; color: var(--ink); }
+.fld.sel-ic select:focus { box-shadow: none; border: 0; outline: none; }
+.mus-albums { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 12px; }
+.mus-alb { display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--card); transition: border-color .12s, transform .12s; }
+.mus-alb:hover { border-color: var(--accent); transform: translateY(-2px); }
+.mus-alb-p { position: relative; flex: none; display: grid; place-items: center; border-radius: 12px; }
+.mus-alb-p .trk-o { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, .35); color: #fff; border-radius: 12px; opacity: 0; transition: opacity .12s; }
+.mus-alb-p:hover .trk-o, .mus-alb-p:focus-visible .trk-o { opacity: 1; }
+.mus-alb-m { min-width: 0; }
+.mus-alb-m b, .mus-alb-m small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mus-alb-m small { color: var(--ink2); margin: 2px 0 4px; font-variant-numeric: tabular-nums; }
+.mus-alb-m .link { font-size: .88em; }
+@media (max-width: 720px) {
+  .mus-tools { gap: 6px; }
+  .fld.sel-ic select { max-width: 150px; }
+  .mus-albums { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+  .mus-alb { padding: 10px; gap: 10px; }
+}
