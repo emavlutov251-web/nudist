@@ -1,5 +1,6 @@
 // Окно чата: шапка, закрепы, поиск, лента сообщений, треды, форум.
 import { svcText, html, useState, useEffect, useRef, useLayoutEffect, S, bump, rpc, call, toast, Icon, Avatar, ChatAvatar, Badges, cx, showMenu, closeMenu, openModal, closeModal, Modal, chatInfo, msgPreview, fmtTime, fmtDay, fmtFull, fmtShort, sameDay, userName, lastSeen, kindIcon, md, copyText, confirmDlg, promptDlg, addUsers, Empty, Spinner, plural, fmtNum, fmtDur, ttlLabel, isMuted, setSetting, debounce , hitTrigger } from './lib.js';
+import { chatFirstHint } from './hints.js';
 import { msgKey, loadHistory, openChat, closeChat, openUser, markRead, retryMsg, secretIssue, ensureKey } from './store.js';
 import { Sticker, sfx } from './fun.js';
 import { OnceMsg, Streak, answerAsk } from './growth.js';
@@ -355,6 +356,7 @@ export function Main({ chat }) {
   const voice = chat.server && (chat.kind === 'voice' || chat.kind === 'stage'), forum = chat.kind === 'forum' && !thread;
   const flat = S.settings.flat === 'auto' ? !!chat.server : !!S.settings.flat;
   useEffect(() => { if (!h.loaded && !h.loading) loadHistory(chat.id, { thread }); }, []);
+  useEffect(() => { chatFirstHint(); }, []);
   useEffect(() => {
     if (chat.type !== 'secret') return;
     const blur = () => setHid(true), focus = () => setHid(false), key = e => { if (e.key === 'PrintScreen') { setHid(true); try { navigator.clipboard.writeText('Скриншоты секретного чата — моветон.'); } catch (x) { /* нет доступа */ } toast('Скриншот? В секретном чате? Мы всё видели.', 'err'); setTimeout(() => setHid(false), 1500); } };

@@ -15,6 +15,7 @@ import { Hub, openHub, openApps } from './hub.js';
 import { Dock, foldDock } from './dock.js';
 import { takeRef, pendingRef, clearRef, pendingUtm, clearUtm, offerSiteUpdate, StartCards } from './growth.js';
 import './i18n.js';
+import { appEntryHints } from './hints.js';
 takeRef();
 // Офлайн-кеш оболочки: со второго захода приложение открывается с диска. Вышла новая версия — докачается в фоне и предложит обновиться.
 function swSetup() {
@@ -320,7 +321,7 @@ async function handleHash(first) {
   else if (p.get('join')) { history.replaceState(history.state, '', location.pathname); openModal(JoinPreview, { q: p.get('join') }); }
   else if (p.get('u')) { history.replaceState(history.state, '', location.pathname); showProfile(null, p.get('u')); }
 }
-onReady(first => handleHash(first));
+onReady(first => { handleHash(first); appEntryHints(); });
 window.addEventListener('hashchange', () => S.ready && !hashFromHistory() && handleHash(false));
 window.addEventListener('focus', () => bump());
 
