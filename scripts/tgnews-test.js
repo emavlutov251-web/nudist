@@ -93,6 +93,20 @@ const TOKEN = '123456:TEST-only-token', sent = [];
     const hh = await fetch(base + '/api/tg/health');
     ck('адрес проверки жив — /api/tg/health', hh.status === 200 && (await hh.json()).ok === true, hh.status);
 
+    // ── рассылка снаружи по ключу интеграции (для скрипта выкладки)
+    const noKey = await fetch(base + '/api/admin/news', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    ck('без ключа внешняя рассылка не работает', noKey.status === 401, noKey.status);
+    let apiOut = null;
+    {      // ключ выдаём админом (как в админке), кладём в базу напрямую — сервер читает её при каждом запросе
+      const raw = await adm.rpc('admin.apikeys', { new: 'агент' });
+      const dbf = path.join(dir, 'db.json'); const j = JSON.parse(fs.readFileSync(dbf, 'utf8'));
+      j.meta.apiKeys = j.meta.apiKeys || []; j.meta.apiKeys.push({ id: 'k1', name: 'агент', hash: require('crypto').createHash('sha256').update(raw.key).digest('hex'), at: Date.now() });
+      fs.writeFileSync(dbf, JSON.stringify(j));
+      const rr = await fetch(base + '/api/admin/news', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + raw.key }, body: JSON.stringify({ force: 'i' }) });
+      apiOut = { status: rr.status, body: await rr.json() };
+    }
+    ck('снаружи по ключу рассылка проходит', apiOut.status === 200 && apiOut.body && apiOut.body.tg && apiOut.body.tg.ok === true, apiOut);
+
     // ── обычный пользователь не может рассылать
     const den = await bob.fail('admin.news', { force: 'i' });
     ck('не-админ не рассылает', /Недостаточно прав/i.test(den || ''), den);

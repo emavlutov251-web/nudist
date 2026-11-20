@@ -244,13 +244,22 @@ H['admin.apikeys'] = (c, p) => {
   return { list: db.meta.apiKeys.map(x => ({ id: x.id, name: x.name, at: x.at })) };
 };
 // HTTP API для интеграций: Authorization: Bearer nud_…
-function httpApi(pathname, auth) {
+const newsOut = { at: 0, out: null };      // последний ответ рассылки обновления (для отладки из /api/admin/news)
+// Рассылка обновления снаружи — для скрипта выкладки: POST /api/admin/news с ключом интеграции.
+// Ничего не сломает: правила тишины внутри те же (раз в день человеку, ночью — до утра).
+async function newsFromApi(body) {
+  newsOut.out = await require('./push').newsPush({ by: 'api', force: ONE((body || {}).force), wall: ONE((body || {}).wall) });
+  newsOut.at = now(); save();
+  return newsOut.out;
+}
+function httpApi(pathname, auth, method, body) {
   const key = (auth || '').replace(/^Bearer\s+/i, ''); const h = crypto.createHash('sha256').update(key).digest('hex');
   if (!key || !(db.meta.apiKeys || []).some(k => k.hash === h)) return { code: 401, body: { error: 'unauthorized' } };
   if (pathname === '/api/admin/stats') return { code: 200, body: stats() };
   if (pathname === '/api/admin/funnel') return { code: 200, body: Funnel.stats() };
   if (pathname === '/api/admin/monitor') return { code: 200, body: monitor() };
   if (pathname === '/api/admin/flags') return { code: 200, body: db.flags };
+  if (pathname === '/api/admin/news' && method === 'POST') return newsFromApi(body).then(out => ({ code: 200, body: out }), e => ({ code: 500, body: { error: e.message } }));
   return { code: 404, body: { error: 'not found' } };
 }
 module.exports = { httpApi, stats, monitor };
