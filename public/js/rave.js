@@ -45,6 +45,9 @@ async function loadQueue(kind) {
 export async function loadRaves() {
   rvOn();
   try { const r = await rpc('rave.list'); RV.list = r.list || []; bump(); } catch (e) { /* тихо */ }
+  // Уже в комнате? Тогда и состояние комнаты обновляем: вход в «Рейв» показывает её сразу,
+  // даже если человек зашёл туда из другого места и не перезагружал страницу.
+  if (!RV.cur && RV.lastId) { try { await enterRave(RV.lastId); } catch (e) { /* комната закрылась */ } }
   return RV.list;
 }
 export async function enterRave(id) {
@@ -54,6 +57,7 @@ export async function enterRave(id) {
     if (!r.in) { await rpc('rave.join', { id }); }
     const g = await rpc('rave.get', { id });
     RV.cur = { ...g.room, chat: g.chat || [] };
+    RV.lastId = id;
     RV.link = g.link || null;      // ссылка, которая уже стоит в комнате — видно сразу при входе
     if (typeof g.serverAt === 'number' && RV.cur.now) { RV.skew = g.serverAt - Date.now(); } else syncClock();
     bump();
@@ -71,8 +75,48 @@ export async function newRave(o = {}) {
 
 // ───────── плеер клипа: обычное видео с адреса, синхронно с комнатой
 function RavePlayer({ room }) {
-  const vid = useRef(), now = room.now;
+  const vid = useRef(), ytBox = useRef(), now = room.now;
   const host = room.host;
+  // Встроенный плеер YouTube управляется через его же API: спрашиваем «который час» и, если разошлись
+  // с комнатой, просим прыгнуть. Так пауза и перемотка хозяина доходят и до тех, кто смотрит кино с Ютуба.
+  const ytSync = () => {
+    const p = RV.player; if (!p || !now || typeof p.getCurrentTime !== 'function') return;
+    try {
+      const t = roomTime(now);
+      if (now.paused) { if (typeof p.pauseVideo === 'function') p.pauseVideo(); const c = p.getCurrentTime(); if (Math.abs(c - now.at) > 1) p.seekTo(now.at, true); }
+      else if (Math.abs(p.getCurrentTime() - t) > 2) p.seekTo(Math.max(0, t), true);
+    } catch (e) { /* плеер ещё грузится */ }
+  };
+  // Каждую секунду — как и у обычных клипов.
+  useEffect(() => {
+    const t = setInterval(ytSync, 1000);
+    return () => clearInterval(t);
+  }, [now && now.ts, now && now.paused, now && now.item]);
+  // Плеер создаём один раз на ссылку. Скрипт API Ютуба подключаем сами: iframe от сервиса нам не подчиняется.
+  useEffect(() => {
+    if (!now || now.kind !== 'link') return;
+    const L = RV.link || {};
+    if (L.kind !== 'embed' || !L.yt) return;
+    let dead = false;
+    const boot = () => {
+      if (dead) return;
+      const box = ytBox.current;
+      if (!box) { setTimeout(boot, 200); return; }
+      if (!window.YT || !window.YT.Player) { setTimeout(boot, 300); return; }
+      if (RV.player && RV.playerYt === L.yt) return;      // этот же ролик уже играет
+      try {
+        if (RV.player && RV.player.destroy) RV.player.destroy();
+        RV.playerYt = L.yt;
+        RV.player = new window.YT.Player(box, { width: '100%', height: '100%', videoId: L.yt,
+          playerVars: { autoplay: 0, playsinline: 1, rel: 0, modestbranding: 1, origin: location.origin },
+          events: { onReady: () => { ytSync(); if (!host) ytSync(); }, onStateChange: () => ytSync() } });
+      } catch (e) { RV.player = null; }
+    };
+    if (!window.YT) { const sc = document.createElement('script'); sc.src = 'https://www.youtube.com/iframe_api'; sc.async = true; document.head.appendChild(sc); }
+    boot();
+    return () => { dead = true; };
+  }, [now && now.kind, now && now.item, now && (RV.link && RV.link.yt)]);
+  useEffect(() => () => { try { if (RV.player && RV.player.destroy) RV.player.destroy(); } catch (e) { /* уже нет */ } RV.player = null; RV.playerYt = null; }, []);
   const [cur, setCur] = useState(null);
   useEffect(() => {
     let live = true;
@@ -104,13 +148,24 @@ function RavePlayer({ room }) {
     }, 1000);
     return () => clearInterval(t);
   }, [now && now.ts, now && now.paused, now && now.item]);
+  useEffect(() => () => { try { if (RV.player && RV.player.destroy) RV.player.destroy(); } catch (e) { /* уже нет */ } RV.player = null; }, []);
   if (now && now.kind === 'link') {
     const L = RV.link || {};
     if (!L.url) return html`<div class="rv-empty"><${Spinner} /></div>`;
     if (L.kind === 'file') return html`<div class="rv-stage"><${Vid} src=${L.url} preload="metadata" controls=${host} onClick=${e => { if (!host) { const w = e.target.closest ? e.target.closest('.vstage') : null; const v = w ? w.querySelector('video') : e.target; if (v && v.paused) { v.currentTime = roomTime(now); v.play().catch(() => {}); } } }} />
       <span class="rv-src">${L.title}</span></div>`;
-    if (L.kind === 'embed') return html`<div class="rv-stage rv-embed"><iframe key=${L.url} src=${L.url} sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-popups" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" title=${L.title}></iframe>
+    if (L.kind === 'embed' && L.yt) return html`<div class="rv-stage rv-embed">
+      <div class="rv-ytwrap"><div ref=${ytBox} id="rv-yt"></div></div>
+      ${host && html`<div class="rv-ctl">
+        <button title=${now.paused ? 'Продолжить у всех' : 'Пауза у всех'} onClick=${() => rpc('rave.pause', { id: room.id, paused: !now.paused, at: now.paused ? roomTime(now) : (RV.player && RV.player.getCurrentTime ? RV.player.getCurrentTime() : roomTime(now)) }).catch(e => toast(e.message, 'err'))}>${now.paused ? html`<${Icon} n="play" s=${20} />` : html`<${Icon} n="pause" s=${20} />`}</button>
+        <input type="range" min="0" max=${Math.max(1, Math.round((RV.player && RV.player.getDuration && RV.player.getDuration()) || 3600))} step="1"
+          value=${Math.round(now.paused ? now.at : roomTime(now))}
+          onChange=${e => { const at = Math.max(0, Number(e.target.value)); if (RV.player && RV.player.seekTo) RV.player.seekTo(at, true); rpc('rave.pause', { id: room.id, paused: now.paused, at }).catch(() => {}); }} />
+      </div>`}
       ${L.warn === 'yt' && html`<p class="hint">YouTube в России без VPN не грузится. Если вместо видео пусто — включите VPN или откройте оригинал кнопкой ниже.</p>`}
+      <a class="rv-open" href=${L.link} target="_blank" rel="noopener noreferrer">${L.title} · открыть в ${L.site || 'сервисе'}</a></div>`;
+    if (L.kind === 'embed') return html`<div class="rv-stage rv-embed"><iframe key=${L.url} src=${L.url} sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-popups" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" title=${L.title}></iframe>
+      <p class="hint">${L.site || 'Этот сервис'} не отдаёт управление снаружи: паузу и перемотку — в его же плеере у себя. Чтобы смотреть синхронно, ставьте ссылку на файл mp4 или видео с YouTube.</p>
       <a class="rv-open" href=${L.link} target="_blank" rel="noopener noreferrer">${L.title} · открыть в ${L.site || 'сервисе'}</a></div>`;
     return html`<div class="rv-empty"><${Empty} icon="film" title="Этот сервис не даёт встраивать видео" text=${'Откройте ссылку рядом и смотрите вместе — кнопка ниже. ' + (L.site || '')} /><a class="btn" href=${L.link} target="_blank" rel="noopener noreferrer">Открыть видео</a></div>`;
   }
@@ -247,7 +302,8 @@ export function RaveRoom() {
     <div class="rv-tabs"><button class=${cx(tab === 'queue' && 'on')} onClick=${() => setTab('queue')}>Очередь</button><button class=${cx(tab === 'chat' && 'on')} onClick=${() => setTab('chat')}>Чат${(room.chat || []).length ? html`<b>${room.chat.length}</b>` : ''}</button></div>
     ${tab === 'queue' ? html`<div class="rv-queue">
       ${host ? html`<div class="rv-url"><${Icon} n="link" s=${16} /><input placeholder="Ссылка на видео: youtube, vk, rutube, mp4" value=${url} onInput=${e => setUrl(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter') playUrl(); }} /><button class="btn sm" disabled=${!url.trim()} onClick=${playUrl}>Включить</button></div>
-        ${!clips || !clips.length ? html`<p class="hint">Скиньте ссылку — фильм или клип пойдёт у всех одновременно. Хотите обсуждение — включите микрофон вверху.</p>` : ''}`
+        <p class="hint">Ссылка любую программу делает общей: YouTube, VK, Rutube, Дзен или просто mp4. Пауза и перемотка на YouTube тоже доходят до всех — у гостей плеер сам прыгает на ту же секунду.</p>
+        ${!clips || !clips.length ? html`<p class="hint">Хотите обсуждение — включите микрофон вверху: голос слышат все в комнате.</p>` : ''}`
         : html`<p class="hint">Видео ставит хозяин — ${userName(S.users[room.by] || {})}. Включите микрофон вверху, чтобы обсуждать по ходу.</p>`}
       ${host && (!list.length ? html`<${Empty} icon="film" title="Клипов пока нет" text="Выложите клип в ленте — и он появится здесь." />` : html`<div class="rv-list">${list.map(c => html`<button class=${cx('rv-item', room.now && room.now.item === c.id && 'on')} key=${c.id} onClick=${() => put(c)}>
         <span class="rv-thumb">${c.poster ? html`<img src=${c.poster} alt="" loading="lazy" />` : html`<${Icon} n="film" s=${20} />`}</span>

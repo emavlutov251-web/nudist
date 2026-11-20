@@ -49,7 +49,9 @@ let memberCache = null;      // счётчик людей для /api/config: н
 const PUBLIC = path.join(C.ROOT, 'public');
 const MIME = { apk: 'application/vnd.android.package-archive', html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', json: 'application/json', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', ico: 'image/x-icon', woff2: 'font/woff2', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', mp3: 'audio/mpeg', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', pdf: 'application/pdf', webmanifest: 'application/manifest+json', txt: 'text/plain; charset=utf-8' };
 const INLINE_UPLOAD = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'mp4', 'webm', 'mov', 'mp3', 'ogg', 'oga', 'opus', 'wav', 'm4a', 'aac', 'flac', 'pdf', 'txt']);
-const CSP = "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: data: https:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'self' https:; object-src 'none'; base-uri 'self'";
+// Плеер YouTube в рейве создаётся страницей через его собственный скрипт API (iframe_api) — поэтому
+// скрипты разрешены с youtube.com, а рамка с i.ytimg.com нужна для превью ролика.
+const CSP = "default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; frame-src 'self' https:; img-src 'self' data: blob: https:; media-src 'self' blob: data: https:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'";
 
 // Адрес клиента. На Render перед нами Cloudflare: он сам пишет настоящий адрес в cf-connecting-ip, а первый элемент x-forwarded-for клиент может подделать.
 // Адрес клиента. Заголовкам X-Forwarded-For и подобным верим, только если запрос пришёл от своего прокси

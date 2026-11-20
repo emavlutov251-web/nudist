@@ -94,6 +94,12 @@ const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРО�
     ck('rpc ждёт восстановления связи, а не падает сразу', /tick = \(\) =>/.test(libjs) && /8000/.test(libjs), '');
     const hts = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'hints.js'), 'utf8');
     ck('есть подсказки для рейва и звонка', /raveHostHint/.test(hts) && /callFirstHint/.test(hts), '');
+    // ── «кино с Ютуба»: пауза и перемотка хозяина доходят до встроенного плеера
+    ck('у ссылки на YouTube есть номер ролика для своего плеера', /yt: yt\[1\]/.test(ravsv) && /enablejsapi=1/.test(ravsv), '');
+    ck('рейв подключает API Ютуба и сам создаёт плеер', /youtube\.com\/iframe_api/.test(ravjs) && /new window\.YT\.Player/.test(ravjs), '');
+    ck('встроенный плеер подравнивается раз в секунду', /ytSync/.test(ravjs) && /setInterval\(ytSync, 1000\)/.test(ravjs), '');
+    ck('у хозяина есть пульт для Ютуба', /rv-ytwrap/.test(ravjs), '');
+    ck('CSP разрешает скрипт API Ютуба, но не встроенные', /script-src 'self' https:\/\/www\.youtube\.com/.test(fs.readFileSync(path.join(__dirname, '..', 'server', 'index.js'), 'utf8')), '');
     if (process.env.VERBOSE) console.log('');
     console.log(`${total - bad}/${total} ✓`);
     if (bad) process.exitCode = 1;

@@ -391,3 +391,8 @@ html.native-nav .call { padding-bottom: calc(18px + var(--nav-pad)); }
 
 .rv-mbtns { display: flex; align-items: center; gap: 6px; }
 .rv-mseek { width: 100%; margin: 10px 0 0; accent-color: var(--accent); }
+
+/* Кино с Ютуба: свой плеер в рамке 16:9 — он же слушается кнопок хозяина */
+.rv-ytwrap { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 14px; overflow: hidden; }
+.rv-ytwrap > div { position: absolute; inset: 0; }
+.rv-ytwrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }

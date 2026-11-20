@@ -49,7 +49,7 @@ function parseVideo(raw) {
   need(u, 'Это не похоже на ссылку');
   const host = u.hostname.replace(/^www\.|^m\./, '').toLowerCase(), path = u.pathname;
   const yt = /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([\w-]{11})/.exec(u.href);
-  if (yt) return { kind: 'embed', site: 'YouTube', url: `https://www.youtube.com/embed/${yt[1]}?autoplay=1&playsinline=1&rel=0`, poster: `https://i.ytimg.com/vi/${yt[1]}/hqdefault.jpg`, link: 'https://www.youtube.com/watch?v=' + yt[1], title: 'Видео с YouTube', dur: 0, warn: 'yt' };
+  if (yt) return { kind: 'embed', site: 'YouTube', yt: yt[1], url: `https://www.youtube.com/embed/${yt[1]}?enablejsapi=1&rel=0&playsinline=1`, poster: `https://i.ytimg.com/vi/${yt[1]}/hqdefault.jpg`, link: 'https://www.youtube.com/watch?v=' + yt[1], title: 'Видео с YouTube', dur: 0, warn: 'yt' };
   if (/(^|\.)vk(video)?\.(com|ru)$/.test(host)) {
     const m = /video(-?\d+)_(\d+)/.exec(u.href);
     if (m) return { kind: 'embed', site: 'VK', url: `https://vk.com/video_ext.php?oid=${m[1]}&id=${m[2]}&hd=2`, link: u.href, title: 'Видео из VK', dur: 0 };
