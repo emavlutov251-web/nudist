@@ -6,16 +6,36 @@ import { PayBlock } from './pay.js';
 import { openShop } from './shop.js';
 import { valentineOn, sendValentine } from './events.js';
 import { GiftShelf, GiftGrid, openGiftShop } from './gifts.js';
-import qrcode from '/vendor/qrcode.js';
+// QR-код нужен только в профиле и приглашениях: библиотеку подтягиваем по требованию,
+// иначе её 52 КБ уезжают каждому при первом открытии мессенджера.
+let qrLib = null;
+const qrFn = m => { const f = (m && (m.default || m.qrcode || m)); return typeof f === 'function' ? f : null; };      // модуль отдаёт и default, и именованные — берём функцию
+const loadQr = async () => { const have = qrFn(qrLib); if (have) return have; try { qrLib = qrFn(await import('/vendor/qrcode.js')); } catch (e) { qrLib = null; } return qrFn(qrLib); };
 import { ServerPanel } from './guildui.js';
 import { startCall } from './rtc.js';
 import { openSettings, AdminRoleDlg } from './settings.js';
 import { Collection, openGiftItems } from './perks.js';
 
 // ═════ QR ═════
+// Библиотека QR грузится по требованию (см. loadQr выше): пока её нет, показываем место под код,
+// а не «слишком длинный текст» — иначе первый кадр окна выглядит как ошибка.
 export function QR({ text, size = 180 }) {
-  const d = useMemo(() => { try { const q = qrcode(0, 'M'); q.addData(text || ' '); q.make(); const n = q.getModuleCount(); let p = ''; for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) p += `M${c} ${r}h1v1h-1z`; return { n, p }; } catch (e) { return null; } }, [text]);
-  if (!d) return html`<p class="hint">Слишком длинный текст для QR</p>`;
+  const [lib, setLib] = useState(qrFn(qrLib));
+  // не useMemo: он бы закешировал пустой результат, и после загрузки библиотеки код так и не появился бы
+  const [tick, setTick] = useState(0);
+  useEffect(() => { if (typeof lib !== 'function') loadQr().then(q => { if (typeof q === 'function') { setLib(() => q); setTick(t => t + 1); } }); }, [lib]);      // setLib(() => q): иначе Preact примет функцию за обновлятор состояния
+  const [d, setD] = useState(null), [bad, setBad] = useState(false);
+  useEffect(() => {
+    if (typeof lib !== 'function') { setD(null); setBad(false); return; }
+    try {
+      const q = lib(0, 'M'); q.addData(text || ' '); q.make();
+      const n = q.getModuleCount(); let p = '';
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) p += `M${c} ${r}h1v1h-1z`;
+      setD({ n, p }); setBad(false);
+    } catch (e) { setD(null); setBad(true); }
+  }, [text, lib, tick]);
+  if (bad) return html`<p class="hint">Слишком длинный текст для QR</p>`;
+  if (!d) return html`<div class="qr-load" style=${`width:${size}px;height:${size}px`} aria-label="Готовим QR-код"><${Spinner} /></div>`;
   return html`<svg class="qr" width=${size} height=${size} viewBox=${`-2 -2 ${d.n + 4} ${d.n + 4}`} shape-rendering="crispEdges" role="img" aria-label="QR-код"><rect x="-2" y="-2" width=${d.n + 4} height=${d.n + 4} fill="#fff" /><path d=${d.p} fill="#10231A" /></svg>`;
 }
 const link = h => location.origin + '/#' + h;
