@@ -80,8 +80,9 @@ const TOKEN = '123456:TEST-only-token', sent = [];
     if (night) ck('ночью само не уходит, а ждёт утра', real && real.tg && real.tg.sent === 0 && /ночная/.test(real.tg.skipped || ''), real && real.tg);
     const out = await adm.rpc('admin.news', { force: 'i' });
     ck('рассылка ушла привязавшим', out.tg && out.tg.sent === 3 && out.tg.failed === 0, out.tg);
-    ck('текст — про обновление 4.2 и со ссылкой', sent.length === 3 && /4\.2/.test(sent[0].text) && /https:\/\/nudist\.example\/start/.test(sent[0].text), sent[0] && sent[0].text.slice(0, 160));
-    ck('новинка 4.2 в тексте', /Ютуб/i.test(sent[0].text), sent[0] && sent[0].text.slice(0, 300));
+    const apk = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'apk.json'), 'utf8'));
+    ck('текст — про текущую сборку и со ссылкой', sent.length === 3 && sent[0].text.includes(apk.name) && /https:\/\/nudist\.example\/start/.test(sent[0].text), sent[0] && sent[0].text.slice(0, 160));
+    ck('в тексте первая новинка из apk.json', sent[0].text.includes(apk.news[0].slice(0, 40)), sent[0] && sent[0].text.slice(0, 300));
     ck('в чаты ушли только привязавшим', sent.map(m => m.chat).join(',') === '9001,9002,9003', sent.map(m => m.chat));
 
     // ── второй раз в тот же день: каждому не больше раза в день

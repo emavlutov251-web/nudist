@@ -83,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 43;      // 4.3: «вышло обновление» — уведомление и в Telegram; просьба привязать Telegram
+    private static final int APP_VERSION = 44;      // 4.4: обновление ставит именно предложенную версию, рейв переживает обрыв связи
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -161,6 +161,7 @@ public class MainActivity extends Activity {
         super.onStart();
         visible = true;
         PushService.clearShown(this);
+        dropStaleUpdate();            // выкидываем скачанное, что уже не новее установленного
         PushService.start(this);      // если систему пришлось перезапустить службу или она ещё не поднята
         syncEmbedded();               // раз в сутки: нет ли на сервере интерфейса новее встроенного
     }
@@ -983,13 +984,38 @@ public class MainActivity extends Activity {
     /** Где лежит готовая к установке сборка (во внутреннем хранилище приложения). */
     private File updateFile() { return new File(getFilesDir(), UPD); }
 
-    /** Есть ли уже скачанная сборка, и не от другой ли она версии. */
+    /** Какая сборка на самом деле лежит в файле. Раньше доверяли отметке «что предложил сервер» — и ставили старый файл. */
+    private int apkCodeOf(File f) {
+        try {
+            android.content.pm.PackageInfo pi = getPackageManager().getPackageArchiveInfo(f.getAbsolutePath(), 0);
+            return pi == null ? 0 : pi.versionCode;
+        } catch (Throwable e) { return 0; }
+    }
+
+    /**
+     * Есть ли уже скачанная сборка — и та ли это версия.
+     * Тут была неприятная ошибка: «готовым» считался любой файл, раз сервер назвал новую версию. Файл мог
+     * остаться с прошлого раза (человек нажал «Позже» или поставил и не удалил), и тогда телефон бодро
+     * предлагал установку, а ставилась СТАРАЯ сборка — человек видел, что «пришло 4.3», и получал 3.9.
+     * Теперь версию читаем из самого файла и никогда не ставим то, что не новее установленного.
+     */
     private boolean updateReady() {
         File f = updateFile();
         if (!f.isFile() || f.length() < 300 * 1024) return false;      // обрывок загрузки — не в счёт
-        String seen = prefs.getString("updCode", "");
-        if (seen != null && seen.length() > 0 && !seen.equals(String.valueOf(latestCode))) return false;
+        int code = apkCodeOf(f);
+        if (code <= 0) { f.delete(); return false; }                    // битый файл: без версии не ставим
+        if (code <= APP_VERSION) { f.delete(); return false; }          // старее нас (или та же) — это не обновление
+        if (latestCode > 0 && code != latestCode) { f.delete(); return false; }   // скачан не тот, что предлагают
         return true;
+    }
+
+    /** При запуске выбрасываем скачанное, что уже не новее установленного: иначе оно всплывёт при следующем обновлении. */
+    private void dropStaleUpdate() {
+        try {
+            File f = updateFile();
+            if (f.isFile()) { int code = apkCodeOf(f); if (code <= 0 || code <= APP_VERSION) f.delete(); }
+            File part = new File(getFilesDir(), UPD + ".part"); if (part.isFile()) part.delete();
+        } catch (Throwable e) { /* как есть */ }
     }
 
     private volatile int latestCode;      // версия, которую предложил сервер
@@ -1026,6 +1052,7 @@ public class MainActivity extends Activity {
                         while ((n = in.read(buf)) > 0) { out.write(buf, 0, n); got += n; if (total > 0) updatePercent = (int) (got * 100 / total); }
                     } finally { try { out.close(); } catch (Throwable ignored) { } try { in.close(); } catch (Throwable ignored) { } c.disconnect(); }
                     if (total > 0 && got < total) { tmp.delete(); updateState = "fail"; return; }      // обрыв — попробуем позже
+                    if (apkCodeOf(tmp) != latestCode) { tmp.delete(); updateState = "fail"; return; }      // пришёл не тот файл — не ставим
                     File dst = updateFile();
                     dst.delete();
                     if (!tmp.renameTo(dst)) { tmp.delete(); updateState = "fail"; return; }
@@ -1044,6 +1071,13 @@ public class MainActivity extends Activity {
     private void installUpdate() {
         File f = updateFile();
         if (!f.isFile()) { updateState = "idle"; return; }
+        int fileCode = apkCodeOf(f);
+        // Страховка: в файле не то, что обещал сервер (старая сборка, обрывок) — не открываем установщик, а качаем заново.
+        if (fileCode <= APP_VERSION || (latestCode > 0 && fileCode != latestCode)) {
+            f.delete(); updateState = "idle"; updatePercent = 0;
+            toast("Скачанная сборка устарела — качаем заново");
+            fetchUpdate(); return;
+        }
         // Android 8+: пока для «Нудиста» не включено «Установка неизвестных приложений», система молча гасит
         // запрос на установку, и человек видел, что кнопка ничего не делает. Сначала сами открываем этот экран.
         if (!canInstall()) { openInstallSettings(); return; }

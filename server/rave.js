@@ -13,6 +13,10 @@ const { db, save, now, need, str, id } = C;
 const H = R.H;
 
 const MAX = Number(process.env.RAVE_MAX) || 40;      // больше сорока человек в комнате не проверить толком
+// Сколько комната живёт без людей. Раньше она удалялась в ту же секунду, как пропадала последняя связь:
+// телефон свернули, VPN моргнул, экран погас — и комната «закрылась» у всех. Теперь пауза: пять минут никого —
+// и только потом закрываем. Человек вернулся — он снова в той же комнате, с той же лентой и чатом.
+const GRACE = Number(process.env.RAVE_GRACE_MS) || 5 * 60e3;
 const rooms = new Map();      // id → { id, by, title, kind, pub, ts, users: Map(connId → userId), chat: [], now: {kind,id,at,paused} }
 const raveMsg = (r, ev, d, skip) => { for (const cid of r.users.keys()) { if (cid === skip) continue; const cn = C.connById.get(cid); if (cn) cn.send(ev, d); } };
 const raveView = (r, uid) => ({ id: r.id, by: r.by, title: r.title, kind: r.kind, pub: !!r.pub, ts: r.ts, n: r.users.size, max: MAX,
@@ -20,10 +24,18 @@ const raveView = (r, uid) => ({ id: r.id, by: r.by, title: r.title, kind: r.kind
 const announce = () => C.emitAll('rave.upd', {});
 const me = c => { const u = db.users[c.uid]; need(u, 'Вход не выполнен'); return u; };
 const usersOf = (ids, vid) => { const o = {}; for (const i of ids) if (i && !o[i] && db.users[i]) o[i] = C.pubUser(db.users[i], vid); return o; };
+// Комната по номеру. Просроченную (никого не было дольше GRACE) выкидываем на месте.
+const find = rid => {
+  const r = rooms.get(rid); if (!r) return null;
+  if (r.exp && r.exp < now()) { rooms.delete(r.id); dropVoiceChat(r.id); announce(); return null; }
+  return r;
+};
+// Комната «на паузе»: людей нет, но ещё ждёт возвращения (exp — до какого времени).
+const waiting = r => !!(r.exp && r.exp > now());
 const room = (r, c) => { need(r, 'Комната не найдена или уже закрылась'); need(r.users.has(c.id), 'Вы не в этой комнате'); return r; };
 
 H['rave.list'] = c => {
-  const list = [...rooms.values()].filter(r => r.pub || r.users.has(c.id));
+  const list = [...rooms.values()].filter(r => !waiting(r) && (r.pub || r.users.has(c.id)));      // ждущие людей комнаты в списке не висят
   return { list: list.sort((a, b) => b.users.size - a.users.size || b.ts - a.ts).slice(0, 30).map(r => raveView(r, c.uid)), users: usersOf(list.flatMap(r => [...r.users.values()]), c.uid) };
 };
 H['rave.new'] = (c, p) => {
@@ -81,8 +93,11 @@ H['rave.url'] = (c, p) => {
 };
 H['rave.join'] = (c, p) => {
   me(c);
-  const r = rooms.get(str(p.id, 32)); need(r, 'Комната не найдена или уже закрылась');
+  const r = find(str(p.id, 32)); need(r, 'Комната не найдена или уже закрылась');
   need(r.users.size < MAX, `В комнате уже ${MAX} человек — больше мест нет`);
+  // После обрыва связи у того же человека остался старый номер соединения: убираем его, иначе он «дважды» в комнате.
+  for (const [cid, uid] of [...r.users]) if (uid === c.uid) r.users.delete(cid);
+  r.exp = 0;      // вернулись — комната снова живая
   r.users.set(c.id, c.uid);
   const first = r.users.size === 1 ? c.id : null;
   if (r.users.size === 1) r.by = c.uid;      // хозяин ушёл — комнату ведёт тот, кто пришёл, если дом остался пустым
@@ -92,10 +107,12 @@ H['rave.join'] = (c, p) => {
   return { room: raveView(r, c.uid), you: c.id, first, link: link || null, chat: r.chat.slice(-60), users: usersOf([...r.users.values()].concat(r.chat.map(m => m.by)), c.uid) };
 };
 H['rave.leave'] = (c, p) => {
-  const r = rooms.get(str(p.id, 32)); if (!r) return;
+  const r = find(str(p.id, 32)); if (!r) return;
   r.users.delete(c.id);
   const rest = [...r.users.values()];
-  if (!rest.length) { rooms.delete(r.id); dropVoiceChat(r.id); announce(); return; }
+  // Вышли все — комната не пропадает в ту же секунду: держим её GRACE, чтобы вернувшийся (или тот, кого
+  // выкинуло вместе с ним) попал на то же место. По-настоящему закрываем по таймеру ниже.
+  if (!rest.length) { r.exp = now() + GRACE; announce(); return; }
   if (r.by === c.uid) r.by = rest[0];
   raveMsg(r, 'rave.people', { id: r.id, users: rest, n: rest.length });
   announce();
@@ -172,10 +189,21 @@ function dropVoiceChat(rid) {
   for (const [cid, cn] of C.connById) { /* пусть клиенты сами увидят, что разговор кончился */ if (cn) cn.send('call.end', { chat: id, quiet: true }); }
 }
 H['rave.get'] = (c, p) => {
-  const r = rooms.get(str(p.id, 32)); need(r, 'Комната закрылась');
+  const r = find(str(p.id, 32)); need(r, 'Комната закрылась');
+  if (r.exp) r.exp = now() + GRACE;      // кто-то постучался — продлеваем ожидание
   const link = r.now && r.now.kind === 'link' && r.links && r.links[r.now.item];
   return { room: raveView(r, c.uid), in: r.users.has(c.id), now: r.now, link: link || null, chat: r.chat.slice(-60), users: usersOf([...r.users.values()].concat(r.chat.map(m => m.by)), c.uid), serverAt: now() };
 };
-function dropConn(c) { for (const r of [...rooms.values()]) if (r.users.has(c.id)) { r.users.delete(c.id); const rest = [...r.users.values()]; if (!rest.length) { rooms.delete(r.id); dropVoiceChat(r.id); } else { if (r.by === c.uid) r.by = rest[0]; raveMsg(r, 'rave.people', { id: r.id, users: rest, n: rest.length }); } } announce(); }
+// Связь пропала (телефон свернули, VPN моргнул, экран погас): человека убираем из зала, но комнату не закрываем —
+// даём GRACE, чтобы он вернулся на то же место. Закроем по таймеру, если так никто и не придёт.
+function dropConn(c) { for (const r of [...rooms.values()]) if (r.users.has(c.id)) { r.users.delete(c.id); const rest = [...r.users.values()];
+  if (!rest.length) { r.exp = now() + GRACE; }      // комната «на паузе»: лента, чат и хозяин остаются на месте
+  else { if (r.by === c.uid) r.by = rest[0]; raveMsg(r, 'rave.people', { id: r.id, users: rest, n: rest.length }); } } announce(); }
+// Таймер: закрываем то, что так и не дождалось людей.
+setInterval(() => {
+  const t = now(); let gone = 0;
+  for (const [id, r] of [...rooms]) if (r.exp && r.exp < t) { rooms.delete(id); dropVoiceChat(id); gone++; }
+  if (gone) announce();
+}, 30e3).unref();
 
 module.exports = { dropConn };

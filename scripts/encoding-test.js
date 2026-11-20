@@ -114,6 +114,16 @@ const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРО�
     ck('просьба привязать Telegram: полоска с отложить-на-3-дня', /TgStrip/.test(setj) && /tg\.nag/.test(setj), '');
     ck('просьба доходит и подсказкой с кнопкой «Привязать»', /tgWallHint/.test(hintj) && /Привязать/.test(hintj), '');
     ck('рассылка уходит и по ключу из настроек сервера', /NEWS_KEY/.test(fs.readFileSync(path.join(__dirname, '..', 'server', 'admin.js'), 'utf8')), '');
+    // ── 4.4: ставится именно предложенная сборка + рейв переживает обрыв связи
+    const mj = fs.readFileSync(path.join(__dirname, '..', 'android', 'src', 'ru', 'nudist', 'app', 'MainActivity.java'), 'utf8');
+    const rj = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'rave.js'), 'utf8');
+    const rs = fs.readFileSync(path.join(__dirname, '..', 'server', 'rave.js'), 'utf8');
+    ck('версию скачанной сборки читаем из самого файла', /getPackageArchiveInfo/.test(mj) && /apkCodeOf/.test(mj), '');
+    ck('старый файл не считается готовым к установке', /code <= APP_VERSION\) \{ f\.delete\(\); return false; \}/.test(mj), '');
+    ck('скачан не тот файл — не ставим', /apkCodeOf\(tmp\) != latestCode/.test(mj), '');
+    ck('комната без людей живёт ещё несколько минут', /GRACE/.test(rs) && /r\.exp = now\(\) \+ GRACE/.test(rs), '');
+    ck('после переподключения человек сам возвращается в комнату', /async function rejoin/.test(rj) && /on\('init', \(\) => \{ const id = roomToRestore\(\)/.test(rj), '');
+    ck('комната запоминается на устройстве, а «Выйти» её забывает', /local\.set\(LAST, id\)/.test(rj) && /local\.set\(LAST, null\)/.test(rj), '');
     if (process.env.VERBOSE) console.log('');
     console.log(`${total - bad}/${total} ✓`);
     if (bad) process.exitCode = 1;

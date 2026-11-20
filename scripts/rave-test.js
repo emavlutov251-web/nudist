@@ -25,6 +25,7 @@ const ck = (n, ok, x) => { total++; passed++; if (!ok) { bad++; console.log('  �
       c.rpc = (m, p) => new Promise((ok, no) => { const i = ++n; w.set(i, { ok, no }); ws.send(JSON.stringify({ id: i, m, p: p || {} })); setTimeout(() => { if (w.has(i)) { w.delete(i); no(new Error('нет ответа на ' + m)); } }, 8000); });
       c.fail = (m, p) => c.rpc(m, p).then(() => null, e => e.message); c.close = () => ws.close(); });
     const reg = async u => { const r = await post('/api/register', { username: u, password: 'Rave-test-' + u, name: u, agree: true }); await sleep(150); return conn(r.token); };
+    const regNew = async () => { const r = await post('/api/login', { username: 'rv_boris', password: 'Rave-test-rv_boris' }); await sleep(100); return conn(r.token); };      // «тот же человек с новым ключом» — как после переподключения
     const a = await reg('rv_anya'), b = await reg('rv_boris'), c1 = await reg('rv_vika');
 
     const nw = await a.rpc('rave.new', { title: 'Пятничный рейв', kind: 'clips' });
@@ -73,10 +74,20 @@ const ck = (n, ok, x) => { total++; passed++; if (!ok) { bad++; console.log('  �
     ck('приглашение уходит в личный чат', !!(inv && inv.chat), inv);
     const hist = await b.rpc('msg.history', { chat: inv.chat, limit: 5 });
     ck('в личном чате есть зов на рейв', (hist.msgs || []).some(m => m.rave === pvId), (hist.msgs || []).map(m => m.text).slice(0, 3));
-    // уход всех закрывает комнату
+    // все вышли — комната ещё несколько минут ждёт возвращения (телефон свернули, VPN моргнул),
+    // и только потом закрывается. Раньше она пропадала мгновенно, и у людей «комната закрылась» на ровном месте.
     await a.rpc('rave.leave', { id: pvId }); await c1.rpc('rave.leave', { id: pvId });
-    const goneMsg = await b.fail('rave.get', { id: pvId });
-    ck('пустая комната закрывается', /не найдена|закрылась/i.test(goneMsg || ''), goneMsg);
+    const stillThere = await b.rpc('rave.get', { id: pvId });
+    ck('после ухода всех комната ещё ждёт нас', !!(stillThere.room && stillThere.room.id === pvId), stillThere.room && stillThere.room.id);
+    const backIn = await b.rpc('rave.join', { id: pvId });
+    ck('вернувшись, попадаешь в ту же комнату', !!(backIn.room && backIn.room.id === pvId && backIn.room.n === 1), backIn.room && backIn.room.n);
+    // обрыв связи: соединение закрылось само (не «выход»), потом человек вернулся
+    await b.rpc('rave.leave', { id: pvId });
+    const conn2 = await regNew();      // то же самое, что новый сеанс после потери сети
+    await conn2.rpc('rave.join', { id: pvId });
+    const again = await conn2.rpc('rave.get', { id: pvId });
+    ck('после переподключения человек снова в комнате', again.in === true && again.room.n === 1, { in: again.in, n: again.room && again.room.n });
+    await conn2.rpc('rave.leave', { id: pvId }); conn2.close();
     // хозяин вышел — комнату ведёт оставшийся
     await a.rpc('rave.leave', { id: rid });
     const g3 = await c1.rpc('rave.get', { id: rid });

@@ -1,6 +1,6 @@
 // Рейв — комната, где вместе смотрят клипы и слушают музыку. Хозяин переключает — у остальных лента идёт следом.
 // Сами видео и музыка идут с обычных адресов, поэтому плеер здесь самый обычный: сервер хранит только «что и с какой секунды».
-import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avatar, cx, userName, Spinner, Empty, addUsers } from './lib.js';
+import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avatar, cx, userName, Spinner, Empty, addUsers, local } from './lib.js';
 import { Vid } from './media.js';
 
 export const RV = { cur: null, list: [], ev: null, voice: false, link: null, skew: 0 };      // voice — включён общий голосовой канал
@@ -42,28 +42,61 @@ async function loadQueue(kind) {
   try { const r = await rpc('clip.feed', { off: 0 }); addUsers(r.users); return (r.clips || []).filter(c => c.url); } catch (e) { return []; }
 }
 
+// Связь пропала и вернулась (свернули телефон, VPN моргнул): сервер убрал нас из зала, но комната жива ещё
+// несколько минут. Заходим обратно сами — иначе человек видел «Комната не найдена или уже закрылась» на ровном месте.
+let rejoining = false;
+async function rejoin() {
+  const id = roomToRestore(); if (!id || rejoining) return false;
+  rejoining = true;
+  try {
+    const g = await rpc('rave.get', { id });
+    if (!g.in) await rpc('rave.join', { id });
+    const gg = await rpc('rave.get', { id });
+    if (RV.cur && RV.cur.id === id) RV.cur = { ...RV.cur, ...gg.room, chat: gg.chat || [] };
+    else RV.cur = { ...gg.room, chat: gg.chat || [] };
+    RV.link = gg.link || RV.link || null;
+    if (typeof gg.serverAt === 'number' && RV.cur.now) RV.skew = gg.serverAt - Date.now();
+    bump(); return true;
+  } catch (e) { return false; }
+  finally { rejoining = false; }
+}
+on('init', () => { const id = roomToRestore(); if (id) setTimeout(() => rejoin(), 400); });      // переподключились после обрыва или перезапуска — назад в комнату
+
 export async function loadRaves() {
   rvOn();
   try { const r = await rpc('rave.list'); RV.list = r.list || []; bump(); } catch (e) { /* тихо */ }
   // Уже в комнате? Тогда и состояние комнаты обновляем: вход в «Рейв» показывает её сразу,
   // даже если человек зашёл туда из другого места и не перезагружал страницу.
-  if (!RV.cur && RV.lastId) { try { await enterRave(RV.lastId); } catch (e) { /* комната закрылась */ } }
+  if (!RV.cur && roomToRestore()) { try { await enterRave(roomToRestore()); } catch (e) { /* комната закрылась */ } }
   return RV.list;
 }
+// Комната запоминается на устройстве: закрыл вкладку или приложение — вернулся и ты на том же месте.
+// Раньше это жило только в памяти страницы, и «кто-нибудь из гостей» после перезапуска видел «комната закрылась».
+const LAST = 'rave.last';
+const rememberRoom = id => { RV.lastId = id; local.set(LAST, id); };
+export function roomToRestore() { try { return RV.lastId || local.get(LAST, null); } catch (e) { return RV.lastId; } }
+
 export async function enterRave(id) {
   rvOn();
   try {
-    const r = await rpc('rave.get', { id });
+    let r;
+    try { r = await rpc('rave.get', { id }); }
+    catch (e) {      // комната правда закрылась (никого не было пять минут) — не держим человека в ней
+      if (RV.cur && RV.cur.id === id) { RV.cur = null; }
+      if (RV.lastId === id) { RV.lastId = null; local.set(LAST, null); }
+      bump(); throw e;
+    }
     if (!r.in) { await rpc('rave.join', { id }); }
     const g = await rpc('rave.get', { id });
     RV.cur = { ...g.room, chat: g.chat || [] };
-    RV.lastId = id;
+    rememberRoom(id);
     RV.link = g.link || null;      // ссылка, которая уже стоит в комнате — видно сразу при входе
     if (typeof g.serverAt === 'number' && RV.cur.now) { RV.skew = g.serverAt - Date.now(); } else syncClock();
     bump();
   } catch (e) { toast(e.message, 'err'); }
 }
-export function leaveRave() { const r = RV.cur; RV.cur = null; if (r) rpc('rave.leave', { id: r.id }).catch(() => {}); bump(); }
+// «Выйти» — это осознанный уход: стираем и отметку о комнате, иначе человек вернётся в неё сам.
+export function leaveRave() { const r = RV.cur; RV.cur = null; RV.lastId = null; local.set(LAST, null); if (r) rpc('rave.leave', { id: r.id }).catch(() => {}); bump(); }
 export async function newRave(o = {}) {
   rvOn();
   try {
@@ -267,11 +300,20 @@ export function RaveRoom() {
   }, [!!clips]);
   if (!room) return null;
   const host = room.host;
-  const send = () => { const t = text.trim(); if (!t) return; setText(''); rpc('rave.chat', { id: room.id, text: t }).catch(e => toast(e.message, 'err')); };
-  const put = c => rpc('rave.play', { id: room.id, kind: c.music ? 'music' : 'clip', item: c.id, at: 0 }).catch(e => toast(e.message, 'err'));
+  const send = () => { const t = text.trim(); if (!t) return; setText(''); act('rave.chat', { id: room.id, text: t }).catch(e => toast(e.message, 'err')); };
+  // Переключаем ленту. Если связи не было и сервер успел убрать нас из зала — сначала заходим обратно.
+  const act = async (m, p) => {
+    try { return await rpc(m, p); }
+    catch (e) {
+      if (!/не в этой комнате|не найдена|закрылась/i.test(e.message || '')) throw e;
+      if (!(await rejoin())) throw e;
+      return await rpc(m, p);
+    }
+  };
+  const put = c => act('rave.play', { id: room.id, kind: c.music ? 'music' : 'clip', item: c.id, at: 0 }).catch(e => toast(e.message, 'err'));
   const playUrl = async () => {
     const u = url.trim(); if (!u) return;
-    try { const r = await rpc('rave.url', { id: room.id, url: u }); RV.link = r.item; RV.cur.now = r.now; setUrl(''); bump(); }
+    try { const r = await act('rave.url', { id: room.id, url: u }); RV.link = r.item; RV.cur.now = r.now; setUrl(''); bump(); }
     catch (e) { toast(e.message, 'err'); }
   };
   const voice = async () => {
