@@ -71,6 +71,14 @@ const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРО�
     const pushjs = fs.readFileSync(path.join(__dirname, '..', 'server', 'push.js'), 'utf8');
     ck('уведомление об обновлении несёт click=update', /click: 'update'/.test(pushjs), '');
     ck('напоминание об обновлении идёт первым', /f\.q\.unshift\(upd\)/.test(pushjs), '');
+    // ── установка сборки и «своя страница» в оболочке: раньше тут были дыры
+    const mainj = fs.readFileSync(path.join(__dirname, '..', 'android', 'src', 'ru', 'nudist', 'app', 'MainActivity.java'), 'utf8');
+    ck('кнопка «Скачать и установить» качает внутри приложения', /async function downloadTap/.test(growth) && /updateFetch/.test(growth), '');
+    ck('в приложении кнопка скачивания не уводит на файл', /onClick=\$\{e => downloadTap\(e\)\}/.test(growth), '');
+    ck('оболочка знает свою страницу вместо пустого экрана', /showBuiltinPage/.test(mainj), '');
+    ck('пустой экран после загрузки ловится', /checkShown\(url\)/.test(mainj), '');
+    ck('установку не гасит запрет из настроек — ведём туда', /ACTION_MANAGE_UNKNOWN_APP_SOURCES/.test(mainj) && /canRequestPackageInstalls/.test(mainj), '');
+    ck('сборки (.apk) страница из памяти не получает', /endsWith\("\.apk"\)/.test(mainj), '');
     if (process.env.VERBOSE) console.log('');
     console.log(`${total - bad}/${total} ✓`);
     if (bad) process.exitCode = 1;

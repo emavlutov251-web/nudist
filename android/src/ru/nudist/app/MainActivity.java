@@ -83,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 39;      // 3.9: уведомление об обновлении открывает окно обновления; плашка на главной
+    private static final int APP_VERSION = 40;      // 4.0: если WebView показал файл вместо страницы — перерисовка и своя страница; установка сборки в одно нажатие
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -102,7 +102,9 @@ public class MainActivity extends Activity {
     private volatile String updateState = "idle";
     private volatile int updatePercent;
     private volatile String updateUrl;
-    private int mainChecks;               // сколько раз уже перезагружали: защита от бесконечного цикла
+    private int mainChecks;               // сколько раз уже перерисовывали текст вместо страницы (защита от цикла)
+    private int shownFixes;               // сколько раз показывали свою страницу вместо пустой (тоже защита от цикла)
+    private boolean installAfterSettings;  // отправили человека включать «Установку неизвестных приложений»
     /** Переезд на новый адрес: пока true, ждём от страницы прежнего адреса её хранилище (см. migrate). */
     private boolean moving;
     private String moveServer, moveChat;
@@ -142,6 +144,16 @@ public class MainActivity extends Activity {
         if (server == null || ACTION_CHANGE_SERVER.equals(getIntent().getAction())) showSetup(null);
         clearShareDir();      // остатки с прошлого раза
         if (state == null) takeShare(getIntent());
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Вернулись с экрана разрешений — если установка теперь разрешена, сразу показываем её.
+        if (installAfterSettings) {
+            installAfterSettings = false;
+            if (canInstall() && updateFile().isFile()) web.postDelayed(new Runnable() { @Override public void run() { installUpdate(); } }, 400);
+        }
     }
 
     @Override
@@ -335,7 +347,11 @@ public class MainActivity extends Activity {
 
     /** Нажали уведомление «Вышло обновление» — открываем приложение сразу на окне обновления. */
     private static boolean updateFrom(Intent intent) {
-        return intent != null && PushService.ACTION_UPDATE.equals(intent.getAction());
+        if (intent == null) return false;
+        if (PushService.ACTION_UPDATE.equals(intent.getAction())) return true;
+        // Тот же смысл может прийти ссылкой: сервер шлёт push со ссылкой на /#update, телефон открывает её в «Нудисте».
+        String d = intent.getDataString();
+        return d != null && d.indexOf("#update") >= 0;
     }
 
     /** Чат из нажатого уведомления. Идентификатор проверяем: он попадает в адрес страницы. */
@@ -377,6 +393,28 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void updateInstall() {
             runOnUiThread(new Runnable() { @Override public void run() { installUpdate(); } });
+        }
+
+        /** Страница собралась: заставка больше не нужна. Зовётся из интерфейса при каждом запуске. */
+        @JavascriptInterface
+        public void pageReady() {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                if (panel != null && "loading".equals(panel.getTag())) hidePanel();
+                mainChecks = 0;
+                shownFixes = 0;
+            } });
+        }
+
+        /** Скачать интерфейс заново, не дожидаясь суточной проверки. Помогает, когда страница не показалась. */
+        @JavascriptInterface
+        public void retryWeb() {
+            runOnUiThread(new Runnable() { @Override public void run() {
+                try { prefs.edit().remove("web").remove("webSkip").putLong(WEB_MARK, 0).apply(); } catch (Throwable e) { /* как есть */ }
+                embeddedReady = false;
+                try { assetCache.clear(); } catch (Throwable e) { /* кеш и так перечитается */ }
+                syncEmbedded();
+                showBuiltinPage(false);      // свежая страница подхватится при следующем открытии
+            } });
         }
 
         /** Переезд: страница с прежнего адреса отдаёт то, что приложение хранило в браузере (ключ сеанса, настройки, ключи секретных чатов). Принимается только в момент переезда. */
@@ -828,6 +866,33 @@ public class MainActivity extends Activity {
     }
 
     /**
+     * Своя страница вместо ответа сервера, когда интерфейса нет ни в APK, ни в скачанной копии.
+     * Без неё WebView показывал ответ сервера как файл: человек видел разметку и стили простынёй.
+     * Здесь всё своё, без единого запроса за файлами, а кнопки повторяют штатные методы оболочки.
+     */
+    private void showBuiltinPage(boolean offline) {
+        if (web == null) return;
+        String server;
+        try { server = String.valueOf(prefs.getString("server", "")); } catch (Throwable e) { server = ""; }
+        String html = "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">"
+                + "<title>Нудист</title><style>"
+                + "html,body{margin:0;height:100%;background:#14251C;color:#EAF3EE;font:16px/1.5 Roboto,system-ui,sans-serif}"
+                + ".box{max-width:360px;margin:0 auto;padding:22vh 24px 0;text-align:center}"
+                + "h1{font-size:22px;margin:0 0 10px}p{opacity:.75;margin:0 0 22px;font-size:15px}"
+                + "button{display:block;width:100%;font:inherit;font-weight:600;padding:13px;border:0;border-radius:14px;margin:0 0 10px;background:#2BB36A;color:#fff}"
+                + "button.ghost{background:rgba(255,255,255,.08);color:#EAF3EE}"
+                + "</style></head><body><div class=\"box\"><h1>"
+                + (offline ? "Интернета нет" : "Не получилось раздеться")
+                + "</h1><p>" + (offline ? "Проверьте связь и попробуйте ещё раз." : "Приложение не смогло показать интерфейс. Обычно помогает повторить.") + "</p>"
+                + "<button onclick=\"location.reload()\">Попробовать снова</button>"
+                + "<button class=\"ghost\" onclick=\"try{window.NudistApp.retryWeb()}catch(e){location.reload()}\">Скачать интерфейс заново</button>"
+                + "<p style=\"margin-top:18px;font-size:12px;opacity:.45;word-break:break-all\">" + server.replace("<", "&lt;") + "</p>"
+                + "</div></body></html>";
+        web.loadDataWithBaseURL(server + "/", html, "text/html", "utf-8", null);
+    }
+
+    /**
      * Проверка главной страницы после загрузки.
      * Бывает, что WebView получает наш index.html с типом «обычный текст» (так приходит кешированный документ
      * после перезагрузки, а VPN-прокси умеет испортить заголовок). Тогда человек видит вместо приложения
@@ -845,13 +910,13 @@ public class MainActivity extends Activity {
                 + "}catch(e){return \"ok\"}})()", new android.webkit.ValueCallback<String>() {
             @Override public void onReceiveValue(String v) {
                 if (v == null || !v.contains("text")) return;
-                if (mainChecks >= 2) return;
+                if (mainChecks >= 2) { showBuiltinPage(false); return; }      // два раза не вышло — показываем свою страницу
                 mainChecks++;
                 String server = prefs.getString("server", null);
                 if (server == null) return;
                 Uri u = Uri.parse(server + "/");
                 WebResourceResponse r = embeddedResponse(u, server);      // берём свежую встроенную страницу
-                if (r == null) { mainChecks = 0; return; }
+                if (r == null) { mainChecks = 0; showBuiltinPage(false); return; }      // интерфейса в памяти нет — не оставляем человеку разметку
                 String html;
                 try {
                     java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
@@ -865,6 +930,46 @@ public class MainActivity extends Activity {
                 web.loadDataWithBaseURL(server + "/", html, "text/html", "utf-8", url);
             }
         });
+    }
+
+    /**
+     * Короткая проверка после каждой загрузки: показала ли главная страница хоть что-то живое — приложение или заставку.
+     * Если на экране пусто (сервер ответил, а файлы не дошли), человек видел белое окно. Тогда один раз показываем свою страницу.
+     */
+    private void checkShown(final String url) {
+        if (web == null) return;
+        final String u = String.valueOf(url);
+        web.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (web == null || u.equals("null") || u.startsWith("data:") || u.startsWith("about:")) return;
+                String server = prefs.getString("server", "");
+                if (server == null || !u.startsWith(server)) return;
+                try {
+                    web.evaluateJavascript("(function(){try{var b=document.body;if(!b)return 'empty';"
+                            + "var t=(b.textContent||'').trim();while(t.length&&t.charCodeAt(0)<33)t=t.slice(1);"
+                            + "if(t.indexOf('<!doctype')===0||t.indexOf('<html')===0)return 'text';"      // разметку показывает checkMainFrame
+                            + "if(document.getElementById('app')||document.getElementById('start'))return 'ok';"
+                            + "return t.length>0?'ok':'empty';}catch(e){return 'ok'}})()", new android.webkit.ValueCallback<String>() {
+                        @Override public void onReceiveValue(String v) {
+                            if (v == null || !v.contains("empty")) return;
+                            if (shownFixes >= 1) return;
+                            shownFixes++;
+                            showBuiltinPage(!networkUp());
+                        }
+                    });
+                } catch (Throwable e) { /* страница не отвечает — ничего не трогаем */ }
+            }
+        }, 1500);
+    }
+
+    /** Есть ли сейчас сеть (по мнению системы). */
+    private boolean networkUp() {
+        try {
+            android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return true;
+            android.net.NetworkInfo ni = cm.getActiveNetworkInfo();
+            return ni != null && ni.isConnected();
+        } catch (Throwable e) { return true; }
     }
 
     // ───── автообновление сборки
@@ -936,6 +1041,34 @@ public class MainActivity extends Activity {
     private void installUpdate() {
         File f = updateFile();
         if (!f.isFile()) { updateState = "idle"; return; }
+        // Android 8+: пока для «Нудиста» не включено «Установка неизвестных приложений», система молча гасит
+        // запрос на установку, и человек видел, что кнопка ничего не делает. Сначала сами открываем этот экран.
+        if (!canInstall()) { openInstallSettings(); return; }
+        launchInstaller();
+    }
+
+    /** Разрешена ли установка сборок из самого приложения. На старых Android такого разрешения нет — считаем, что да. */
+    private boolean canInstall() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT < 26) return true;
+            return getPackageManager().canRequestPackageInstalls();
+        } catch (Throwable e) { return true; }
+    }
+
+    /** Экран «Установка неизвестных приложений» с уже выбранным «Нудистом». Вернулись — установка продолжится сама. */
+    private void openInstallSettings() {
+        installAfterSettings = true;
+        try {
+            Intent i = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName()));
+            startActivity(i);
+            toast("Разрешите установку — и вернитесь: сборка поставится сама");
+        } catch (Throwable e) {
+            installAfterSettings = false;
+            launchInstaller();      // не вышло — пробуем обычным путём
+        }
+    }
+
+    private void launchInstaller() {
         try {
             Uri apk = Uri.parse("content://" + UpdateProvider.AUTHORITY + "/" + UPD);
             Intent i = new Intent(Intent.ACTION_VIEW);
@@ -960,6 +1093,7 @@ public class MainActivity extends Activity {
     private WebResourceResponse embeddedResponse(Uri uri, String server) {
         String path = uri.getPath() == null ? "/" : uri.getPath();
         if (path.startsWith("/api/") || path.startsWith("/ws") || path.startsWith("/u/") || path.startsWith("/bot/") || path.startsWith("/hook/") || path.startsWith("/p/")) return null;
+        if (path.endsWith(".apk") || path.endsWith(".zip")) return null;      // сборки отдаёт сервер: в памяти интерфейса им не место
         prepareEmbedded();
         boolean main = path.equals("/") || path.equals("/index.html");
         String rel = main ? "index.html" : path.substring(1);
@@ -1104,6 +1238,7 @@ public class MainActivity extends Activity {
                 if (!mainFrameFailed) applyMove(url);
                 if (!mainFrameFailed && panel != null && ("error".equals(panel.getTag()) || "loading".equals(panel.getTag()))) hidePanel();
                 if (!mainFrameFailed) checkMainFrame(url);
+                if (!mainFrameFailed) checkShown(url);
             }
         });
 
@@ -1685,6 +1820,13 @@ public class MainActivity extends Activity {
         tip.setPadding(0, dp(14), 0, 0);
         box.addView(tip);
         web.loadUrl(server + "/" + (update ? "#update" : chat == null ? "" : "#c=" + chat));
+        // Заставку убираем по ответу страницы через мост (Bridge.pageReady). Если скрипты в этом WebView
+        // не запустились, заставка так и висела бы до перезагрузки — через 12 секунд убираем её сами.
+        web.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (panel != null && "loading".equals(panel.getTag())) hidePanel();
+            }
+        }, 12000);
     }
 
     private void showSetup(String problem) {

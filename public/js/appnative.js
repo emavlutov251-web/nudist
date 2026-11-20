@@ -89,6 +89,9 @@ if (app()) {
   window.addEventListener('resize', applyNavHeight);
   window.addEventListener('orientationchange', () => setTimeout(applyNavHeight, 300));
   local.set('hint.welcome-1', true);      // «внизу — Чаты, Лента, Хаб…»: панель теперь своя, подсказка не нужна
+  // Страница собралась — говорим приложению: оно убирает заставку и обнуляет счётчики починок.
+  // Если этот вызов не придёт (скрипты не запустились), заставку приложение снимет само по таймеру.
+  try { if (window.NudistApp.pageReady) window.NudistApp.pageReady(); } catch (e) { /* старое приложение */ }
   on('init', () => setTimeout(push, 300));
   setInterval(push, 1500);
   window.addEventListener('focus', push);

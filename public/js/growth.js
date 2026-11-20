@@ -368,12 +368,35 @@ function UpdateDlg({ id, info }) {
           ? html`<button class="btn" onClick=${() => window.NudistApp.updateInstall()}><${Icon} n="download" s=${16} /> Установить</button>`
           : inApp() && auto && auto.state === 'downloading'
             ? html`<button class="btn" disabled><${Icon} n="download" s=${16} /> Скачиваем… ${auto.percent}%</button>`
-            : html`<a class="btn" href="/nudist.apk" download="nudist.apk" onClick=${() => { setStep(1); if (inApp() && auto) window.NudistApp.updateFetch(); }}><${Icon} n="download" s=${16} /> ${step ? 'Скачать ещё раз' : 'Скачать и установить'}</a>`}
+            : html`<a class="btn" href="/nudist.apk" download="nudist.apk" onClick=${e => downloadTap(e)}><${Icon} n="download" s=${16} /> ${step ? 'Скачать ещё раз' : 'Скачать и установить'}</a>`}
         <button class="btn ghost" onClick=${() => { local.set('upd.later', String(Date.now())); closeModal(id); }}>Позже</button></div>
       <p class="hint">Пока стоит старая версия, окно будет появляться при каждом заходе. Не скачивается — откройте ${location.host}/start в браузере телефона.</p>
     </div>
   <//>`;
 }
+/**
+ * «Скачать и установить» в приложении. Раньше ссылка просто уводила WebView на файл: телефон отдавал
+ * загрузку системе, и человек искал nudist.apk в «Загрузках» — или не находил вовсе.
+ * Теперь файл скачивает само приложение (то же место, куда его кладёт автообновление),
+ * а дальше открывается обычная установка. Ссылка остаётся только для браузера.
+ */
+async function downloadTap(e) {
+  if (!inApp() || !window.NudistApp || !window.NudistApp.updateFetch) return;      // браузер — обычное скачивание
+  e.preventDefault();
+  try { window.NudistApp.updateFetch(); } catch (x) { location.href = '/nudist.apk'; return; }
+  const t0 = Date.now();
+  while (Date.now() - t0 < 90e3) {
+    await new Promise(r => setTimeout(r, 400));
+    const st = updState();
+    if (st === 'ready') {
+      try { window.NudistApp.updateInstall(); } catch (x) { location.href = '/nudist.apk'; }
+      return;
+    }
+    if (st === 'fail') break;
+  }
+  toast('Не получилось скачать сборку. Проверьте связь и попробуйте ещё раз', 'err');
+}
+
 function SiteUpdateDlg({ id }) {
   const [busy, setBusy] = useState(false);
   return html`<${Modal} id=${id} title="Вышло обновление" icon="refresh-cw" cls="small">
