@@ -175,6 +175,24 @@ C.hooks.afterPost.push((chat, m) => {
   } catch (e) { console.warn('[tg] мост:', e.message); }
 });
 
+// ───── отправка самого файла сборки в Telegram
+// Telegram не принимает «вложение по ссылке»: файл нужно отдать ему целиком (multipart). Наш APK меньше мегабайта,
+// так что это дёшево. Загружаем один раз и переиспользуем file_id — дальше Telegram отдаёт файл по номеру сразу.
+const fs = require('fs'), path = require('path');
+const uploadMemo = new Map();      // "code:размер" → file_id: повторно файл не грузим
+async function callMultipart(method, fields, fileField, filePath, fileName) {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(fields || {})) form.append(k, typeof v === 'string' ? v : JSON.stringify(v));
+  const buf = fs.readFileSync(filePath);
+  form.append(fileField, new Blob([buf], { type: 'application/vnd.android.package-archive' }), fileName);
+  const r = await fetch(`${TG}/bot${token()}/${method}`, { method: 'POST', body: form, signal: AbortSignal.timeout(120000) });
+  const j = await r.json().catch(() => null);
+  if (!j || !j.ok) throw new Error(method + ': ' + ((j && j.description) || r.status));
+  return j.result;
+}
+// Файл сборки на диске: лежит рядом с сайтом (public/nudist.apk), путь можно задать переменной APK_FILE.
+const apkPath = () => process.env.APK_FILE || path.join(C.ROOT || path.join(__dirname, '..'), 'public', 'nudist.apk');
+
 // ───── рассылка «вышло обновление» в Telegram: человеку, который привязал Telegram, бот пишет первым
 // (в Telegram нельзя написать незнакомцу, поэтому получатели — только те, кто сам нажал Start).
 // Правило тишины: в сутки не больше двух рассылок, одному человеку — не чаще раза в день, ночью (23:00–9:00 по Москве) не будим.
@@ -192,20 +210,41 @@ setInterval(() => {
 }, 60e3).unref();
 const isNight = () => { const h = new Date(now() + 3 * 3600e3).getUTCHours(); return h >= 23 || h < 9; };
 const appUrl = () => SITE + '/start';
-function newsText(apk) {
+function newsText(apk, withFile) {
   const head = '🍃 Вышло обновление «Нудиста» ' + apk.name + '!';
   const list = (apk.news || []).filter(Boolean).slice(0, 5).map(x => '· ' + String(x).slice(0, 300)).join('\n');
-  const tail = 'Скачать и поставить поверх старой версии: данные и вход сохранятся. Если бот вам больше не нужен — заблокируйте его, и мы перестанем писать.';
-  return [head, list, tail, appUrl()].filter(Boolean).join('\n\n');
+  const how = withFile
+    ? 'Скачайте обновление с сайта — так надёжнее всего: ' + appUrl() + '\n' + 'Ниже я приложил и сам файл: откройте его в Telegram и нажмите «Установить». Ставится поверх старой версии, вход и переписка сохранятся.'
+    : 'Скачайте обновление с сайта и поставьте поверх старой версии: ' + appUrl() + '\nВход и переписка сохранятся.';
+  const tail = 'Если бот вам больше не нужен — заблокируйте его, и мы перестанем писать.';
+  return [head, list, how, tail].filter(Boolean).join('\n\n');
 }
-async function newsSend(uid, text) {
+// Отправка одному человеку: сначала текст с просьбой скачать с сайта, потом сам APK документом.
+// Если файл не ушёл (нет на диске, Telegram отказал в размере) — текст всё равно доставлен, человек скачает с сайта.
+async function newsSend(uid, text, apk, withFile) {
   const u = db.users[uid];
   if (!u || u.deleted || u.bot || !u.tg || !u.tg.id) return 'нет telegram';
-  try { await call('sendMessage', { chat_id: u.tg.id, text, link_preview_options: { is_disabled: true } }); return 'ok'; }
+  const blocked = e => /blocked|chat not found|deactivated|kicked/i.test(String((e && e.message) || ''));
+  try { await call('sendMessage', { chat_id: u.tg.id, text, link_preview_options: { is_disabled: true } }); }
   catch (e) {
-    const m = String((e && e.message) || '');
-    if (/blocked|chat not found|deactivated|kicked/i.test(m)) { u.tg.bad = now(); save(); return 'заблокировал'; }
-    return 'ошибка: ' + m.slice(0, 80);
+    if (blocked(e)) { u.tg.bad = now(); save(); return 'заблокировал'; }
+    return 'ошибка: ' + String(e.message || e).slice(0, 80);
+  }
+  if (!withFile) return 'ok';
+  const file = apkPath();
+  if (!fs.existsSync(file)) return 'ok';      // файла нет — текст уже ушёл, сайт на месте
+  const key = apk.code + ':' + fs.statSync(file).size;
+  if (uploadMemo.has(key)) {      // уже загружали: отправляем по номеру, это мгновенно
+    try { await call('sendDocument', { chat_id: u.tg.id, document: uploadMemo.get(key), caption: 'Нудист ' + apk.name }); return 'ok'; }
+    catch (e) { if (blocked(e)) { u.tg.bad = now(); save(); return 'заблокировал'; } uploadMemo.delete(key); }
+  }
+  try {
+    const r = await callMultipart('sendDocument', { chat_id: String(u.tg.id), caption: 'Нудист ' + apk.name }, 'document', file, 'nudist-' + apk.name + '.apk');
+    const fid = r && r.document && r.document.file_id; if (fid) uploadMemo.set(key, fid);
+    return 'ok';
+  } catch (e) {
+    if (blocked(e)) { u.tg.bad = now(); save(); return 'заблокировал'; }
+    return 'ок (файл не ушёл: ' + String(e.message || e).slice(0, 60) + ')';
   }
 }
 // Пуш нового обновления: сперва в Telegram (если есть ключ бота), дальше лента телефона и браузерные пуши — это делает push.js.
@@ -219,11 +258,12 @@ async function newsAnnounce(apk, it) {
   if (!it.force && isNight()) { db.meta.tgNewsDue = { by: it.by || '', at: now() }; save(); return { ok: true, sent: 0, skipped: 'ночная тишина 23:00–9:00 — отправится утром само' }; }
   let day = db.meta.tgNewsDay; if (!day || day.d !== dayMsk()) day = db.meta.tgNewsDay = { d: dayMsk(), n: 0 };
   if (day.n >= 2 && !it.force) return { ok: false, sent: 0, error: 'сегодня уже было две рассылки' };
-  const text = newsText(apk), sentMap = (db.meta.tgNewsSent = db.meta.tgNewsSent || {}), today = dayMsk();
+  const withFile = process.env.TG_NEWS_FILE !== 'off' && fs.existsSync(apkPath());
+  const text = newsText(apk, withFile), sentMap = (db.meta.tgNewsSent = db.meta.tgNewsSent || {}), today = dayMsk();
   const targets = Object.values(db.users).filter(u => !u.deleted && !u.bot && u.tg && u.tg.id && !(sentMap[u.id] && dayMsk(sentMap[u.id].at) === today)).map(u => u.id);
-  const out = { ok: true, sent: 0, failed: 0, total: targets.length, errors: [] };
+  const out = { ok: true, sent: 0, failed: 0, total: targets.length, file: withFile, errors: [] };
   for (const id of targets) {
-    const r = await newsSend(id, text);
+    const r = await newsSend(id, text, apk, withFile);
     if (r === 'ok') { out.sent++; sentMap[id] = { at: now(), c: apk.code }; }
     else if (r !== 'нет telegram') { out.failed++; if (out.errors.length < 5) out.errors.push(id + ': ' + r); }
   }

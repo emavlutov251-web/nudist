@@ -8,7 +8,7 @@ const WS = require('../server/vendor/ws');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let bad = 0, total = 0, passed = 0;
 const ck = (n, ok, x) => { total++; passed++; if (!ok) { bad++; console.log('  ✗ ПРОВАЛ:', n, x === undefined ? '' : JSON.stringify(x).slice(0, 300)); } else if (process.env.VERBOSE) console.log('  ✓', n); };
-const TOKEN = '123456:TEST-only-token', sent = [];
+const TOKEN = '123456:TEST-only-token', sent = [], docs = [];
 
 (async () => {
   const port = 4300 + Math.floor(Math.random() * 120), dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nudist-tgnews-'));
@@ -17,7 +17,9 @@ const TOKEN = '123456:TEST-only-token', sent = [];
   const mock = http.createServer((req, res) => {
     let b = ''; req.on('data', d => b += d);
     req.on('end', () => {
-      const body = b ? JSON.parse(b) : {}, m = /\/bot([^/]+)\/(\w+)$/.exec(req.url);
+      const isJson = /application\/json/.test(req.headers['content-type'] || '');
+      let body = {}; try { body = isJson && b ? JSON.parse(b) : {}; } catch (e) { body = {}; }
+      const m = /\/bot([^/]+)\/(\w+)$/.exec(req.url);
       const ok = r => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: true, result: r })); };
       if (!m || m[1] !== TOKEN) { res.writeHead(401); return res.end(JSON.stringify({ ok: false, description: 'Unauthorized' })); }
       const method = m[2];
@@ -25,6 +27,15 @@ const TOKEN = '123456:TEST-only-token', sent = [];
       if (method === 'sendMessage') {
         if (String(body.text || '').includes('ЗАБЛОКИРОВАН')) { res.writeHead(403); return res.end(JSON.stringify({ ok: false, description: 'Forbidden: bot was blocked by the user' })); }
         sent.push({ chat: body.chat_id, text: body.text }); return ok({ message_id: sent.length });
+      }
+      if (method === 'sendDocument') {
+        if (!isJson) {      // первый раз — настоящий файл
+          const m2 = /name="document"; filename="([^"]+)"/.exec(b) || [];
+          docs.push({ chat: 0, file: m2[1] || '', bytes: b.length, real: true });
+          return ok({ message_id: 900 + docs.length, document: { file_id: 'F' + docs.length, file_name: m2[1] || 'x.apk' } });
+        }
+        docs.push({ chat: body.chat_id, byId: String(body.document || ''), bytes: 0, real: false });      // повторно — по номеру
+        return ok({ message_id: 900 + docs.length, document: { file_id: body.document, file_name: 'nudist.apk' } });
       }
       return ok(true);
     });
@@ -84,11 +95,15 @@ const TOKEN = '123456:TEST-only-token', sent = [];
     ck('текст — про текущую сборку и со ссылкой', sent.length === 3 && sent[0].text.includes(apk.name) && /https:\/\/nudist\.example\/start/.test(sent[0].text), sent[0] && sent[0].text.slice(0, 160));
     ck('в тексте первая новинка из apk.json', sent[0].text.includes(apk.news[0].slice(0, 40)), sent[0] && sent[0].text.slice(0, 300));
     ck('в чаты ушли только привязавшим', sent.map(m => m.chat).join(',') === '9001,9002,9003', sent.map(m => m.chat));
+    ck('в тексте — просьба скачать с сайта', /Скачайте обновление с сайта/.test(sent[0].text), sent[0] && sent[0].text.slice(0, 200));
+    ck('каждому приложен файл сборки', docs.length === 3, docs.length);
+    ck('файл загружается один раз, дальше по номеру', docs.filter(d => d.real).length === 1 && docs.filter(d => d.byId).length === 2, docs.map(d => d.real ? 'файл' : d.byId));
+    ck('файл настоящий — не пустышка', docs[0] && docs[0].bytes > 300 * 1024 && /\.apk$/.test(docs[0].file), docs[0] && { b: docs[0].bytes, f: docs[0].file });
 
     // ── второй раз в тот же день: каждому не больше раза в день
     sent.length = 0;
     const out2 = await adm.rpc('admin.news', { force: 'i' });
-    ck('повторная рассылка не дублирует', out2.tg && out2.tg.sent === 0 && sent.length === 0, { tg: out2.tg, sent: sent.length });
+    ck('повторная рассылка не дублирует (и файлы тоже)', out2.tg && out2.tg.sent === 0 && sent.length === 0 && docs.length === 3, { tg: out2.tg, sent: sent.length, docs: docs.length });
 
     // ── «жив ли сайт»: телефон проверяет адрес обновления перед скачиванием
     const hh = await fetch(base + '/api/tg/health');
