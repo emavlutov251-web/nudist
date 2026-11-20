@@ -83,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 33;      // 3.3: кино вдвоём в рейве, голос, сообщества, кириллица в оболочке
+    private static final int APP_VERSION = 34;      // 3.4: без сжатия в оболочке — у всех пропали ромбики вместо букв
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -736,15 +736,11 @@ public class MainActivity extends Activity {
         Map<String, String> headers = new java.util.HashMap<String, String>();
         headers.put("Cache-Control", "no-cache");
         if (main) headers.put("X-Nudist-Build", String.valueOf(embeddedBuild()));     // страница сверит со сборкой сервера
-        try {
-            if (main) body = personalizeIndex(body);
-            if (textType(mime) || rel.endsWith(".webmanifest")) {     // текст отдаём сжатым: меньше памяти и быстрее разбор
-                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream(body.length / 2 + 64);
-                GZIPOutputStream gz = new GZIPOutputStream(bo); gz.write(body); gz.close();
-                headers.put("Content-Encoding", "gzip");
-                return new WebResourceResponse(mime, "utf-8", 200, "OK", headers, new ByteArrayInputStream(bo.toByteArray()));
-            }
-        } catch (Throwable e) { /* отдадим как есть */ }
+        // Сжатие отдаём БЕЗ заголовка Content-Encoding: раньше здесь стоял gzip, и на части телефонов
+        // (MIUI/HyperOS, WebView с VPN-прокси) заголовок терялся при перехвате — страница показывала
+        // вместо русских букв ромбики с вопросами. Проверено по скриншотам друзей.
+        // Экономия от gzip того не стоит: файлы и так мелкие и лежат внутри приложения.
+        try { if (main) body = personalizeIndex(body); } catch (Throwable e) { /* отдадим как есть */ }
         return new WebResourceResponse(mime, textType(mime) || rel.endsWith(".woff2") ? "utf-8" : null, 200, "OK", headers, new ByteArrayInputStream(body));
     }
 

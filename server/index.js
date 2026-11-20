@@ -101,7 +101,11 @@ function serveStatic(req, res, rel) {
     const TEXTUAL = /^(html|js|css|json|svg|txt|webmanifest|xml|map)$/;
     if (TEXTUAL.test(ext) && !/charset/i.test(h['content-type'])) h['content-type'] += '; charset=utf-8';
     if (TEXTUAL.test(ext)) h['content-language'] = 'ru';
-    const ae = req.headers['accept-encoding'] || '';
+    // Встроенный браузер приложения не сжимаем никогда: на части телефонов (старый WebView, MIUI, VPN-прокси)
+    // заголовок Content-Encoding теряется и вместо страницы человек видит ромбики с вопросами.
+    // Файлы интерфейса и так лежат в приложении — экономить тут нечего.
+    const inApp = /NudistAndroid\//i.test(String(req.headers['user-agent'] || ''));
+    const ae = inApp ? '' : (req.headers['accept-encoding'] || '');
     if (/^(html|js|css|json|svg|webmanifest)$/.test(ext) && /\b(br|gzip)\b/.test(ae)) {      // текст отдаём сжатым: brotli на треть меньше gzip
       const enc = /\bbr\b/.test(ae) ? 'br' : 'gzip', k = enc + file + etag; let z = gzCache.get(k);
       if (!z) {
