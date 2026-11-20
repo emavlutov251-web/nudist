@@ -32,7 +32,7 @@ const TOKEN = '123456:TEST-only-token', sent = [];
   await new Promise(r => mock.listen(0, '127.0.0.1', r));
   const TG_API = `http://127.0.0.1:${mock.address().port}`;
 
-  const env = { ...process.env, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dir, KEEP_AWAKE: 'off', TG_BOT_TOKEN: TOKEN, TG_API, TG_SETUP_MS: '100', SITE_URL: 'https://nudist.example' };
+  const env = { ...process.env, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dir, KEEP_AWAKE: 'off', TG_BOT_TOKEN: TOKEN, TG_API, TG_SETUP_MS: '100', NEWS_KEY: 'test-news-key-0123456789', SITE_URL: 'https://nudist.example' };
   for (const k of Object.keys(env)) if (/^(SUPABASE_|S3_|OWNERS|LEAF_ADMINS|TG_LOGIN|YOOKASSA|NODE_ENV|MOVED_TO)/.test(k)) delete env[k];
   const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'boot.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; srv.stdout.on('data', d => log += d); srv.stderr.on('data', d => log += d);
@@ -106,6 +106,12 @@ const TOKEN = '123456:TEST-only-token', sent = [];
       apiOut = { status: rr.status, body: await rr.json() };
     }
     ck('снаружи по ключу рассылка проходит', apiOut.status === 200 && apiOut.body && apiOut.body.tg && apiOut.body.tg.ok === true, apiOut);
+    const nk = await fetch(base + '/api/admin/news', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer test-news-key-0123456789' }, body: '{}' });
+    ck('ключ рассылки из настроек сервера тоже работает', nk.status === 200, nk.status);
+    const wrong = await fetch(base + '/api/admin/news', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer test-news-key-0000000000' }, body: '{}' });
+    ck('чужой ключ рассылки не пускает', wrong.status === 401, wrong.status);
+    const wrongStats = await fetch(base + '/api/admin/stats', { headers: { authorization: 'Bearer test-news-key-0123456789' } });
+    ck('ключ рассылки не открывает остальную админку', wrongStats.status === 401, wrongStats.status);
 
     // ── обычный пользователь не может рассылать
     const den = await bob.fail('admin.news', { force: 'i' });

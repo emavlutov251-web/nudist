@@ -245,6 +245,10 @@ H['admin.apikeys'] = (c, p) => {
 };
 // HTTP API для интеграций: Authorization: Bearer nud_…
 const newsOut = { at: 0, out: null };      // последний ответ рассылки обновления (для отладки из /api/admin/news)
+// Ключ рассылки из настроек сервера (NEWS_KEY) — для скрипта выкладки, чтобы не заводить ключ руками в админке.
+// Действует только на один путь — /api/admin/news; остальной интеграционный API им не открывается.
+const NEWS_KEY = String(process.env.NEWS_KEY || '');
+const newsKeyOk = k => !!NEWS_KEY && k.length > 12 && crypto.timingSafeEqual(Buffer.from(crypto.createHash('sha256').update(String(k)).digest('hex')), Buffer.from(crypto.createHash('sha256').update(NEWS_KEY).digest('hex')));
 // Рассылка обновления снаружи — для скрипта выкладки: POST /api/admin/news с ключом интеграции.
 // Ничего не сломает: правила тишины внутри те же (раз в день человеку, ночью — до утра).
 async function newsFromApi(body) {
@@ -254,6 +258,7 @@ async function newsFromApi(body) {
 }
 function httpApi(pathname, auth, method, body) {
   const key = (auth || '').replace(/^Bearer\s+/i, ''); const h = crypto.createHash('sha256').update(key).digest('hex');
+  if (pathname === '/api/admin/news' && method === 'POST' && newsKeyOk(key)) return newsFromApi(body).then(out => ({ code: 200, body: out }), e => ({ code: 500, body: { error: e.message } }));
   if (!key || !(db.meta.apiKeys || []).some(k => k.hash === h)) return { code: 401, body: { error: 'unauthorized' } };
   if (pathname === '/api/admin/stats') return { code: 200, body: stats() };
   if (pathname === '/api/admin/funnel') return { code: 200, body: Funnel.stats() };
