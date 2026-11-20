@@ -374,6 +374,9 @@ async function ask(fresh) {
 export async function checkUpdate() {
   const t = Date.now(); if (t - U.at < 20e3) return ask(); U.at = t;
   let v; try { v = await (await fetch('/api/version', { cache: 'no-store' })).json(); } catch (e) { U.at = 0; return; }
+  // Язык интерфейса: сервер знает страну посетителя, страница — нет. Пока человек не выбрал язык сам,
+  // берём подсказку сервера (русский для СНГ, английский для остальных) и запоминаем.
+  try { if (v.ui && !localStorage.getItem('nudist.lang') && window.NudistI18n) window.NudistI18n.setLang(v.ui === 'en' ? 'en' : 'ru'); } catch (e) { /* не страшно */ }
   const newer = !U.apk || Number(v.apk && v.apk.code) > Number(U.apk.code); if (v.apk && v.apk.code) U.apk = v.apk;
   if (inApp() && !U.told) { U.told = true; rpc('app.hello', { v: appVer() }).catch(() => { U.told = false; }); }      // сервер запомнит сборку и напомнит об обновлении в шторке
   if (v.build) {

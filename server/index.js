@@ -100,6 +100,40 @@ function serveStatic(req, res, rel) {
     h['content-length'] = stt.size; res.writeHead(200, h); fs.createReadStream(file).pipe(res);
   });
 }
+// Язык интерфейса по стране посетителя: русский по всему СНГ, английский для остальных.
+// Это же значение подставляет страница (см. index.html) и приложение при встраивании интерфейса.
+const RU_COUNTRIES = new Set(['RU', 'BY', 'KZ', 'UA', 'MD', 'AM', 'AZ', 'KG', 'UZ', 'TJ', 'TM', 'GE', 'LT', 'LV', 'EE', 'IL', 'CY', 'AE', 'TR', 'TH', 'ID', 'VN', 'RS', 'BG', 'DE', 'ES', 'IT', 'CZ', 'PL', 'FI', 'PT', 'GR', 'HU', 'RO', 'SK', 'SI', 'HR', 'NL', 'AT', 'CH', 'BE', 'DK', 'NO', 'SE', 'FR', 'GB', 'US', 'CA', 'AU', 'NZ', 'BR', 'AR', 'MX', 'IN', 'CN', 'JP', 'KR', 'SG', 'MY', 'PH']);
+function uiLang(req) {
+  const c = countryOf(req);
+  const accept = String(req.headers['accept-language'] || '').toLowerCase();
+  if (/^ru\b/.test(accept)) return 'ru';
+  if (c) return RU_COUNTRIES.has(c) ? 'ru' : 'en';
+  return /^ru\b/.test(accept) || !accept ? 'ru' : 'en';
+}
+
+// Что входит в интерфейс: код, стили, шрифты, значки, манифест. Список нужен приложению,
+// чтобы скачать ровно эти файлы и больше ничего (фотографии, страницы правил и APK — отдельно).
+const WEB_SKIP = /^\/(index\.html|admin\.html|ask\.html|start\.html|start-phone\.jpg|css\/admin\.css|js\/admin\.js|js\/ask\.js|js\/start\.js|js\/start-qr\.js|nudist\.apk|sw\.js|promo\/|miniapps\/)/;
+let webListCache = { at: 0, list: [] };
+function webList() {
+  const t = Date.now();
+  if (t - webListCache.at < 60000 && webListCache.list.length) return webListCache.list;
+  const list = [];
+  const walk = dir => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const f = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(f); continue; }
+      const rel = '/' + path.relative(PUBLIC, f).split(path.sep).join('/');
+      if (/^\/index\.html$/.test(rel)) continue;      // главную страницу приложение держит внутри: она подставляет адрес сайта
+      if (WEB_SKIP.test(rel) || rel === '/og.png') continue;
+      if (/\.(html|js|css|woff2|svg|png|webmanifest|json)$/.test(rel)) list.push(rel);
+    }
+  };
+  walk(PUBLIC);
+  webListCache = { at: t, list };
+  return list;
+}
+
 // Главная страница: картинка для ссылок (og:image) должна быть с полным адресом сайта. Адрес берём из SITE_URL, а без него — из запроса,
 // чтобы при смене домена превью в соцсетях не продолжало показывать на старый адрес.
 const SITE_PUB = (process.env.SITE_URL || '').replace(/\/+$/, ''), indexCache = new Map();
@@ -129,7 +163,10 @@ function buildSw() {
   const walk = dir => { for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) { const f = path.join(dir, e.name); if (e.isDirectory()) walk(f); else { const rel = '/' + path.relative(PUBLIC, f).split(path.sep).join('/'); if (!SW_SKIP.test(rel)) { files.push(rel); hash.update(rel).update(fs.readFileSync(f)); } } } };
   walk(PUBLIC);
   if (process.env.BUILD_SALT) hash.update(process.env.BUILD_SALT);      // для тестов: «выложить новую версию», не меняя файлов
-  const v = swVer = hash.digest('hex').slice(0, 12);
+  // Отпечаток встроенного интерфейса — тот же, что считает приложение (SHA-256 по index.html, 12 символов).
+  // По нему приложение понимает, совпадает ли его копия с сервером, и решает, обновлять ли интерфейс.
+  // В тестах BUILD_SALT позволяет «выложить новую версию», не меняя файлов — учитываем его и здесь.
+  let v; try { const ih = crypto.createHash('sha256').update(fs.readFileSync(path.join(PUBLIC, 'index.html'))); if (process.env.BUILD_SALT) ih.update(process.env.BUILD_SALT); v = swVer = ih.digest('hex').slice(0, 12); } catch (e) { v = swVer = hash.digest('hex').slice(0, 12); }
   if (process.env.NO_SW) return `self.addEventListener('install',function(){self.skipWaiting()});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}).then(function(){return self.registration.unregister()}))});`;
   return `// Нудист: кеш оболочки, версия ${v}
 var V='nudist-${v}',FILES=${JSON.stringify(files)},SET={};FILES.forEach(function(f){SET[f]=1});
@@ -214,7 +251,8 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/upload' && req.method === 'POST') return handleUpload(req, res);
     if (p === '/api/notify' && req.method === 'GET') { const a = sessionOf(req); if (a) { try { A.limit('notify:' + a.u.id, 90, 60000); } catch (e) { return json(res, 429, { error: 'Слишком часто' }); } } return Push.poll(req, res, url, a, json); }      // лента уведомлений для приложения на Android
     if (p === '/api/health') return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), online: C.conns.size, db: { mb: Math.round((C.metrics.dbBytes || 0) / 104857.6) / 10, saveMs: C.metrics.saveMs || 0, unsavedMs: C.unsavedMs() }, cloud: Cloud.enabled ? { ok: !Cloud.status.lastError, savedAgo: Cloud.status.lastOk ? Math.round((Date.now() - Cloud.status.lastOk) / 1000) : null } : undefined, mirror: Cloud.mirrorStatus(), files: (u => u ? { mb: Math.round(u.bytes / 1048576), maxMb: Math.round(u.max / 1048576), count: u.files } : undefined)(Cloud.usage()) });
-    if (p === '/api/version') return json(res, 200, { build: buildVer(), apk: Push.apkInfo(), cc: countryOf(req) });      // что сейчас выложено: интерфейс и сборка для Android
+    if (p === '/api/version') return json(res, 200, { build: buildVer(), apk: Push.apkInfo(), cc: countryOf(req), ui: uiLang(req) });      // ui — язык интерфейса для страницы      // что сейчас выложено: интерфейс и сборка для Android
+    if (p === '/api/web-list') return json(res, 200, webList());      // что входит в интерфейс: приложение обновляет свою копию по этому списку
     if (p === '/api/config') { const t = Date.now(); if (!memberCache || t - memberCache.at > 120000) memberCache = { at: t, n: Object.values(db.users).filter(u => !u.deleted && !u.bot).length }; return json(res, 200, { flags: A.pubFlags(), setup: A.setupNeeded() || undefined, tg: Tg.botName() || undefined, name: 'Нудист', version: '1.0.0', members: memberCache.n }); }
     if (p === '/api/track' && req.method === 'POST') { try { A.limit('trk:' + ipOf(req), 180, 60e3); } catch (e) { return json(res, 429, { error: 'Слишком часто' }); } const b = await readJson(req); return json(res, 200, Funnel.track(String(b.e || b.event || ''), Funnel.cleanUtm(b.utm ? { utm_source: b.utm.src, utm_medium: b.utm.med, utm_campaign: b.utm.cam, utm_content: b.utm.cnt } : b), b.ref, ipOf(req))); }      // статистика посадочной: визит, скачивание, открытие
     if (p === '/api/clientlog' && req.method === 'POST') {      // телефон сообщает, почему приложение не запустилось

@@ -37,6 +37,7 @@ import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.SslErrorHandler;
 import android.webkit.URLUtil;
+import android.webkit.MimeTypeMap;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -54,10 +55,18 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.zip.GZIPOutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.SecureRandom;
@@ -74,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 30;      // 3.0: экран версии и обновлений, заставка при запуске, отклик панели, ссылки nudist.app открываются в приложении
+    private static final int APP_VERSION = 31;      // 3.1: интерфейс целиком внутри APK — открывается сразу, обновляется без переустановки
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -135,6 +144,7 @@ public class MainActivity extends Activity {
         visible = true;
         PushService.clearShown(this);
         PushService.start(this);      // если систему пришлось перезапустить службу или она ещё не поднята
+        syncEmbedded();               // раз в сутки: нет ли на сервере интерфейса новее встроенного
     }
 
     @Override
@@ -156,6 +166,109 @@ public class MainActivity extends Activity {
                 web.evaluateJavascript("(function(){try{var h='#c=" + chat + "';if(location.hash===h)window.dispatchEvent(new HashChangeEvent('hashchange'));else location.hash=h;}catch(e){}})()", null);
             } catch (Throwable e) { /* страница ещё не загрузилась */ }
         }
+    }
+
+    // ───── Обновление интерфейса без переустановки
+    // Встроенная копия стареет: мы выкладываем новые версии каждую неделю. Поэтому раз в сутки приложение спрашивает
+    // /api/version; если build на сервере другой, тихо скачивает все файлы интерфейса (список — из /api/web-list),
+    // кладёт во внутреннее хранилище и со следующего запуска показывает их. Хранится одна версия; старая удаляется.
+    private static final String WEB_MARK = "web-check";      // когда проверяли в последний раз
+
+    private void syncEmbedded() {
+        if (!embeddedReady) prepareEmbedded();
+        if (System.currentTimeMillis() - prefs.getLong(WEB_MARK, 0) < 24 * 3600e3) return;      // раз в сутки достаточно
+        final String server = prefs.getString("server", null);
+        if (server == null) return;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String build = serverBuild(server);
+                    if (build == null) return;
+                    String have = currentWebBuild();
+                    prefs.edit().putLong(WEB_MARK, System.currentTimeMillis()).apply();
+                    if (build.equals(have) || build.equals(prefs.getString("webSkip", null))) return;      // уже эта версия (или она не скачалась — не долбим сервер)
+                    String list = fetchText(server + "/api/web-list");
+                    if (list == null || list.length() < 3) return;
+                    org.json.JSONArray files = new org.json.JSONArray(list);
+                    File dir = new File(getFilesDir(), "web/" + build);
+                    File tmp = new File(getFilesDir(), "web/" + build + ".tmp");
+                    deleteTree(tmp);
+                    if (!tmp.mkdirs() && !tmp.isDirectory()) return;
+                    for (int i = 0; i < files.length(); i++) {
+                        String rel = files.getString(i);
+                        if (rel == null || rel.contains("..") || rel.startsWith("/")) continue;
+                        byte[] body = fetchBytes(server + "/" + rel);
+                        if (body == null) { deleteTree(tmp); prefs.edit().putString("webSkip", build).apply(); return; }      // недокачали — попробуем завтра
+                        File f = new File(tmp, rel);
+                        File parent = f.getParentFile();
+                        if (parent != null && !parent.isDirectory() && !parent.mkdirs()) { deleteTree(tmp); return; }
+                        FileOutputStream out = new FileOutputStream(f);
+                        try { out.write(body); } finally { try { out.close(); } catch (Throwable ignored) { } }
+                    }
+                    File dst = new File(getFilesDir(), "web/" + build);
+                    deleteTree(dst);
+                    if (!tmp.renameTo(dst)) { deleteTree(tmp); return; }
+                    String old = prefs.getString("web", null);
+                    prefs.edit().putString("web", build).remove("webSkip").apply();
+                    if (old != null && !old.equals(build)) deleteTree(new File(getFilesDir(), "web/" + old));
+                    embeddedReady = false;      // список файлов перечитаем при следующем обращении
+                    assetCache.clear();
+                } catch (Throwable e) {
+                    prefs.edit().putLong(WEB_MARK, System.currentTimeMillis()).apply();      // сеть подвела — не чаще раза в сутки
+                }
+            }
+        }).start();
+    }
+
+    /** Какая копия интерфейса сейчас главная: скачанная (её отпечаток) или встроенная. */
+    private String currentWebBuild() {
+        String v = prefs.getString("web", null);
+        if (v != null) return v;
+        return embeddedBuild();
+    }
+
+    private static String fetchText(String url) {
+        byte[] b = fetchBytes(url);
+        return b == null ? null : new String(b, StandardCharsets.UTF_8);
+    }
+
+    /** GET без кеша. Приложение и так качает только интерфейс и только раз в сутки. */
+    private static byte[] fetchBytes(String url) {
+        java.net.HttpURLConnection c = null;
+        try {
+            c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            c.setConnectTimeout(15000); c.setReadTimeout(30000);
+            c.setRequestProperty("Accept-Encoding", "identity");
+            c.setRequestProperty("User-Agent", "NudistAndroid-web");
+            if (c.getResponseCode() != 200) return null;
+            InputStream in = c.getInputStream();
+            try {
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(Math.max(1024, c.getContentLength()));
+                byte[] buf = new byte[16384]; int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                return out.toByteArray();
+            } finally { try { in.close(); } catch (Throwable ignored) { } }
+        } catch (Throwable e) {
+            return null;
+        } finally { if (c != null) c.disconnect(); }
+    }
+
+    private String serverBuild(String server) {
+        try {
+            String v = fetchText(server + "/api/version");
+            if (v == null) return null;
+            org.json.JSONObject j = new org.json.JSONObject(v);
+            String b = j.optString("build", "");
+            return b.matches("[0-9a-f]{6,64}") ? b : null;
+        } catch (Throwable e) { return null; }
+    }
+
+    private static void deleteTree(File f) {
+        if (f == null || !f.exists()) return;
+        File[] kids = f.listFiles();
+        if (kids != null) for (File k : kids) deleteTree(k);
+        f.delete();
     }
 
     /** Чат из нажатого уведомления. Идентификатор проверяем: он попадает в адрес страницы. */
@@ -515,6 +628,163 @@ public class MainActivity extends Activity {
         }
     }
 
+    // ───── Интерфейс внутри приложения
+    // Мессенджер целиком лежит в APK (assets/public): код, стили, шрифты, значки. WebView не ходит за ними в сеть —
+    // MainActivity отдаёт файлы из assets через shouldInterceptRequest, поэтому при медленном интернете интерфейс
+    // открывается сразу, а не после загрузки мегабайта скриптов. Сеть нужна только данным: /api, /ws, /u (файлы) и /nudist.apk.
+    // Встроенная копия привязана к номеру сборки: после каждого обновления сервера приложение забирает новый интерфейс
+    // один раз и кладёт во внутреннее хранилище (это и есть «обновления без переустановки»).
+    private static final String EMBEDDED_ROOT = "public/";
+    private final Map<String, byte[]> assetCache = new HashMap<String, byte[]>();
+    private java.util.Set<String> overlayFiles;          // список файлов скачанной новой версии
+    private volatile boolean embeddedReady;
+
+    /** Встроенная копия интерфейса: assets из APK плюс один раз скачанное обновление поверх. */
+    private final class Embedded {
+        String lang;              // язык системы: ru / en — от него зависит язык интерфейса (см. index.html)
+        boolean ready() { return embeddedReady; }
+    }
+
+    /** Путь к файлу во внутреннем хранилище, где лежит скачанная новая версия интерфейса (или null). */
+    private File overlayDir() {
+        if (!embeddedReady) prepareEmbedded();
+        String v = prefs.getString("web", null);
+        if (v == null) return null;
+        File d = new File(getFilesDir(), "web/" + v);
+        return d.isDirectory() ? d : null;
+    }
+
+    /** Один раз при запуске: читаем список встроенных файлов, чтобы знать, что можно отдавать из APK. */
+    private void prepareEmbedded() {
+        if (embeddedReady) return;
+        try {
+            overlayFiles = new java.util.HashSet<String>();
+            File ov = overlayDirNoList();
+            if (ov != null) for (String n : ov.list()) overlayFiles.add(n);
+        } catch (Throwable e) { overlayFiles = new java.util.HashSet<String>(); }
+        embeddedReady = true;
+    }
+
+    private File overlayDirNoList() {
+        String v = prefs.getString("web", null);
+        if (v == null) return null;
+        File d = new File(getFilesDir(), "web/" + v);
+        return d.isDirectory() ? d : null;
+    }
+
+    /** Открытые текстовые ресурсы держим: модули грузятся пачками, и читать их из assets каждый раз медленно. */
+    private static boolean textType(String mime) {
+        return mime != null && (mime.startsWith("text/") || mime.endsWith("javascript") || mime.endsWith("json") || mime.endsWith("xml") || mime.endsWith("svg"));
+    }
+
+    private static String mimeOf(String path) {
+        String p = path.toLowerCase(Locale.ROOT);
+        if (p.endsWith(".html")) return "text/html";
+        if (p.endsWith(".js") || p.endsWith(".mjs")) return "application/javascript";
+        if (p.endsWith(".css")) return "text/css";
+        if (p.endsWith(".json") || p.endsWith(".webmanifest")) return "application/manifest+json";
+        if (p.endsWith(".svg")) return "image/svg+xml";
+        String ext = MimeTypeMap.getFileExtensionFromUrl(p);
+        String m = ext == null ? null : MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
+        return m == null ? "application/octet-stream" : m;
+    }
+
+    /** Файл интерфейса из APK (assets) или null, если такого нет. */
+    private byte[] assetFile(String path) {
+        byte[] cached = assetCache.get(path);
+        if (cached != null) return cached;
+        InputStream in = null;
+        try {
+            in = getAssets().open(EMBEDDED_ROOT + path);
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(Math.max(1024, in.available()));
+            byte[] buf = new byte[16384]; int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            byte[] b = out.toByteArray();
+            if (cachedStatic(path)) assetCache.put(path, b);
+            return b;
+        } catch (Throwable e) {
+            return null;
+        } finally { try { if (in != null) in.close(); } catch (Throwable ignored) { } }
+    }
+
+    /** Что кешируем в памяти: код и шрифты (их много и они мелкие), картинки читаем по мере надобности. */
+    private static boolean cachedStatic(String p) {
+        return p.endsWith(".js") || p.endsWith(".css") || p.endsWith(".woff2") || p.endsWith(".svg") || p.endsWith(".json") || p.endsWith(".webmanifest");
+    }
+
+    /**
+     * Ответ на запрос страницы: главная — index.html из APK с подставленными адресами сайта,
+     * остальное — файл из APK или из скачанного обновления. Данные (/api, /ws, /u, /bot, /hook) не перехватываем:
+     * они идут на сервер как обычно.
+     */
+    private WebResourceResponse embeddedResponse(Uri uri, String server) {
+        String path = uri.getPath() == null ? "/" : uri.getPath();
+        if (path.startsWith("/api/") || path.startsWith("/ws") || path.startsWith("/u/") || path.startsWith("/bot/") || path.startsWith("/hook/") || path.startsWith("/p/")) return null;
+        prepareEmbedded();
+        boolean main = path.equals("/") || path.equals("/index.html");
+        String rel = main ? "index.html" : path.substring(1);
+        byte[] body = null;
+        File ov = overlayDirNoList();
+        if (ov != null && overlayFiles != null && overlayFiles.contains(rel)) {
+            try { body = readFile(new File(ov, rel)); } catch (Throwable e) { body = null; }
+        }
+        if (body == null) body = assetFile(rel);
+        if (body == null) return null;                       // нет в APK — пусть решает сервер (новые файлы, картинки, страницы)
+        String mime = mimeOf(rel);
+        Map<String, String> headers = new java.util.HashMap<String, String>();
+        headers.put("Cache-Control", "no-cache");
+        if (main) headers.put("X-Nudist-Build", String.valueOf(embeddedBuild()));     // страница сверит со сборкой сервера
+        try {
+            if (main) body = personalizeIndex(body);
+            if (textType(mime) || rel.endsWith(".webmanifest")) {     // текст отдаём сжатым: меньше памяти и быстрее разбор
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream(body.length / 2 + 64);
+                GZIPOutputStream gz = new GZIPOutputStream(bo); gz.write(body); gz.close();
+                headers.put("Content-Encoding", "gzip");
+                return new WebResourceResponse(mime, "utf-8", 200, "OK", headers, new ByteArrayInputStream(bo.toByteArray()));
+            }
+        } catch (Throwable e) { /* отдадим как есть */ }
+        return new WebResourceResponse(mime, rel.endsWith(".woff2") ? "utf-8" : null, 200, "OK", headers, new ByteArrayInputStream(body));
+    }
+
+    private static byte[] readFile(File f) throws IOException {
+        java.io.FileInputStream in = new java.io.FileInputStream(f);
+        try {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream((int) Math.max(1024, f.length()));
+            byte[] buf = new byte[16384]; int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            return out.toByteArray();
+        } finally { try { in.close(); } catch (Throwable ignored) { } }
+    }
+
+    /**
+     * index.html из APK плюс то, что обычно подставляет сервер: полный адрес картинки для превью ссылок
+     * и ключ обновления интерфейса. Ключ берём из встроенной копии — по нему приложение видит, что на сервере новее,
+     * и один раз забирает новый интерфейс.
+     */
+    private byte[] personalizeIndex(byte[] raw) {
+        String html = new String(raw, StandardCharsets.UTF_8);
+        String server = prefs.getString("server", "");
+        // в файле стоит относительный /og.png (в браузере его превращает сервер) — здесь подставляем полный адрес сайта
+        html = html.replaceAll("(<meta property=\"og:image\" content=\")[^\"]*(\")", "$1" + server + "/og.png$2");
+        String build = embeddedBuild();
+        if (build != null) html = html.replace("</head>", "<meta name=\"nudist-build\" content=\"" + build + "\" />\n</head>");
+        return html.getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** Отпечаток встроенной копии интерфейса: совпадает с build сервера, если на сервере тот же код. */
+    private String embeddedBuild() {
+        try {
+            byte[] idx = assetFile("index.html");
+            if (idx == null) return null;
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            md.update(idx);
+            byte[] h = md.digest();
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 6; i++) sb.append(String.format("%02x", h[i]));
+            return sb.toString();      // 12 символов — как у сервера
+        } catch (Throwable e) { return null; }
+    }
+
     // ───── WebView
 
     private void createWebView() {
@@ -545,6 +815,21 @@ public class MainActivity extends Activity {
                 if (!request.isForMainFrame() && scheme.equals("https")) return false;
                 openExternal(u);
                 return true;
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                // Интерфейс — из APK (assets/public). Данные по-прежнему с сервера. Это не кеш браузера:
+                // файлы лежат внутри приложения и работают даже при медленном интернете.
+                try {
+                    Uri u = request.getUrl();
+                    String server = prefs.getString("server", null);
+                    if (server == null || u == null) return null;
+                    if (!sameOrigin(u, Uri.parse(server))) return null;
+                    return embeddedResponse(u, server);
+                } catch (Throwable e) {
+                    return null;      // любая беда — пусть грузит сервер, приложение не должно ломаться
+                }
             }
 
             @Override

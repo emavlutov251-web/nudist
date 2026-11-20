@@ -9,6 +9,11 @@ export const apkCode = () => { try { return window.NudistApp && window.NudistApp
 export const apkName = c => c ? `${Math.floor(c / 10)}.${c % 10}` : '';
 const fmtDate = ts => { try { return new Date(ts).toLocaleString('ru-RU', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
 
+// Сборка интерфейса: сервер считает её сам и присылает в каждом ответе (/api/version).
+// В приложении код может быть встроен в APK, поэтому локальная копия может отставать — это нормально, и это видно.
+const SERVER_BUILD = (() => { try { return String((document.querySelector('meta[name="nudist-build"]') || {}).content || ''); } catch (e) { return ''; } })();
+export const embeddedBuild = () => SERVER_BUILD;
+
 // Сведения о сборке интерфейса и приложения. Сервер отвечает одним запросом, кеш — на минуту.
 let cache = null;
 export async function versionInfo() {
@@ -53,7 +58,8 @@ export function Version({ wide }) {
 
     <div class="list">
       <div class="li ver-row"><${Icon} n="smartphone" /><span><b>Сборка приложения</b><small>${mine ? `${apkName(mine)} · номер ${mine}` : 'не приложение — открыто в браузере'}</small></span></div>
-      <div class="li ver-row"><${Icon} n="refresh-cw" /><span><b>Интерфейс (сайт)</b><small>${(v && v.build ? v.build.slice(0, 12) : '…')}${v ? ' · проверено ' + fmtDate(v.at) : ''}</small></span></div>
+      <div class="li ver-row"><${Icon} n="refresh-cw" /><span><b>Интерфейс на сервере</b><small>${(v && v.build ? v.build.slice(0, 12) : '…')}${v ? ' · проверено ' + fmtDate(v.at) : ''}</small></span></div>
+      <div class="li ver-row"><${Icon} n="database" /><span><b>Интерфейс внутри приложения</b><small>${(mine && embeddedBuild()) ? embeddedBuild() : mine ? 'грузится с сервера' : 'не приложение — берётся с сервера'}</small></span></div>
       <div class="li ver-row"><${Icon} n="download" /><span><b>Что выложено для Android</b><small>${from || (busy ? 'спрашиваем сервер…' : err || 'нет данных')}</small></span></div>
     </div>
 

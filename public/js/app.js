@@ -21,6 +21,9 @@ takeRef();
 // Офлайн-кеш оболочки: со второго захода приложение открывается с диска. Вышла новая версия — докачается в фоне и предложит обновиться.
 function swSetup() {
   if (!('serviceWorker' in navigator) || !/^https:|^http:\/\/(localhost|127\.)/.test(location.href)) return;
+  // В приложении интерфейс лежит внутри APK и обновляется сам (MainActivity → syncEmbedded), а не сервис-воркером.
+  // Два механизма обновления сразу — лишние сюрпризы: приложение перезагружало бы страницу посреди работы.
+  if (window.NudistApp) return;
   let reloading = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (reloading) location.reload(); });
   const offer = w => offerSiteUpdate(() => { reloading = true; w.postMessage('skip'); setTimeout(() => location.reload(), 5000); });      // окно «Вышло обновление»; если новая копия не включилась за 5 секунд — просто перезагружаемся

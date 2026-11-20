@@ -26,6 +26,23 @@ cp AndroidManifest.xml "$W/AndroidManifest.xml"
 case "$SERVER_URL" in https://*) sed -i 's/android:usesCleartextTraffic="true"/android:usesCleartextTraffic="false"/' "$W/AndroidManifest.xml";; esac
 printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="default_server" translatable="false">%s</string>\n    <string name="migrate_from" translatable="false">%s</string>\n</resources>\n' "$SERVER_URL" "$MIGRATE_FROM" > "$W/res/values/server.xml"
 
+# ───── Интерфейс внутрь APK
+# Мессенджер целиком (код, стили, шрифты, значки) кладём в assets/public. Тогда WebView не тратит время и трафик
+# на загрузку интерфейса: страница открывается сразу, сеть нужна только сообщениям. Список файлов тот же,
+# что отдаёт сервер в /api/web-list, чтобы приложение могло потом обновить копию без переустановки.
+WEB="$W/assets/public"
+mkdir -p "$WEB"
+cp -r ../public/js ../public/css ../public/fonts ../public/vendor "$WEB"/
+cp ../public/index.html ../public/manifest.webmanifest "$WEB"/
+cp ../public/icon.svg ../public/icon-180.png ../public/icon-192.png ../public/icon-512.png ../public/icon-maskable.png "$WEB"/ 2>/dev/null || true
+cp ../public/*.png ../public/*.svg "$WEB"/ 2>/dev/null || true
+# страницы правил открываются в браузере с сервера — их внутрь не кладём, но политика должна быть доступна и офлайн
+cp ../public/privacy.html "$WEB"/ 2>/dev/null || true
+# лишнее внутрь не тащим
+rm -rf "$WEB"/js/admin.js "$WEB"/js/ask.js "$WEB"/js/start.js "$WEB"/js/start-qr.js "$WEB"/css/admin.css 2>/dev/null || true
+find "$WEB" -type f | wc -l | xargs printf 'интерфейс в APK: файлов %s\n'
+du -sh "$WEB" | awk '{print "интерфейс в APK: " $1}'
+
 "$BT/aapt2" compile --dir "$W/res" -o "$W/res.zip"
 "$BT/aapt2" link -o "$W/app.apk" -I "$JAR" --manifest "$W/AndroidManifest.xml" --java "$W/gen" \
   --min-sdk-version 26 --target-sdk-version 34 --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" "$W/res.zip"
@@ -33,6 +50,7 @@ mkdir -p "$W/classes" "$W/dex"
 javac -encoding UTF-8 -Xlint:-options -source 8 -target 8 -bootclasspath "$JAR" -d "$W/classes" $(find src "$W/gen" -name '*.java')
 "$BT/d8" --release --lib "$JAR" --min-api 26 --output "$W/dex" $(find "$W/classes" -name '*.class')
 (cd "$W/dex" && zip -q -j "$W/app.apk" classes.dex)
+(cd "$W" && zip -q -r "$W/app.apk" assets)      # интерфейс внутрь APK
 "$BT/zipalign" -f -p 4 "$W/app.apk" "$W/aligned.apk"
 # Ключ подписи: один и тот же для всех сборок, иначе обновление не встанет поверх старой версии.
 # Пароль хранилища — только из переменной NUDIST_KEYSTORE_PASS (в репозитории его нет). Нет файла nudist.keystore — создаётся новый ключ с этим паролем.
