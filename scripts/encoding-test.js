@@ -113,6 +113,7 @@ const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРО�
     ck('в админке есть кнопка «Разослать обновление»', /admin\.news/.test(adminj) && /Разослать обновление/.test(adminj), '');
     ck('просьба привязать Telegram: полоска с отложить-на-3-дня', /TgStrip/.test(setj) && /tg\.nag/.test(setj), '');
     ck('просьба доходит и подсказкой с кнопкой «Привязать»', /tgWallHint/.test(hintj) && /Привязать/.test(hintj), '');
+    ck('рассылка уходит и по ключу NEWS_KEY, но только на этот путь', /NEWS_KEY/.test(tgj === tgj ? fs.readFileSync(path.join(__dirname, '..', 'server', 'admin.js'), 'utf8') : '') , '');
     if (process.env.VERBOSE) console.log('');
     console.log(`${total - bad}/${total} ✓`);
     if (bad) process.exitCode = 1;
