@@ -129,6 +129,12 @@ const TOKEN = '123456:TEST-only-token', sent = [], docs = [];
     const wrongStats = await fetch(base + '/api/admin/stats', { headers: { authorization: 'Bearer test-news-key-0123456789' } });
     ck('ключ рассылки не открывает остальную админку', wrongStats.status === 401, wrongStats.status);
 
+    // ── «Отправить ещё раз всем»: осознанная переотправка снимает правило «раз в день»
+    sent.length = 0; docs.length = 0;
+    const again = await adm.rpc('admin.news', { force: 'i', all: 'i' });
+    ck('переотправка всем проходит, даже если сегодня писали', again.tg && again.tg.sent === 3, again.tg);
+    ck('во второй раз файл тоже приложен', docs.length === 3, docs.length);
+
     // ── обычный пользователь не может рассылать
     const den = await bob.fail('admin.news', { force: 'i' });
     ck('не-админ не рассылает', /Недостаточно прав/i.test(den || ''), den);

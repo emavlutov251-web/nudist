@@ -233,7 +233,7 @@ H['admin.broadcast'] = (c, p) => {
 // это служебное сообщение про сборку, его повторять безопасно, а текст и список новинок берутся из apk.json.
 H['admin.news'] = async (c, p) => {
   guard(c, 'admin');
-  const out = await require('./push').newsPush({ by: R.uname(db.users[c.uid]), force: ONE(p.force) });
+  const out = await require('./push').newsPush({ by: R.uname(db.users[c.uid]), force: ONE(p.force), all: ONE(p.all) });
   log(c, 'news', `${out.apk.name}: tg ${out.tg && out.tg.sent}/${out.tg && out.tg.total}, лента ${out.feed}`);
   return out;
 };
@@ -252,7 +252,7 @@ const newsKeyOk = k => !!NEWS_KEY && k.length > 12 && crypto.timingSafeEqual(Buf
 // Рассылка обновления снаружи — для скрипта выкладки: POST /api/admin/news с ключом интеграции.
 // Ничего не сломает: правила тишины внутри те же (раз в день человеку, ночью — до утра).
 async function newsFromApi(body) {
-  newsOut.out = await require('./push').newsPush({ by: 'api', force: ONE((body || {}).force) });
+  newsOut.out = await require('./push').newsPush({ by: 'api', force: ONE((body || {}).force), all: ONE((body || {}).all) });
   newsOut.at = now(); save();
   return newsOut.out;
 }

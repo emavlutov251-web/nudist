@@ -260,7 +260,9 @@ async function newsAnnounce(apk, it) {
   if (day.n >= 2 && !it.force) return { ok: false, sent: 0, error: 'сегодня уже было две рассылки' };
   const withFile = process.env.TG_NEWS_FILE !== 'off' && fs.existsSync(apkPath());
   const text = newsText(apk, withFile), sentMap = (db.meta.tgNewsSent = db.meta.tgNewsSent || {}), today = dayMsk();
-  const targets = Object.values(db.users).filter(u => !u.deleted && !u.bot && u.tg && u.tg.id && !(sentMap[u.id] && dayMsk(sentMap[u.id].at) === today)).map(u => u.id);
+  // it.all — переотправить всем привязавшим, даже если сегодня уже писали. Это осознанное действие владельца
+  // (например, в прошлый раз файл не приложился), поэтому правило «раз в день» здесь снимается — но только им.
+  const targets = Object.values(db.users).filter(u => !u.deleted && !u.bot && u.tg && u.tg.id && (it.all || !(sentMap[u.id] && dayMsk(sentMap[u.id].at) === today))).map(u => u.id);
   const out = { ok: true, sent: 0, failed: 0, total: targets.length, file: withFile, errors: [] };
   for (const id of targets) {
     const r = await newsSend(id, text, apk, withFile);
