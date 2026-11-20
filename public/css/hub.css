@@ -335,3 +335,17 @@ article.post footer { font-size: inherit; color: inherit; }
 .rv-card b { font-size: 14px; } .rv-card small { font-size: 12px; opacity: .7; } .rv-card .btn { margin-top: 2px; }
 .vid-rave { position: relative; }
 .vid-rave .rv { position: absolute; }
+
+/* ───── Сообщества по интересам */
+.co { display: flex; flex-direction: column; gap: 14px; }
+.co-load { padding: 30px; display: grid; place-items: center; }
+.co-lead { margin: 0; font-size: 13px; line-height: 1.45; opacity: .78; }
+.co-sec h3 { margin: 0 0 8px; font-size: 15px; }
+.co-list { display: grid; gap: 8px; }
+.co-card { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.co-card.in { border-color: rgba(43,179,106,.45); background: rgba(43,179,106,.06); }
+.co-e { font-size: 22px; line-height: 1.1; flex: none; }
+.co-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.co-t b { font-size: 15px; } .co-t small { font-size: 12.5px; line-height: 1.4; opacity: .72; }
+.co-n { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; opacity: .6; margin-top: 3px; }
+.co-card .btn { flex: none; align-self: center; }

@@ -5,6 +5,7 @@ import { openChat, showChannel, sendPayload } from './store.js';
 import { playAudio, AudioBar } from './media.js';
 import { GameButtons, RotateHint } from './gamefull.js';
 import { Raves, RaveRoom, RV, loadRaves } from './rave.js';
+import { Communities } from './communities.js';
 import { Cover, tagCover, spendEnergy, EnergyPill } from './perks.js';
 import { openLobby } from './lobby.js';
 import { openMiniApp } from './panels.js';
@@ -12,7 +13,7 @@ import { Feed, Viewers } from './feed.js';
 import { openDock, ytDock, oldShell } from './dock.js';
 import { Events } from './events.js';
 
-const TABS = [['events', 'party-popper', 'События'], ['music', 'music', 'Музыка'], ['apps', 'gamepad-2', 'Игры'], ['help', 'life-buoy', 'Поддержка']];
+const TABS = [['events', 'party-popper', 'События'], ['communities', 'users', 'Сообщества'], ['music', 'music', 'Музыка'], ['apps', 'gamepad-2', 'Игры'], ['help', 'life-buoy', 'Поддержка']];
 // «Лента» — отдельная вкладка внизу. В ней три раздела: общая лента (люди и каналы), «Видео» (клипы, ролики каналов и эфиры) и свои записи.
 const FEED_TABS = [['feed', 'list', 'Лента'], ['video', 'film', 'Видео'], ['user', 'user', 'Мои']];
 const VID = { mode: 'clips' };      // что открыто в «Видео»: клипы, эфиры или рейв
@@ -40,7 +41,7 @@ export function Hub() {
       <nav class=${cx('hub-tabs', feed && 'even')} role="tablist">${(feed ? FEED_TABS : TABS).map(([k, ic, name]) => { const on = feed ? ft === k : tab === k; return html`<button role="tab" aria-selected=${on} class=${cx(on && 'on')} onClick=${() => (feed ? setFeedTab(k) : setTab(k))} title=${name}><${Icon} n=${ic} s=${19} /><span>${name}</span>${k === 'video' && LIVE.n > 0 && html`<b class="hub-dot" title="Идут эфиры">${LIVE.n}</b>`}</button>`; })}</nav>
       <button class="ib hub-x" onClick=${closeHub} title="Закрыть и вернуться к чатам" aria-label="Закрыть"><${Icon} n="x" /></button>
     </header>
-    <div class="hub-b">${feed ? (video ? html`<${Video} />` : html`<${Feed} key=${ft} tab=${ft} />`) : tab === 'music' ? html`<${Music} />` : tab === 'events' ? html`<${Events} />` : tab === 'apps' ? html`<div class="hub-pad"><${AppsCatalog} /></div>` : html`<${Help} />`}</div>
+    <div class="hub-b">${feed ? (video ? html`<${Video} />` : html`<${Feed} key=${ft} tab=${ft} />`) : tab === 'music' ? html`<${Music} />` : tab === 'events' ? html`<${Events} />` : tab === 'communities' ? html`<div class="hub-pad"><${Communities} onOpen=${id => { closeHub(); S.ui.server = id; S.ui.list = true; const first = Object.values(S.chats).filter(x => x.server === id && x.kind === 'text').sort((a, b) => a.pos - b.pos)[0]; if (first) openChat(first.id); bump(); }} /></div>` : tab === 'apps' ? html`<div class="hub-pad"><${AppsCatalog} /></div>` : html`<${Help} />`}</div>
     ${!video && html`<${AudioBar} />`}
   </section>`;
 }

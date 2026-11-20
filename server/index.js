@@ -8,6 +8,7 @@ const A = require('./auth');
 const Hub = require('./hub');
 const Rave = require('./rave');
 require('./rp');
+const GuildsSeed = require('./guilds-seed');
 const Cards = require('./cards');
 const Rp = require('./rp');
 require('./feed');
@@ -412,6 +413,8 @@ let minuteCount = 0;
 
 // ───── фоновые задачи
 setInterval(() => { for (const set of C.conns.values()) for (const c of set) { c.n = 0; } }, 1000).unref();
+// Готовые сообщества для творческих людей и айтишников — один раз при старте, если их ещё нет.
+setTimeout(() => { try { GuildsSeed.ensure(); } catch (e) { console.warn('[guilds]', e.message); } }, 4000).unref?.();
 setInterval(() => { for (const set of C.conns.values()) for (const c of set) { if (!c.alive) { c.ws.terminate(); continue; } c.alive = false; try { c.ws.ping(); } catch (e) { /* закрыт */ } const s = db.sessions[c.token]; if (s) s.seen = now(); } }, 30000).unref();
 setInterval(() => {
   const t = now();
