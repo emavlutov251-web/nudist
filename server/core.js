@@ -114,8 +114,12 @@ function tierOf(u) {
   return t;
 }
 let cosHook = null, selfHook = null; const setCosHook = f => { cosHook = f; }, setSelfHook = f => { selfHook = f; };      // украшения из магазина (server/shop.js)
-// Кто «побыл рядом» за последние сутки (server/quiet.js)
-const nearOf = u => { const l = (u.near || []).filter(x => now() - x.ts < 864e5); return l.length ? l : undefined; };
+// Кто «побыл рядом» за последние сутки (server/quiet.js).
+// ВНИМАНИЕ: у одного человека поле near занято координатами «Я рядом» (server/nearby.js) — это объект {lat,lon,ts},
+// а отметки «побыть рядом» — массив. Спутать их легко, и одна ошибка роняет весь вход в аккаунт.
+// Поэтому массив берём только если это действительно массив; старое поле-объект при этом не трогаем.
+const nearList = u => (Array.isArray(u && u.near) ? u.near : []);
+const nearOf = u => { const l = nearList(u).filter(x => x && now() - x.ts < 864e5); return l.length ? l : undefined; };
 // Что о прочтении видно другим. У человека в режиме инкогнито своя отметка (read) двигается, а видимая остальным (pr) — нет.
 const pubRead = o => (o.pr === undefined ? o.read : o.pr) || 0;
 function canSee(u, viewerId, key) {

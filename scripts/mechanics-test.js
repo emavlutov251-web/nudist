@@ -96,6 +96,17 @@ const ck = (name, ok, extra) => { total++; if (!ok) { bad++; console.log('  ✗ 
     const commonId = dump.meta.common, tf = Object.values(dump.chats).find(c => c.username === 'istinnie_druzya');
     ck('«Весь Нудист» заводится сам даже без OWNERS, и зарегистрированные уже внутри', !!commonId && !!dump.chats[commonId] && ['mech_owner', 'mech_anna', 'mech_boris'].every(n => { const u = Object.values(dump.users).find(x => x.username === n); return u && dump.chats[commonId].members[u.id]; }), dump.meta.common);
     ck('«Истинные друзья» не найдены в поиске, вход — только по ссылке и заявке', !!tf && tf.pub === false && tf.approval === true, tf && { pub: tf.pub, approval: tf.approval });
+    // ── одна и та же ошибка ломала вход: «Я рядом» пишет в поле near координаты, а функция «рядом с вами» ждала там массив.
+    // Ловим регрессию на живом входе: у b включены координаты — сервер обязан отдать полноценные данные, а не упасть.
+    // Причина аварии 20.11: «Я рядом» пишет в поле near объект координат, а функция «рядом с вами» ждала там массив,
+    // и вход в аккаунт падал целиком. Проверяем на живых данных: две формы поля не должны мешать друг другу.
+    await a.rpc('near.send', { to: b.me.id }).catch(() => null);      // у b появился массив отметок
+    const C = require('../server/core.js');
+    const rawA = Object.values(dump.users).find(x => x.username === 'mech_anna'), rawB = Object.values(dump.users).find(x => x.username === 'mech_boris');
+    const withGeo = C.selfUser({ ...rawA, near: { lat: 55.75, lon: 37.61, ts: Date.now() } });
+    ck('координаты «Я рядом» не ломают данные человека', !!withGeo && withGeo.near === undefined, withGeo && withGeo.near);
+    const withList = C.selfUser({ ...rawB, near: [{ u: rawA.id, ts: Date.now() }] });
+    ck('отметки «побыть рядом» по-прежнему доходят', Array.isArray(withList.near) && withList.near.length === 1, withList.near);
     const h = await (await fetch(base + '/api/health')).json(); ck('состояние сервера: размер базы и время сохранения видны', h.ok && h.db && typeof h.db.saveMs === 'number' && typeof h.db.unsavedMs === 'number', h.db);
     const idx = await (await fetch(base + '/')).text(); ck('картинка для ссылок берётся с адреса, по которому открыли сайт', idx.includes(`og:image" content="${base}/og.png"`), (/og:image[^>]*/.exec(idx) || [])[0]);
   } finally { srv.kill(); await sleep(300); fs.rmSync(dir, { recursive: true, force: true }); }

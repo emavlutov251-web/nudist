@@ -330,7 +330,12 @@ function onConnect(ws, tok, sess, u, ip) {
   sess.seen = now(); if (!u.hideMeta) sess.ip = ip; u.seen = now(); C.touchDau(u.id);
   // отметка «доставлено» для личных чатов
   for (const cid of u.chats || []) { const ch = db.chats[cid]; if (ch && (ch.type === 'dm' || ch.type === 'secret') && ch.members[u.id]) { const s = C.st(ch, u.id); if ((s.deliv || 0) < ch.seq) { s.deliv = ch.seq; for (const o in ch.members) if (o !== u.id) emit(o, 'deliv', { chat: ch.id, seq: ch.seq }); } } }
-  c.send('init', { ...initData(c), build: buildVer() });
+  // Если данные человека почему-то не собираются, входить он всё равно должен: отдаём минимум, а не молча висим.
+  let hello; try { hello = { ...initData(c), build: buildVer() }; } catch (e) {
+    console.warn('[init] не собрались данные, отдаю минимум:', e.message);
+    hello = { me: C.pubUser(u, u.id), settings: u.settings || null, chats: [], servers: [], users: {}, flags: A.pubFlags(), conn: c.id, sys: db.meta.sys, time: now(), partial: 1, prices: { premium: R.PREMIUM_PRICE, boost: R.BOOST_PRICE, leaf: R.LEAF } };
+  }
+  c.send('init', hello);
   if (first) presence(u, true);
   save();
   ws.on('pong', () => { c.alive = true; });

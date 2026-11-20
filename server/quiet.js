@@ -23,7 +23,7 @@ H['chat.wipe'] = (c, p) => {
   const ids = Object.keys(ch.members), n = (db.msgs[ch.id] || []).length;
   Push.forget(ids, ch.id);
   C.destroyChat(ch);
-  for (const id of ids) { const u = db.users[id]; if (u && u.near) u.near = u.near.filter(x => !ids.includes(x.u)); }      /* вместе с перепиской уходит и «был рядом» */
+  for (const id of ids) { const u = db.users[id]; if (u && Array.isArray(u.near)) u.near = u.near.filter(x => !ids.includes(x.u)); }      /* вместе с перепиской уходит и «был рядом»; массив, а не координаты */
   save();
   return { ok: true, n };
 };
@@ -34,13 +34,13 @@ H['near.send'] = (c, p) => {
   const u = db.users[c.uid], o = db.users[typeof p.to === 'string' ? p.to : '']; need(o && !o.deleted && !o.bot && o.id !== u.id, 'Побыть рядом можно с другим человеком');
   need(!(o.blocked || []).includes(u.id) && !(u.blocked || []).includes(o.id), 'Этот человек сейчас недоступен');
   C.needVoice(u);
-  const last = (o.near || []).find(x => x.u === u.id);
+  const last = (Array.isArray(o.near) ? o.near : []).find(x => x.u === u.id);
   need(!last || now() - last.ts >= NEAR_GAP, 'Вы уже рядом. Этого достаточно — человек знает.');
   A.limit('near:' + u.id, 20, 3600e3);
-  o.near = [{ u: u.id, ts: now() }].concat((o.near || []).filter(x => x.u !== u.id && now() - x.ts < 864e5)).slice(0, 30);
+  o.near = [{ u: u.id, ts: now() }].concat((Array.isArray(o.near) ? o.near : []).filter(x => x.u !== u.id && now() - x.ts < 864e5)).slice(0, 30);
   const ch = C.openDm(u.id, o.id);
   const m = C.postMessage(ch, u.id, { text: '🤍 Я рядом. Отвечать не нужно.', near: 1 });
   save(); R.selfUpdate(o);
   return { ok: true, chat: ch.id, id: m.id };
 };
-H['near.clear'] = c => { const u = db.users[c.uid]; delete u.near; save(); R.selfUpdate(u); return { ok: true }; };
+H['near.clear'] = c => { const u = db.users[c.uid]; if (Array.isArray(u.near)) delete u.near; save(); R.selfUpdate(u); return { ok: true }; };      // не стираем координаты «Я рядом» — это другое действие

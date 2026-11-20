@@ -3,6 +3,10 @@
 import { html, useState, useEffect, S, bump, rpc, toast, Icon, Avatar, cx, openModal, closeModal, Modal, userName, confirmDlg, setSetting, Toggle, local, showMenu, fmtShort, plural } from './lib.js';
 import { sendPayload } from './store.js';
 
+// Отметки «побыть рядом» приходят массивом. Координаты «Я рядом» лежат в том же поле объекта человека,
+// но это {lat,lon,ts} — если перепутать, экран падает, поэтому проверяем тип в одном месте.
+const nearList = me => (Array.isArray(me && me.near) ? me.near : []);
+
 export const MOODS = [['sun', '☀️', 'Солнечно'], ['cloud', '⛅', 'Облачно'], ['fog', '🌫️', 'Туман'], ['rain', '🌧️', 'Дождь'], ['storm', '⛈️', 'Гроза']];
 const EM = Object.fromEntries(MOODS.map(m => [m[0], m[1]]));
 const pad = n => String(n).padStart(2, '0'), dayKey = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()), today = () => dayKey(new Date());
@@ -51,7 +55,7 @@ function Calm({ id }) {
     <${MoodCal} />
     <h5>Когда совсем тяжело</h5>
     <${Toggle} label="Статус «Нет сил»" hint="Близкие увидят его у вашего имени и смогут одним нажатием «побыть рядом» — без вопросов и советов. Отвечать никому не нужно" on=${isLow(S.me)} onChange=${v => setLow(v)} />
-    ${(S.me.near || []).length > 0 && html`<p class="note">🤍 Рядом с вами: ${(S.me.near || []).filter(x => S.users[x.u]).map(x => userName(S.users[x.u])).join(', ')}.</p>`}
+    ${nearList(S.me).length > 0 && html`<p class="note">🤍 Рядом с вами: ${nearList(S.me).filter(x => S.users[x.u]).map(x => userName(S.users[x.u])).join(', ')}.</p>`}
     ${sos ? html`<div class="calm-sos"><${Avatar} u=${sos} src=${sos.avatar} name=${userName(sos)} color=${sos.color} s=${40} /><div><b>${userName(sos)}</b><small>близкий человек</small></div><button class="btn" onClick=${write}>Написать</button><button class="ib" title="Выбрать другого" aria-label="Выбрать другого" onClick=${choose}><${Icon} n="pencil" s=${16} /></button></div>`
       : html`<button class="btn ghost wide" onClick=${choose}><${Icon} n="user-plus" s=${16} /> Выбрать близкого человека</button><p class="hint">Одной кнопкой ему уйдёт сообщение «мне сейчас нелегко».</p>`}
     <div class="calm-tel"><a class="btn ghost" href="tel:124"><${Icon} n="phone" s=${16} /> 124</a><a class="btn ghost" href="tel:88002000122"><${Icon} n="phone" s=${16} /> 8-800-2000-122</a></div>
@@ -83,7 +87,7 @@ export function NearCard({ m }) {
 }
 /** Полоска над списком чатов: кто был рядом за последние сутки. */
 export function NearStrip() {
-  const l = (S.me.near || []).filter(x => Date.now() - x.ts < 864e5 && S.users[x.u]); if (!l.length) return null;
+  const l = nearList(S.me).filter(x => Date.now() - x.ts < 864e5 && S.users[x.u]); if (!l.length) return null;
   const names = l.slice(0, 3).map(x => userName(S.users[x.u]).split(' ')[0]).join(', ');
   return html`<div class="near-strip" role="status"><span aria-hidden="true">🤍</span><span><b>Ты не один.</b> Рядом: ${names}${l.length > 3 ? ` и ещё ${l.length - 3}` : ''}</span><button class="ib sm" title="Скрыть" aria-label="Скрыть" onClick=${() => rpc('near.clear').catch(() => {})}><${Icon} n="x" s=${15} /></button></div>`;
 }

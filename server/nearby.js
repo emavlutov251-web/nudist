@@ -18,17 +18,20 @@ H['near.set'] = (c, p) => {
   const u = db.users[c.uid]; if (!u) fail('Вход не выполнен');
   const lat = num(p.lat, -90, 90), lon = num(p.lon, -180, 180);
   if (lat === null || lon === null) fail('Не пришли координаты');
+  if (Array.isArray(u.near)) u.near = undefined;      // тут было старое поле «был рядом» — освобождаем место под координаты
   u.near = { lat: Math.round(lat * 1000) / 1000, lon: Math.round(lon * 1000) / 1000, ts: now() };
   save(); return { ok: true, until: u.near.ts + TTL };
 };
-H['near.off'] = c => { const u = db.users[c.uid]; if (u) { delete u.near; save(); } return { ok: true }; };
+H['near.off'] = c => { const u = db.users[c.uid]; if (u && !Array.isArray(u.near)) { delete u.near; save(); } return { ok: true }; };      // выключаем «Я рядом»; массив «был рядом» не трогаем
 H['near.list'] = c => {
   const me = db.users[c.uid];
   const mine = me && me.near && now() - me.near.ts < TTL ? me.near : null;
   if (!mine) fail('Сначала включите «Я рядом» — иначе и человеку рядом показываться некому');
   const t = now() - TTL, rows = [];
   for (const u of Object.values(db.users)) {
-    if (u.id === c.uid || !u.near || u.near.ts < t || u.deleted || u.bot) continue;
+    if (u.id === c.uid || u.deleted || u.bot) continue;
+    // «Я рядом» хранит координаты объектом; у некоторых людей в этом поле ещё лежит старый массив отметок — пропускаем такой мусор
+    if (!u.near || Array.isArray(u.near) || typeof u.near !== 'object' || u.near.ts < t) continue;
     const d = km(mine, u.near); if (d > MAX_KM) continue;
     rows.push({ u, d: Math.round(d * 10) / 10 });
   }
