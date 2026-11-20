@@ -330,19 +330,46 @@ const U = { build: '', apk: null, siteLater: 0, apkLater: 0, at: 0, hard: 0, tol
 const inApp = () => { try { return !!(window.NudistApp && window.NudistApp.nav) || / NudistAndroid\//.test(navigator.userAgent); } catch (e) { return false; } };
 const appVer = () => { try { return window.NudistApp && window.NudistApp.version ? Number(window.NudistApp.version()) || 0 : 0; } catch (e) { return 0; } };
 const inCall = async () => { try { return !!(await import('./rtc.js')).RTC.chat; } catch (e) { return false; } };      // во время звонка окнами не мешаем
+// Автообновление в приложении: телефон сам качает сборку, человек только подтверждает установку.
+// Состояние живёт в самом приложении (window.NudistApp.updateState), поэтому переживает закрытие окна.
+const updState = () => { try { return window.NudistApp && window.NudistApp.updateState ? String(window.NudistApp.updateState()) : ''; } catch (e) { return ''; } };
+const updPercent = () => { try { return Number(window.NudistApp.updateProgress ? window.NudistApp.updateProgress() : 0) || 0; } catch (e) { return 0; } };
+function useAutoUpdate(on) {
+  const [st, setSt] = useState(() => ({ state: updState(), percent: updPercent() }));
+  useEffect(() => {
+    if (!on) return;
+    try { window.NudistApp.updateFetch(); } catch (e) { /* старое приложение без автообновления */ }
+    const t = setInterval(() => setSt({ state: updState(), percent: updPercent() }), 700);
+    return () => clearInterval(t);
+  }, [on]);
+  return st;
+}
 function UpdateDlg({ id, info }) {
   const [step, setStep] = useState(0);
+  const auto = useAutoUpdate(inApp() && !!(window.NudistApp && window.NudistApp.updateFetch));
   // Сборки до 1.9 подписывались одноразовым ключом (так было в автосборке), а 1.9 подписана постоянным —
   // иначе RuStore не примет обновления. Из-за смены подписи файл не встанет поверх старой версии:
   // об этом честно предупреждаем и даём порядок действий, чтобы человек не остался у разбитого корыта.
   const oldSign = inApp() && appVer() > 0 && appVer() < 19 && Number(info.code) >= 19;
   return html`<${Modal} id=${id} title="Вышло обновление" icon="download">
     <div class="ask">
-      <p><b>«Нудист» ${info.name} для Android.</b> У вас стоит старая версия. Обновление ставится поверх: вход и переписка сохранятся.</p>
+      <p><b>«Нудист» ${info.name} для Android.</b> У вас стоит ${appVer() ? 'версия ' + (Math.floor(appVer() / 10) + '.' + (appVer() % 10)) : 'старая версия'}. Обновление ставится поверх: вход и переписка сохранятся.</p>
       ${oldSign && html`<div class="note warn"><b>Важно: подпись приложения сменилась</b> (этого требует RuStore, иначе обновления не принимаются).<ol class="steps"><li>Вспомните пароль — он понадобится для входа: переписка и аккаунт на сервере, их удаление приложения не затрагивает.</li><li>Скачайте и откройте <b>nudist.apk</b>. Если телефон скажет «Приложение не установлено» — это ожидаемо.</li><li>Тогда удалите «Нудист» и установите скачанный файл заново. Войдите: имя и пароль, всё на месте.</li></ol><p class="hint">Забыли пароль? Напишите в поддержку из приложения до удаления или на navlutove05@gmail.com — поможем.</p></div>`}
       ${(info.news || []).length > 0 && html`<ul class="upd-news">${info.news.map(n => html`<li>${n}</li>`)}</ul>`}
       ${step === 1 && html`<ol class="steps"><li>Дождитесь загрузки файла nudist.apk (${info.size || 'он маленький'}).</li><li>Откройте его из шторки или из папки «Загрузки» и нажмите «Обновить». Если телефон спросит про установку из этого источника — разрешите.</li></ol>`}
-      <div class="ask-btns"><a class="btn" href="/nudist.apk" download="nudist.apk" onClick=${() => setStep(1)}><${Icon} n="download" s=${16} /> ${step ? 'Скачать ещё раз' : 'Скачать и установить'}</a><button class="btn ghost" onClick=${() => { local.set('upd.later', String(Date.now())); closeModal(id); }}>Позже</button></div>
+      ${inApp() && auto ? html`<div class="upd-auto">
+        ${auto.state === 'downloading' && html`<p class="upd-prog"><span><i style=${`width:${auto.percent}%`}></i></span><b>${auto.percent}%</b></p><p class="hint">Скачиваем новую версию в фоне. Можно закрыть окно — загрузка продолжится.</p>`}
+        ${auto.state === 'ready' && html`<p class="hint">Новая версия уже в телефоне. Нажмите «Установить» — телефон попросит разрешение, это его защита.</p>`}
+        ${auto.state === 'fail' && html`<p class="hint">Не получилось скачать в фоне (связь оборвалась). Можно скачать кнопкой ниже.</p>`}
+        ${auto.state === 'ready' && html`<p class="hint">Если после «Установить» телефон пишет, что установка запрещена, — разрешите «Нудисту» установку приложений в настройках телефона и нажмите снова.</p>`}
+      </div>` : ''}
+      <div class="ask-btns">
+        ${inApp() && auto && auto.state === 'ready'
+          ? html`<button class="btn" onClick=${() => window.NudistApp.updateInstall()}><${Icon} n="download" s=${16} /> Установить</button>`
+          : inApp() && auto && auto.state === 'downloading'
+            ? html`<button class="btn" disabled><${Icon} n="download" s=${16} /> Скачиваем… ${auto.percent}%</button>`
+            : html`<a class="btn" href="/nudist.apk" download="nudist.apk" onClick=${() => { setStep(1); if (inApp() && auto) window.NudistApp.updateFetch(); }}><${Icon} n="download" s=${16} /> ${step ? 'Скачать ещё раз' : 'Скачать и установить'}</a>`}
+        <button class="btn ghost" onClick=${() => { local.set('upd.later', String(Date.now())); closeModal(id); }}>Позже</button></div>
       <p class="hint">Пока стоит старая версия, окно будет появляться при каждом заходе. Не скачивается — откройте ${location.host}/start в браузере телефона.</p>
     </div>
   <//>`;
@@ -372,10 +399,25 @@ async function ask(fresh) {
   if (inApp() && apk && Number(apk.code) > appVer()) { if (fresh === 'apk' || t - U.apkLater > APK_AGAIN) { U.apkLater = t; openModal(UpdateDlg, { info: apk }); } return; }      // сначала сборка: с ней обновится и всё остальное
   if (S.ui.update && (fresh === true || t - U.siteLater > SITE_AGAIN)) { U.siteLater = t; openModal(SiteUpdateDlg); }
 }
+/**
+ * Новая сборка качается заранее, в фоне, ещё до того как человек откроет окно.
+ * Так к моменту, когда он решит обновиться, файл уже лежит в телефоне и остаётся одно нажатие.
+ * Тихо: если приложение старое (без автообновления) — просто ничего не делаем.
+ */
+function prefetchApk(info) {
+  try {
+    if (!window.NudistApp || !window.NudistApp.updateFetch) return;
+    if (!info || Number(info.code) <= appVer()) return;
+    if (String(window.NudistApp.updateState ? window.NudistApp.updateState() : '') === 'downloading') return;
+    window.NudistApp.updateFetch();
+  } catch (e) { /* не наше дело ломать интерфейс */ }
+}
+
 /** Спросить сервер, что выложено, и показать просьбу обновиться, если есть что. */
 export async function checkUpdate() {
   const t = Date.now(); if (t - U.at < 20e3) return ask(); U.at = t;
   let v; try { v = await (await fetch('/api/version', { cache: 'no-store' })).json(); } catch (e) { U.at = 0; return; }
+  if (v && v.apk) prefetchApk(v.apk);       // сборка качается в фоне, пока человек занимается своими делами
   // Язык интерфейса: сервер знает страну посетителя, страница — нет. Пока человек не выбрал язык сам,
   // берём подсказку сервера (русский для СНГ, английский для остальных) и запоминаем.
   try { if (v.ui && !localStorage.getItem('nudist.lang') && window.NudistI18n) window.NudistI18n.setLang(v.ui === 'en' ? 'en' : 'ru'); } catch (e) { /* не страшно */ }

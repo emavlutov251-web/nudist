@@ -83,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 37;      // 3.7: если WebView показал файл вместо страницы — приложение перерисовывает её само
+    private static final int APP_VERSION = 38;      // 3.8: обновление без хлопот — сборка качается сама, ставится одним нажатием
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -98,6 +98,10 @@ public class MainActivity extends Activity {
     private PermissionRequest pendingRequest;
     private boolean mainFrameFailed;
     private String lastMainUrl;          // адрес главного документа (для проверки, что показали страницу, а не текст)
+    private static final String UPD = "update.apk";       // скачанная новая сборка во внутреннем хранилище
+    private volatile String updateState = "idle";
+    private volatile int updatePercent;
+    private volatile String updateUrl;
     private int mainChecks;               // сколько раз уже перезагружали: защита от бесконечного цикла
     /** Переезд на новый адрес: пока true, ждём от страницы прежнего адреса её хранилище (см. migrate). */
     private boolean moving;
@@ -339,6 +343,31 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public int version() {
             return APP_VERSION;
+        }
+
+        // ───── автообновление: приложение само скачивает новую сборку и ставит её одним нажатием
+        /** Состояние: idle — ничего, downloading — качаем, ready — файл готов к установке, fail — не вышло. */
+        @JavascriptInterface
+        public String updateState() {
+            return updateState;
+        }
+
+        /** Сколько уже скачано, в процентах (0…100). */
+        @JavascriptInterface
+        public int updateProgress() {
+            return updatePercent;
+        }
+
+        /** Скачать новую сборку в фоне. Повторный вызов во время загрузки ничего не делает. */
+        @JavascriptInterface
+        public void updateFetch() {
+            runOnUiThread(new Runnable() { @Override public void run() { fetchUpdate(); } });
+        }
+
+        /** Открыть установку уже скачанного файла. Телефон спросит разрешение на установку — это его защита. */
+        @JavascriptInterface
+        public void updateInstall() {
+            runOnUiThread(new Runnable() { @Override public void run() { installUpdate(); } });
         }
 
         /** Переезд: страница с прежнего адреса отдаёт то, что приложение хранило в браузере (ключ сеанса, настройки, ключи секретных чатов). Принимается только в момент переезда. */
@@ -827,6 +856,86 @@ public class MainActivity extends Activity {
                 web.loadDataWithBaseURL(server + "/", html, "text/html", "utf-8", url);
             }
         });
+    }
+
+    // ───── автообновление сборки
+    // Раньше человеку нужно было самому скачать APK и найти его в «Загрузках». Теперь приложение качает
+    // новую сборку само (в фоне, по обычному Wi-Fi или мобильному интернету — файл меньше мегабайта)
+    // и показывает в интерфейсе одну кнопку «Установить». Установку подтверждает человек — так требует Android.
+
+    /** Где лежит готовая к установке сборка (во внутреннем хранилище приложения). */
+    private File updateFile() { return new File(getFilesDir(), UPD); }
+
+    /** Есть ли уже скачанная сборка, и не от другой ли она версии. */
+    private boolean updateReady() {
+        File f = updateFile();
+        if (!f.isFile() || f.length() < 300 * 1024) return false;      // обрывок загрузки — не в счёт
+        String seen = prefs.getString("updCode", "");
+        if (seen != null && seen.length() > 0 && !seen.equals(String.valueOf(latestCode))) return false;
+        return true;
+    }
+
+    private volatile int latestCode;      // версия, которую предложил сервер
+
+    /** Скачать новую сборку. Вызывается со страницы, когда она увидела, что вышла новая версия. */
+    private void fetchUpdate() {
+        if ("downloading".equals(updateState)) return;
+        String server = prefs.getString("server", null);
+        if (server == null) return;
+        latestCode = Math.max(latestCode, latestCodeFromPrefs());
+        // адрес и версию уточняем у сервера: страница могла знать старое
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    String v = fetchText(server + "/api/version");
+                    org.json.JSONObject o = new org.json.JSONObject(v);
+                    org.json.JSONObject apk = o.optJSONObject("apk");
+                    int code = apk == null ? 0 : apk.optInt("code", 0);
+                    if (code > 0) latestCode = code;
+                    prefs.edit().putString("updCode", String.valueOf(latestCode)).apply();
+                    if (code <= APP_VERSION) { updateState = "idle"; return; }               // уже свежие
+                    if (updateReady()) { updateState = "ready"; return; }
+                    updateState = "downloading"; updatePercent = 0;
+                    String url = server + "/nudist.apk";
+                    java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                    c.setConnectTimeout(15000); c.setReadTimeout(60000);
+                    c.setRequestProperty("User-Agent", "NudistAndroid-update/" + APP_VERSION);
+                    long total = c.getContentLength();
+                    java.io.InputStream in = c.getInputStream();
+                    File tmp = new File(getFilesDir(), UPD + ".part");
+                    java.io.FileOutputStream out = new java.io.FileOutputStream(tmp);
+                    byte[] buf = new byte[16384]; long got = 0; int n;
+                    try {
+                        while ((n = in.read(buf)) > 0) { out.write(buf, 0, n); got += n; if (total > 0) updatePercent = (int) (got * 100 / total); }
+                    } finally { try { out.close(); } catch (Throwable ignored) { } try { in.close(); } catch (Throwable ignored) { } c.disconnect(); }
+                    if (total > 0 && got < total) { tmp.delete(); updateState = "fail"; return; }      // обрыв — попробуем позже
+                    File dst = updateFile();
+                    dst.delete();
+                    if (!tmp.renameTo(dst)) { tmp.delete(); updateState = "fail"; return; }
+                    updatePercent = 100;
+                    updateState = "ready";
+                } catch (Throwable e) {
+                    updateState = "fail";
+                }
+            }
+        }).start();
+    }
+
+    private int latestCodeFromPrefs() { try { return Integer.parseInt(prefs.getString("updCode", "0")); } catch (Throwable e) { return 0; } }
+
+    /** Открыть установщик Android для скачанного файла. */
+    private void installUpdate() {
+        File f = updateFile();
+        if (!f.isFile()) { updateState = "idle"; return; }
+        try {
+            Uri apk = Uri.parse("content://" + UpdateProvider.AUTHORITY + "/" + UPD);
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(apk, "application/vnd.android.package-archive");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        } catch (Throwable e) {
+            toast("Не получилось открыть установку. Скачайте файл со страницы /start в браузере.");
+        }
     }
 
     /** Что кешируем в памяти: код и шрифты (их много и они мелкие), картинки читаем по мере надобности. */

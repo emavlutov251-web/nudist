@@ -5,7 +5,7 @@
 //  2) любой текстовый ответ объявлен как UTF-8;
 //  3) в текстах интерфейса нет битых последовательностей и «кракозябр».
 const { spawn } = require('child_process');
-const fs = require('fs'), os = require('os'), path = require('path');
+const fs = require('fs'), zlib = require('zlib'), os = require('os'), path = require('path');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let bad = 0, total = 0;
 const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРОВАЛ:', n, x === undefined ? '' : JSON.stringify(x).slice(0, 200)); } else if (process.env.VERBOSE) console.log('  ✓', n); };
@@ -18,7 +18,7 @@ const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРО�
   try {
     let up = false; for (let i = 0; i < 60 && !up; i++) { await sleep(250); try { up = (await fetch(base + '/api/health')).ok; } catch (e) {} }
     if (!up) throw new Error('сервер не поднялся:\n' + log.slice(-900));
-    const get = async (p, ua, ae) => { const r = await fetch(base + p, { headers: { 'user-agent': ua, 'accept-encoding': ae } }); return { status: r.status, type: r.headers.get('content-type') || '', enc: r.headers.get('content-encoding') || '', text: await r.text() }; };
+    const get = async (p, ua, ae) => { const r = await fetch(base + p, { headers: { 'user-agent': ua, 'accept-encoding': ae } }); const buf = Buffer.from(await r.arrayBuffer()); const dec = r.headers.get('content-encoding') || ''; let body = buf; try { if (dec.includes('gzip') && buf[0] === 0x1f && buf[1] === 0x8b) body = zlib.gunzipSync(buf); else if (dec.includes('br')) body = zlib.brotliDecompressSync(buf); } catch (e) { body = buf; } return { status: r.status, type: r.headers.get('content-type') || '', enc: dec, text: body.toString('utf8'), body }; };
     const APP = 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/100 Mobile Safari/537.36 NudistAndroid/32';
     const APPWEB = 'NudistAndroid-web';       // так приложение скачивает себе копию интерфейса
     for (const p of ['/', '/js/app.js', '/css/app.css', '/api/version']) {
@@ -49,6 +49,20 @@ const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРО�
       ck('файл читается как UTF-8: ' + path.basename(f), !/\uFFFD/.test(s), (s.match(/\uFFFD/g) || []).length);
       ck('в файле нет кракозябр: ' + path.basename(f), !/Ð[°-¿]|Ñ[\x80-\xBF]/.test(s), '');
     }
+    // ── автообновление сборки: приложение качает /nudist.apk само и ставит одним нажатием
+    const apk = await get('/nudist.apk', 'NudistAndroid-update/36', 'identity');
+    ck('новая сборка скачивается целиком', apk.status === 200 && apk.body.length > 300 * 1024, { код: apk.status, байт: apk.body.length });
+    ck('это именно APK-файл, а не страница', apk.body.slice(0, 2).toString() === 'PK', apk.body.slice(0, 4).toString('hex'));
+    const ver = await get('/api/version', 'NudistAndroid-update/36');
+    let vj = {}; try { vj = JSON.parse(ver.text); } catch (e) {}
+    ck('сервер сообщает номер сборки для обновления', !!(vj.apk && Number(vj.apk.code) > 0), vj.apk && vj.apk.code);
+    const apkJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'apk.json'), 'utf8'));
+    ck('номер в apk.json совпадает с сервером', Number(apkJson.code) === Number(vj.apk && vj.apk.code), { файл: apkJson.code, сервер: vj.apk && vj.apk.code });
+    const apkSize = fs.statSync(path.join(__dirname, '..', 'public', 'nudist.apk')).size;
+    ck('размер файла совпадает с заявленным', Math.abs(apkSize - apk.body.length) === 0, { файл: apkSize, сеть: apk.body.length });
+    const growth = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'growth.js'), 'utf8');
+    ck('окно обновления умеет качать в фоне', /updateFetch/.test(growth) && /updateInstall/.test(growth), '');
+    ck('сборка качается заранее, до открытия окна', /prefetchApk/.test(growth), '');
     if (process.env.VERBOSE) console.log('');
     console.log(`${total - bad}/${total} ✓`);
     if (bad) process.exitCode = 1;

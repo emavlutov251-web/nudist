@@ -243,3 +243,10 @@ div.hist-i { display: block; border-left: 3px solid var(--line); border-radius: 
 .vstage-wait::after { content: ''; position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; animation: vspin .9s linear infinite; }
 @keyframes vspin { to { transform: rotate(360deg); } }
 .ph .vstage { height: 100%; }
+
+/* Автообновление: полоска загрузки новой сборки в окне «Вышло обновление». */
+.upd-auto { margin: 10px 0 4px; }
+.upd-prog { display: flex; align-items: center; gap: 10px; }
+.upd-prog span { flex: 1; height: 8px; border-radius: 99px; background: var(--press); overflow: hidden; }
+.upd-prog span i { display: block; height: 100%; border-radius: 99px; background: var(--accent); transition: width .3s ease; }
+.upd-prog b { font-variant-numeric: tabular-nums; font-size: .9em; opacity: .8; }
