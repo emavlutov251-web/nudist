@@ -3,7 +3,14 @@
 import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avatar, cx, userName, Spinner, Empty, addUsers } from './lib.js';
 import { Vid } from './media.js';
 
-export const RV = { cur: null, list: [], ev: null, voice: false, link: null };      // voice — включён общий голосовой канал
+export const RV = { cur: null, list: [], ev: null, voice: false, link: null, skew: 0 };      // voice — включён общий голосовой канал
+// Часы комнаты: у кого-то телефон спешит на минуту — и он считал бы секунду клипа иначе, чем все.
+// Спрашиваем у сервера время и запоминаем разницу (skew). Дальше время комнаты = местные часы + skew.
+const roomNow = () => Date.now() + (RV.skew || 0);
+async function syncClock() {
+  try { const t0 = Date.now(), r = await rpc('rave.time'); const mid = (t0 + Date.now()) / 2; RV.skew = Number(r.now) - mid; } catch (e) { /* останутся местные часы */ }
+}
+const roomTime = n => { const x = n || (RV.cur && RV.cur.now); if (!x) return 0; return Math.max(0, (Number(x.at) || 0) + (x.paused ? 0 : (roomNow() - (Number(x.ts) || roomNow())) / 1000)); };
 // Одна и та же комната — это и чат (для голосового канала), и место просмотра.
 // Регистрируем его в S.chats — общий слой звонков иначе не найдёт, куда звонить.
 function voiceChat(room) {
@@ -48,6 +55,7 @@ export async function enterRave(id) {
     const g = await rpc('rave.get', { id });
     RV.cur = { ...g.room, chat: g.chat || [] };
     RV.link = g.link || null;      // ссылка, которая уже стоит в комнате — видно сразу при входе
+    if (typeof g.serverAt === 'number' && RV.cur.now) { RV.skew = g.serverAt - Date.now(); } else syncClock();
     bump();
   } catch (e) { toast(e.message, 'err'); }
 }
@@ -77,18 +85,29 @@ function RavePlayer({ room }) {
     loadQueue('clips').then(list => { const c = (list || []).find(x => x.id === now.item); if (live) setCur(c ? { clip: c } : { wait: true }); });
     return () => { live = false; };
   }, [now && now.item, now && now.kind]);
-  // Подводим время к комнате: если отстали больше чем на две секунды или ушли вперёд — выравниваем.
+  // Подводим время к комнате: если отстали больше чем на секунду или ушли вперёд — выравниваем.
+  // Раньше сравнивали с «сейчас» и получали отставание на время загрузки клипа: у гостя видео
+  // только начинало грузиться, а хозяин уже был на третьей секунде. Теперь цель с запасом на загрузку.
   useEffect(() => {
     const v = vid.current; if (!v || !now || now.kind === 'link') return;      // ссылки крутит сам сервис/сам файл
-    const want = now.at + (now.paused ? 0 : (Date.now() - now.ts) / 1000);
-    if (now.paused) { v.pause(); if (Math.abs(v.currentTime - now.at) > 1) v.currentTime = now.at; return; }
-    if (Math.abs(v.currentTime - want) > 2) v.currentTime = Math.max(0, want);
+    const want = now.at + (now.paused ? 0 : (roomNow() - now.ts) / 1000);
+    if (now.paused) { v.pause(); if (Math.abs(v.currentTime - now.at) > 0.7) v.currentTime = now.at; return; }
+    if (Math.abs(v.currentTime - want) > 1) v.currentTime = Math.max(0, want);
     v.play().catch(() => { /* браузер попросит нажать */ });
   }, [now && now.ts, now && now.paused]);
+  // И раз в секунду подравниваем сами: связь у всех разная, без этого гости постепенно расходятся.
+  useEffect(() => {
+    const t = setInterval(() => {
+      const v = vid.current; if (!v || !now || now.kind === 'link' || now.paused) return;
+      const want = now.at + (roomNow() - now.ts) / 1000;
+      if (Math.abs(v.currentTime - want) > 1.2) { try { v.currentTime = Math.max(0, want); } catch (e) { /* ещё грузится */ } }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [now && now.ts, now && now.paused, now && now.item]);
   if (now && now.kind === 'link') {
     const L = RV.link || {};
     if (!L.url) return html`<div class="rv-empty"><${Spinner} /></div>`;
-    if (L.kind === 'file') return html`<div class="rv-stage"><${Vid} src=${L.url} preload="metadata" controls=${host} onClick=${e => { if (!host) { const w = e.target.closest ? e.target.closest('.vstage') : null; const v = w ? w.querySelector('video') : e.target; if (v && v.paused) { v.currentTime = now.at + (now.paused ? 0 : (Date.now() - now.ts) / 1000); v.play().catch(() => {}); } } }} />
+    if (L.kind === 'file') return html`<div class="rv-stage"><${Vid} src=${L.url} preload="metadata" controls=${host} onClick=${e => { if (!host) { const w = e.target.closest ? e.target.closest('.vstage') : null; const v = w ? w.querySelector('video') : e.target; if (v && v.paused) { v.currentTime = roomTime(now); v.play().catch(() => {}); } } }} />
       <span class="rv-src">${L.title}</span></div>`;
     if (L.kind === 'embed') return html`<div class="rv-stage rv-embed"><iframe key=${L.url} src=${L.url} sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-popups" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" title=${L.title}></iframe>
       ${L.warn === 'yt' && html`<p class="hint">YouTube в России без VPN не грузится. Если вместо видео пусто — включите VPN или откройте оригинал кнопкой ниже.</p>`}
@@ -98,6 +117,7 @@ function RavePlayer({ room }) {
   if (!now || !now.item) {
     return html`<div class="rv-empty"><${Empty} icon="music" title="Пока тишина" text=${host ? 'Выберите клип в очереди или музыку внизу — и все в комнате увидят то же самое.' : 'Хозяин ещё не включил клип. Поболтайте пока.'} /></div>`;
   }
+  const pausedNote = now && now.paused && !host ? html`<p class="hint rv-paused">Хозяин поставил на паузу — включится у всех сразу.</p>` : '';
   if (cur && cur.music) return html`<div class="rv-music">
     <${Icon} n="music" s=${34} />
     <div class="rv-mt"><b>${cur.music.title}</b><small>${host ? 'Этот трек слышат все в комнате — одновременно' : 'Играет у всех в комнате одновременно'}${now.paused ? ' · на паузе' : ''}</small></div>
@@ -109,12 +129,12 @@ function RavePlayer({ room }) {
     return html`<div class="rv-stage">
       <${Vid} src=${c.url} preload="metadata" onClick=${e => { if (!host) { const v = e.target.closest('.vstage') ? e.target.closest('.vstage').querySelector('video') : e.target; if (v && v.paused) { v.currentTime = now.at; v.play().catch(() => {}); } } }} />
       ${host && html`<div class="rv-ctl">
-        <button title="Пауза" onClick=${() => rpc('rave.pause', { id: room.id, paused: !now.paused, at: (vid.current || {}).currentTime || 0 }).catch(e => toast(e.message, 'err'))}>${now.paused ? html`<${Icon} n="play" s=${20} />` : html`<${Icon} n="pause" s=${20} />`}</button>
+        <button title=${now.paused ? 'Продолжить у всех' : 'Пауза у всех'} onClick=${() => rpc('rave.pause', { id: room.id, paused: !now.paused, at: (vid.current || {}).currentTime || 0 }).catch(e => toast(e.message, 'err'))}>${now.paused ? html`<${Icon} n="play" s=${20} />` : html`<${Icon} n="pause" s=${20} />`}</button>
         <input type="range" min="0" max=${Math.max(1, c.dur || 100)} step="0.5" value=${now.paused ? now.at : (vid.current ? vid.current.currentTime : now.at)} onChange=${e => { const at = Number(e.target.value); if (vid.current) vid.current.currentTime = at; rpc('rave.play', { id: room.id, kind: 'clip', item: c.id, at }).catch(() => {}); }} />
       </div>`}
     </div>`;
   }
-  return html`<div class="rv-empty"><${Spinner} /></div>`;
+  return html`<div class="rv-empty">${now && now.paused && !host ? html`<p class="hint">Хозяин поставил на паузу. Продолжит — и клип пойдёт у всех с той же секунды.</p>` : html`<${Spinner} />`}</div>`;
 }
 
 // ───────── музыка в комнате: у всех одна секунда
@@ -122,11 +142,7 @@ function RavePlayer({ room }) {
 // звук без нажатия — поэтому «синхронного прослушивания» не получалось. Теперь секунду считаем по серверу:
 // сервер помнит, какой трек, с какой секунды и когда включён (now.at + now.ts), а мы подгоняем свой плеер.
 const RS = { audio: null, id: null, at: 0, playing: false, ready: false };      // что сейчас играем у нас
-const rvTime = now => {
-  const n = now || (RV.cur && RV.cur.now);
-  if (!n) return 0;
-  return Math.max(0, (Number(n.at) || 0) + (n.paused ? 0 : (Date.now() - (Number(n.ts) || Date.now())) / 1000));
-};
+const rvTime = roomTime;      // одно и то же время комнаты — и для музыки, и для клипов
 
 /** Подогнать свой звук под комнату: включить нужный трек, перемотать и поставить/снять паузу. */
 function syncMusic(now, clips) {
@@ -139,7 +155,7 @@ function syncMusic(now, clips) {
   const at = rvTime(now);
   const go = () => {
     const d = Math.abs((o.currentTime || 0) - at);
-    if (d > 1.2) { try { o.currentTime = at; } catch (e) { /* ещё не загрузился */ } }
+    if (d > 0.6) { try { o.currentTime = at; } catch (e) { /* ещё не загрузился */ } }
     if (now.paused) { if (!o.paused) o.pause(); }
     else if (o.paused) o.play().catch(() => { RS.blocked = true; bump(); });      // браузер ждёт нажатия
   };
@@ -165,13 +181,19 @@ function keepMusic(now, clips) {
   const o = RS.audio;
   if (o.paused || !isFinite(o.duration)) return;
   const at = rvTime(now);
-  if (Math.abs(o.currentTime - at) > 2.5) { try { o.currentTime = at; } catch (e) { /* пропустим такт */ } }
+  if (Math.abs(o.currentTime - at) > 1.2) { try { o.currentTime = at; } catch (e) { /* пропустим такт */ } }
 }
 export const raveAudio = () => RS;
 
 // ───────── комната
 export function RaveRoom() {
   const room = RV.cur, [text, setText] = useState(''), [clips, setClips] = useState(null), [tab, setTab] = useState('queue'), [url, setUrl] = useState('');
+  // Первый раз в комнате: хозяину — про управление, гостю — почему всё происходит само.
+  useEffect(() => {
+    let live = true;
+    import('./hints.js').then(h => { if (!live) return; if (room.host) h.raveHostHint(); else h.raveGuestHint(); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
   const chatEnd = useRef();
   useEffect(() => { chatEnd.current && chatEnd.current.scrollIntoView({ block: 'end' }); }, [(room.chat || []).length]);
   useEffect(() => { loadQueue(room.kind).then(l => { RV.q = l; setClips(l); }); }, [room.kind]);
@@ -215,6 +237,7 @@ export function RaveRoom() {
     </header>
     <div class="rv-people">${(room.users || []).map(id => html`<${Avatar} key=${id} u=${S.users[id]} name=${userName(S.users[id] || {})} color=${(S.users[id] || {}).color} s=${26} title=${userName(S.users[id] || {})} />`)}</div>
     <${RavePlayer} room=${room} />
+    ${host ? html`<p class="hint rv-host">Вы хозяин: пауза, перемотка и новый клип видны всем сразу. Кнопка «ключ» — закрыть комнату от посторонних.</p>` : ''}
     <div class="rv-tabs"><button class=${cx(tab === 'queue' && 'on')} onClick=${() => setTab('queue')}>Очередь</button><button class=${cx(tab === 'chat' && 'on')} onClick=${() => setTab('chat')}>Чат${(room.chat || []).length ? html`<b>${room.chat.length}</b>` : ''}</button></div>
     ${tab === 'queue' ? html`<div class="rv-queue">
       ${host ? html`<div class="rv-url"><${Icon} n="link" s=${16} /><input placeholder="Ссылка на видео: youtube, vk, rutube, mp4" value=${url} onInput=${e => setUrl(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter') playUrl(); }} /><button class="btn sm" disabled=${!url.trim()} onClick=${playUrl}>Включить</button></div>

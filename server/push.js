@@ -8,6 +8,10 @@ const { db, save, now, need, str } = C;
 const H = R.H;
 
 const b64u = b => Buffer.from(b).toString('base64url'), unb = s => Buffer.from(String(s || ''), 'base64url');
+// Адрес, по которому человек откроет «Нудист» в браузере: в уведомление кладём готовую ссылку,
+// чтобы из шторки можно было скачать сборку или открыть чат, даже если приложение не отвечает.
+const SITE = (process.env.SITE_URL || 'https://95-174-95-148.sslip.io').replace(/\/+$/, '');
+const siteLink = p => SITE + (p && p.length ? p : '/');
 // Пара ключей сервера. Создаётся один раз и хранится в базе: если ключ сменить, все подписки придётся оформлять заново.
 function keys() {
   if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) return { pub: process.env.VAPID_PUBLIC, priv: process.env.VAPID_PRIVATE };
@@ -43,6 +47,7 @@ async function sendOne(sub, payload) {
 }
 // Рассылка на все устройства человека. Подписки, которые служба доставки больше не знает (404, 410), удаляются.
 async function push(u, payload) {
+  if (payload && !payload.url) payload = { ...payload, url: siteLink('/start') };      // браузер откроет страницу скачивания
   const subs = (u.push || []).slice(); let sent = 0, failed = 0;
   for (const s of subs) {
     try { const st = await sendOne(s, payload); if (st >= 200 && st < 300) sent++; else { failed++; if (st === 404 || st === 410) { u.push = (u.push || []).filter(x => x.endpoint !== s.endpoint); save(); } else console.warn('[push] ответ', st, new URL(s.endpoint).hostname); } }
@@ -65,6 +70,7 @@ const FEED_KEEP = 50, FEED_IDLE = 12 * 3600e3, FEED_WAIT = 40000;      // лен
 function feedAdd(uid, p) {
   const f = feeds.get(uid); if (!f) return;
   const it = { id: nextId(), title: String(p.title || 'Нудист').slice(0, 80), body: String(p.body || '').slice(0, 200), tag: String(p.tag || ''), ts: now() };
+  it.url = String(p.url && /^https:\/\//.test(p.url) ? p.url : siteLink(p.url)).slice(0, 200);      // куда вести, если открыть не в приложении
   if (p.click) it.click = String(p.click).slice(0, 20);
   f.q.push(it); if (f.q.length > FEED_KEEP) f.q.splice(0, f.q.length - FEED_KEEP);
   for (const w of [...f.waiters]) w.done([it]);
@@ -89,7 +95,7 @@ function updateItem(u) {      // напоминание об обновлени�
   const t = u.updTold; if (t && t.c === apk.code && now() - t.at < UPD_EVERY) return null;
   u.updTold = { c: apk.code, at: now() }; save();
   // click: 'update' — страница по нажатию откроет окно обновления (иначе тег приняли бы за идентификатор чата)
-  return { id: nextId(), title: 'Вышло обновление «Нудиста» ' + apk.name, body: (apk.news[0] ? apk.news[0] + '. ' : '') + 'Нажмите, чтобы скачать и установить.', tag: 'update', click: 'update', ts: now() };
+  return { id: nextId(), title: 'Вышло обновление «Нудиста» ' + apk.name, body: (apk.news[0] ? apk.news[0] + '. ' : '') + 'Нажмите, чтобы скачать: ' + siteLink('/start').replace(/^https?:\/\//, ''), tag: 'update', click: 'update', url: siteLink('/start'), ts: now() };
 }
 function poll(req, res, url, a, json) {
   if (!a) return json(res, 401, { error: 'Нужна авторизация' });

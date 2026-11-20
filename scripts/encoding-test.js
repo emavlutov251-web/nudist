@@ -79,6 +79,21 @@ const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРО�
     ck('пустой экран после загрузки ловится', /checkShown\(url\)/.test(mainj), '');
     ck('установку не гасит запрет из настроек — ведём туда', /ACTION_MANAGE_UNKNOWN_APP_SOURCES/.test(mainj) && /canRequestPackageInstalls/.test(mainj), '');
     ck('сборки (.apk) страница из памяти не получает', /endsWith\("\.apk"\)/.test(mainj), '');
+    // ── 4.1: ссылка в уведомлениях, часы комнаты рейва, знакомство и звонки
+    ck('уведомления несут ссылку на страницу скачивания', /siteLink\('\/start'\)/.test(pushjs), '');
+    ck('напоминание об обновлении содержит адрес', /url: siteLink\('\/start'\)/.test(pushjs), '');
+    const ravjs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'rave.js'), 'utf8');
+    const ravsv = fs.readFileSync(path.join(__dirname, '..', 'server', 'rave.js'), 'utf8');
+    ck('рейв считает время по часам комнаты', /roomNow\(\)/.test(ravjs) && /RV\.skew/.test(ravjs), '');
+    ck('сервер отдаёт время комнаты', /H\['rave\.time'\]/.test(ravsv) && /serverAt/.test(ravsv), '');
+    ck('клип подравнивается раз в секунду', /setInterval\(\(\) => \{[^}]*currentTime/.test(ravjs), '');
+    const datjs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'dating.js'), 'utf8');
+    ck('знакомство переживает обрыв связи и умеет «Повторить»', /const retry =/.test(datjs) && /Повторить/.test(datjs), '');
+    ck('у знакомства есть подсказки и подписи кнопок', /dt-help/.test(datjs) && /<span>Нравится<\/span>/.test(datjs), '');
+    const libjs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'lib.js'), 'utf8');
+    ck('rpc ждёт восстановления связи, а не падает сразу', /tick = \(\) =>/.test(libjs) && /8000/.test(libjs), '');
+    const hts = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'hints.js'), 'utf8');
+    ck('есть подсказки для рейва и звонка', /raveHostHint/.test(hts) && /callFirstHint/.test(hts), '');
     if (process.env.VERBOSE) console.log('');
     console.log(`${total - bad}/${total} ✓`);
     if (bad) process.exitCode = 1;

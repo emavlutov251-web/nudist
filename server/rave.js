@@ -109,6 +109,9 @@ H['rave.play'] = (c, p) => {
   raveMsg(r, 'rave.play', { id: r.id, now: r.now });
   return { now: r.now };
 };
+// Часы комнаты: чей телефон спешит на минуту, тот иначе считал бы секунду клипа. Отдаём серверное время,
+// клиент запоминает разницу и дальше прибавляет её к местным часам.
+H['rave.time'] = c => ({ now: now() });
 H['rave.pause'] = (c, p) => {
   const r = room(rooms.get(str(p.id, 32)), c);
   need(r.by === c.uid, 'Ставит на паузу хозяин');
@@ -171,7 +174,7 @@ function dropVoiceChat(rid) {
 H['rave.get'] = (c, p) => {
   const r = rooms.get(str(p.id, 32)); need(r, 'Комната закрылась');
   const link = r.now && r.now.kind === 'link' && r.links && r.links[r.now.item];
-  return { room: raveView(r, c.uid), in: r.users.has(c.id), now: r.now, link: link || null, chat: r.chat.slice(-60), users: usersOf([...r.users.values()].concat(r.chat.map(m => m.by)), c.uid) };
+  return { room: raveView(r, c.uid), in: r.users.has(c.id), now: r.now, link: link || null, chat: r.chat.slice(-60), users: usersOf([...r.users.values()].concat(r.chat.map(m => m.by)), c.uid), serverAt: now() };
 };
 function dropConn(c) { for (const r of [...rooms.values()]) if (r.users.has(c.id)) { r.users.delete(c.id); const rest = [...r.users.values()]; if (!rest.length) { rooms.delete(r.id); dropVoiceChat(r.id); } else { if (r.by === c.uid) r.by = rest[0]; raveMsg(r, 'rave.people', { id: r.id, users: rest, n: rest.length }); } } announce(); }
 

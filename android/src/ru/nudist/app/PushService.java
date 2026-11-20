@@ -201,7 +201,7 @@ public class PushService extends Service {
             if (items != null && !quiet) {
                 for (int i = 0; i < items.length(); i++) {
                     JSONObject it = items.getJSONObject(i);
-                    show(it.optString("tag", ""), it.optString("title", "Нудист"), it.optString("body", ""), it.optString("click", ""));
+                    show(it.optString("tag", ""), it.optString("title", "Нудист"), it.optString("body", ""), it.optString("click", ""), it.optString("url", ""));
                 }
             }
             long last = o.optLong("last", since);
@@ -251,9 +251,11 @@ public class PushService extends Service {
         return PendingIntent.getActivity(this, 0, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
-    private void show(String tag, String title, String body) { show(tag, title, body, ""); }
+    private void show(String tag, String title, String body) { show(tag, title, body, "", ""); }
 
-    private void show(String tag, String title, String body, String click) {
+    private void show(String tag, String title, String body, String click) { show(tag, title, body, click, ""); }
+
+    private void show(String tag, String title, String body, String click, String url) {
         if (tag.length() == 0) tag = "misc";
         List<String> lines;
         synchronized (shown) {
@@ -266,20 +268,31 @@ public class PushService extends Service {
             while (lines.size() > 6) lines.remove(0);
             lines = new ArrayList<String>(lines);
         }
+        // Ссылка на страницу скачивания прямо в тексте: из шторки видно, куда идти, даже без нажатия.
+        String show = body;
+        String shownText = body;
+        if (url != null && url.length() > 0 && !"update".equals(click) && body.indexOf(url) < 0) shownText = body + " · " + url.replaceFirst("^https?://", "");
         Notification.Builder b = builder(CH_MSG)
                 .setContentTitle(title)
-                .setContentText(body)
+                .setContentText(shownText)
                 .setAutoCancel(true)
                 .setCategory("call".equals(tag) ? Notification.CATEGORY_CALL : Notification.CATEGORY_MESSAGE)
                 .setVisibility(Notification.VISIBILITY_PRIVATE)
                 .setContentIntent(openIntent("update".equals(click) || "call".equals(tag) || "misc".equals(tag) || "test".equals(tag) ? null : tag, "update".equals(click)));
+        if (url != null && url.length() > 0) {      // кнопка: открыть ту же страницу в браузере телефона
+            Intent web = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url));
+            web.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            b.addAction(new Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_stat_leaf),
+                    "Открыть в браузере", PendingIntent.getActivity(this, 77, web, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE)).build());
+        }
         if (Build.VERSION.SDK_INT < 26) b.setPriority(Notification.PRIORITY_HIGH).setDefaults(Notification.DEFAULT_ALL);
         if (lines.size() > 1) {
             Notification.InboxStyle st = new Notification.InboxStyle().setBigContentTitle(title);
             for (String l : lines) st.addLine(l);
+            if (url != null && url.length() > 0) st.addLine(url);
             b.setStyle(st).setNumber(lines.size());
         } else {
-            b.setStyle(new Notification.BigTextStyle().bigText(body));
+            b.setStyle(new Notification.BigTextStyle().bigText(url != null && url.length() > 0 && !"update".equals(click) ? body + "\n" + url : body));
         }
         try {
             ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).notify(idOf(tag), b.build());

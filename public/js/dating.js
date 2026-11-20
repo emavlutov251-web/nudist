@@ -13,6 +13,11 @@ const LOOK = [['', 'не важно'], ['Спокойный', 'спокойны�
 const PLAY = [['', 'всё равно'], ['Общение', 'общение'], ['Друзья', 'друзья'], ['Отношения', 'отношения'], ['Компания для игр', 'компания для игр']];
 const HUE = n => ['#FFD166', '#8FE08A', '#7BB8FF', '#FF9C8F', '#C7A6FF'][(n || 0) % 5];
 
+// Первый заход: сразу видно, что тут делать. Подсказка живёт в устройстве и показывается один раз.
+const SEEN = 'dating.tip';
+export function datingTip() { try { return !localStorage.getItem('nudist.' + SEEN); } catch (e) { return false; } }
+export function datingTipDone() { try { localStorage.setItem('nudist.' + SEEN, '1'); } catch (e) { /* не страшно */ } }
+
 // ───── анкета
 function Form({ d, onDone, id }) {
   const [year, setYear] = useState(d.year || ''), [city, setCity] = useState(d.city || ''), [aboutT, setAboutT] = useState(d.about || '');
@@ -40,7 +45,7 @@ function Form({ d, onDone, id }) {
 
 // ───── карточка человека
 function Card({ v, onLike, onSkip, busy }) {
-  if (!v) return html`<${Empty} icon="heart" title="Пока никого" text="Всех посмотрели. Загляните позже — люди приходят." />`;
+  if (!v) return html`<${Empty} icon="heart" title="Пока никого" text="Всех посмотрели. Загляните позже — люди приходят. Больше людей приходит, когда знакомство включено у вас: вас тоже показывают." />`;
   return html`<div class="dt-card">
     <div class="dt-ava" style=${`background:linear-gradient(150deg,${HUE(v.color)},${HUE((v.color || 0) + 2)})`}>
       ${v.avatar ? html`<img src=${v.avatar} alt="" loading="lazy" />` : html`<span>${(v.name || '?').slice(0, 1).toUpperCase()}</span>`}
@@ -55,11 +60,13 @@ function Card({ v, onLike, onSkip, busy }) {
 
 // ───── сам экран
 export function DatingModal({ id }) {
-  const [d, setD] = useState(null), [card, setCard] = useState(null), [busy, setBusy] = useState(false), [matches, setMatches] = useState(null), [edit, setEdit] = useState(false);
-  const loadMe = () => rpc('dating.me').then(v => { setD(v); return v; }).catch(e => { toast(e.message, 'err'); return null; });
-  const next = async () => { try { const r = await rpc('dating.next'); setCard(r.none ? null : r); } catch (e) { toast(e.message, 'err'); setCard(null); } };
-  // d в замыкании здесь всегда null: сначала читаем анкету, и уже по её ответу решаем, показывать ли карточку
-  useEffect(() => { loadMe().then(v => { if (v && v.on) next(); }); }, []);
+  const [d, setD] = useState(null), [card, setCard] = useState(null), [busy, setBusy] = useState(false), [matches, setMatches] = useState(null), [edit, setEdit] = useState(false), [err, setErr] = useState('');
+  const loadMe = () => rpc('dating.me').then(v => { setD(v); setErr(''); return v; }).catch(e => { setErr(e.message); return null; });
+  const next = async () => { try { const r = await rpc('dating.next'); setCard(r.none ? null : r); } catch (e) { setErr(e.message); setCard(null); } };
+  // Связь может пропасть на секунду — в таком случае повторяем сами, а не показываем человеку ошибку.
+  const retry = () => { setErr(''); loadMe().then(v => { if (v && v.on) next(); }); };
+  // Анкету и первую карточку просим одним заходом: сначала читаем анкету, по её ответу сразу тянем карточку.
+  useEffect(() => { retry(); }, []);
   const like = async () => {
     if (!card || !card.user) return; setBusy(true);
     try { const r = await rpc('dating.like', { id: card.user.id }); if (r.mutual) { toast('Взаимно! Чат уже открыт 🍃'); loadMe(); } next(); }
@@ -74,16 +81,18 @@ export function DatingModal({ id }) {
   };
   if (edit) return html`<${Form} id=${id} d=${d || { tagsMax: 8, aboutMax: 300 }} onDone=${() => { setEdit(false); loadMe().then(v => { if (v && v.on) next(); }); }} />`;
   return html`<${Modal} id=${id} title="Знакомство" icon="heart" footer=${html`<button class="btn ghost" onClick=${() => closeModal(id)}>Закрыть</button>${d && d.on && html`<button class="btn ghost" onClick=${() => setEdit(true)}>Анкета</button>`}`}>
-    ${!d ? html`<${Spinner} />` : html`
+    ${!d ? (err ? html`<div class="dt-wait"><p class="hint">Не получилось загрузить знакомство: ${err}</p><button class="btn" onClick=${retry}>Повторить</button></div>`
+        : html`<div class="dt-wait"><${Spinner} /><p class="hint">Смотрим, кто рядом…</p></div>`) : html`
       <${Toggle} label="Участвовать в знакомстве" hint="Видят только те, кто тоже участвует. Кого вы пропустили, не узнает об этом никогда" on=${d.on} onChange=${toggleOn} />
-      ${!d.on && html`<${Empty} icon="heart" title="Знакомство выключено" text="Заполните анкету — и мы будем показывать вас тем, с кем есть общие интересы."><button class="btn" onClick=${() => setEdit(true)}>Заполнить анкету</button><//>`}
+      ${!d.on && html`<${Empty} icon="heart" title="Знакомство выключено" text="Заполните анкету — и мы будем показывать вас тем, с кем есть общие интересы. Анкету видят только участники знакомства, год рождения — никому."><button class="btn" onClick=${() => setEdit(true)}>Заполнить анкету</button><//>`}
+      ${d.on && html`<p class="hint dt-help">Листайте карточки: <b>сердце</b> — «нравится», <b>крестик</b> — дальше, об этом человек никогда не узнает. Понравились друг другу — сразу открывается чат. Кто вас лайкнул, не видно никому — такие правила.</p>`}
       ${d.on && html`
         <div class="dt-stats"><span><b>${d.likes}</b> ваших «нравится»</span><span><b>${d.matches}</b> совпадений</span></div>
         ${card && card.common && card.common.length > 0 && html`<p class="dt-common"><${Icon} n="sparkles" s=${14} /> Общее: <b>${card.common.join(', ')}</b></p>`}
         <${Card} v=${card && card.user} busy=${busy} />
         ${card && card.user && html`<div class="dt-btns">
-          <button class="dt-no" onClick=${skip} aria-label="Дальше" title="Дальше"><${Icon} n="x" s=${24} /></button>
-          <button class="dt-yes" disabled=${busy} onClick=${like} aria-label="Нравится" title="Нравится"><${Icon} n="heart" s=${26} /></button>
+          <button class="dt-no" onClick=${skip} aria-label="Дальше" title="Дальше"><${Icon} n="x" s=${24} /><span>Дальше</span></button>
+          <button class="dt-yes" disabled=${busy} onClick=${like} aria-label="Нравится" title="Нравится"><${Icon} n="heart" s=${26} /><span>Нравится</span></button>
         </div>`}
         <button class="link dt-matches" onClick=${() => rpc('dating.list').then(setMatches).catch(e => toast(e.message, 'err'))}>Совпадения${d.matches ? ' · ' + d.matches : ''}</button>
         ${matches && matches.length > 0 && html`<div class="dt-list">${matches.map(m => html`<button class="ci" key=${m.user.id} onClick=${() => { closeModal(id); openChat(m.chat); }}>

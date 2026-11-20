@@ -159,10 +159,26 @@ export function connect() {
 export function disconnect() { closing = true; if (ws) ws.close(); ws = null; }
 export function sendBin(buf) { if (!ws || ws.readyState !== 1 || ws.bufferedAmount > 200000) return false; ws.send(buf); return true; }
 export function rpc(m, p) {
+  // Пока связь восстанавливается, запрос не рушим сразу: ждём до 8 секунд. Раньше человек видел
+  // «Нет соединения с сервером» на пустом месте — связь обрывалась на секунду, и все открытые окна
+  // (знакомство, магазин, чаты) показывали ошибку вместо обычного ожидания.
   return new Promise((ok, no) => {
-    if (!ws || ws.readyState !== 1) return no(new Error('Нет соединения с сервером'));
-    const i = ++rid; pending.set(i, { ok, no }); ws.send(JSON.stringify({ id: i, m, p: p || {} }));
-    setTimeout(() => { if (pending.delete(i)) no(new Error('Сервер не отвечает')); }, 30000);
+    const send = () => {
+      if (ws && ws.readyState === 1) {
+        const i = ++rid; pending.set(i, { ok, no }); ws.send(JSON.stringify({ id: i, m, p: p || {} }));
+        setTimeout(() => { if (pending.delete(i)) no(new Error('Сервер не отвечает')); }, 30000);
+        return true;
+      }
+      return false;
+    };
+    if (send()) return;
+    const t0 = Date.now();
+    const tick = () => {
+      if (send()) return;
+      if (Date.now() - t0 > 8000) return no(new Error('Нет соединения с сервером'));
+      setTimeout(tick, 400);
+    };
+    setTimeout(tick, 400);
   });
 }
 /** rpc с показом ошибки тостом; возвращает undefined при ошибке */

@@ -284,7 +284,11 @@ article.post footer { font-size: inherit; color: inherit; }
 .dt-tags { justify-content: center; margin-top: 10px; }
 .dt-tags .chip { cursor: default; }
 .dt-btns { display: flex; justify-content: center; margin: 16px 0 4px; } .dt-btns > * + * { margin-left: 26px; }
-.dt-no, .dt-yes { width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; border: 0; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); transition: transform .12s; }
+.dt-no, .dt-yes { width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; border: 0; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); transition: transform .12s; position: relative; }
+.dt-no span, .dt-yes span { position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); font-size: 11px; line-height: 1; color: var(--ink2); opacity: .8; white-space: nowrap; }
+.dt-btns { padding-bottom: 18px; }
+.dt-wait { display: grid; place-items: center; gap: 8px; padding: 26px 0 10px; text-align: center; }
+.dt-help { margin: 4px 0 10px; }
 .dt-no { background: var(--hover); color: var(--ink2); } .dt-yes { background: #2BB36A; color: #fff; }
 .dt-no:active, .dt-yes:active { transform: scale(.92); }
 .dt-matches { display: block; margin: 12px auto 0; }
@@ -372,3 +376,15 @@ html.native-nav .call { padding-bottom: calc(18px + var(--nav-pad)); }
 .rv-h { background: var(--panel); box-shadow: 0 1px 0 var(--line); position: relative; z-index: 2; }
 .rv-t b { color: var(--ink); } .rv-t small { color: var(--ink2); }
 .rv-h .ib { color: var(--ink2); } .rv-h .ib:hover { color: var(--ink); }
+
+/* Рейв: подсказки хозяину и гостям, чтобы не гадать, почему на экране тишина */
+.rv-host { margin: 6px 14px 0; font-size: 12px; opacity: .75; }
+.rv-paused { margin: 8px 0 0; text-align: center; }
+
+/* Первый заход: подсказка рядом со значком «Знакомство» — чтобы не гадать, что это за сердце */
+.dt-bubble { position: fixed; top: 64px; right: 12px; z-index: 320; max-width: 260px; text-align: left;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 14px;
+  padding: 10px 12px; font: inherit; font-size: 12.5px; line-height: 1.4; box-shadow: 0 12px 30px rgba(0, 0, 0, .25); }
+.dt-bubble::before { content: ''; position: absolute; top: -6px; right: 64px; width: 11px; height: 11px; background: var(--panel);
+  border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
+.dt-bubble b { display: block; margin-bottom: 2px; }

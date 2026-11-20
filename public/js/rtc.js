@@ -148,6 +148,8 @@ async function join(chatId, { video, ring } = {}) {
     applyMic(); if (mic) watch(r.you, mic);
     for (const id of r.peers) mkPeer(id, true);
     sfx('join'); bump();
+    // Первый звонок на этом устройстве: люди часто не понимают, что микрофон выключен по умолчанию.
+    if (muted) import('./hints.js').then(h => h.callFirstHint && h.callFirstHint()).catch(() => {});
     if (ring && ch && !ch.server && r.room.peers.length < 2) { outT = setInterval(() => sfx('ring'), 3000); sfx('ring'); outKill = setTimeout(() => { if (RTC.chat === chatId && room().peers.length < 2) { toast('Не отвечает. Возможно, загорает.'); leaveVoice(); } }, 45000); }
     if (video) toggleCam();
     if (S.settings.ptt && ch && ch.server) toast('Режим рации: держите Пробел, чтобы говорить');
