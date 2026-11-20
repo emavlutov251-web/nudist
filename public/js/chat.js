@@ -14,6 +14,14 @@ const swipeIndicator = () => {
   return swipeInd;
 };
 const SWIPE_SKIP = e => !!(e.target && e.target.closest && e.target.closest('button,a,input,textarea,select,video,audio,iframe,.ph,.voice,.ytc,.poll,.rxs,.pack-chip'));
+// WebView может не доставить pointerup целевому сообщению при смене экрана/прерывании касания.
+// Страхуемся глобально и сбрасываем inline-стили: они иначе перекрывают opacity/transform из CSS.
+const clearSwipeIndicator = () => {
+  if (!swipeInd) return;
+  swipeInd.classList.remove('on'); swipeInd.style.opacity = ''; swipeInd.style.transform = '';
+};
+for (const ev of ['pointerup', 'pointercancel', 'touchend', 'touchcancel', 'lostpointercapture', 'blur', 'pagehide']) addEventListener(ev, clearSwipeIndicator, true);
+document.addEventListener('visibilitychange', () => { if (document.hidden) clearSwipeIndicator(); }, true);
 import { msgKey, loadHistory, openChat, closeChat, openUser, markRead, retryMsg, secretIssue, ensureKey } from './store.js';
 import { Sticker, sfx } from './fun.js';
 import { OnceMsg, Streak, answerAsk } from './growth.js';
@@ -220,7 +228,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
   const u = S.users[m.from], mine = m.from === S.me.id, sel = S.ui.sel;
   const rowRef = useRef(null), drag = useRef(null);
   const onPD = e => { if (e.pointerType !== 'touch' || sel || m.tmp || SWIPE_SKIP(e)) return; drag.current = { x: e.clientX, y: e.clientY, on: false, dx: 0 }; };
-  const resetRow = () => { const el = rowRef.current; if (el) { el.classList.add('swipe-snap'); el.style.transform = ''; setTimeout(() => el.classList.remove('swipe-snap'), 220); } if (swipeInd) swipeInd.classList.remove('on'); };
+  const resetRow = () => { const el = rowRef.current; if (el) { el.classList.add('swipe-snap'); el.style.transform = ''; setTimeout(() => el.classList.remove('swipe-snap'), 220); } clearSwipeIndicator(); };
   const onPM = e => {
     const d = drag.current; if (!d) return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
