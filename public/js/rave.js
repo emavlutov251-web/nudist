@@ -2,7 +2,15 @@
 // Сами видео и музыка идут с обычных адресов, поэтому плеер здесь самый обычный: сервер хранит только «что и с какой секунды».
 import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avatar, cx, userName, Spinner, Empty, addUsers } from './lib.js';
 
-export const RV = { cur: null, list: [], ev: null };
+export const RV = { cur: null, list: [], ev: null, voice: false, link: null };      // voice — включён общий голосовой канал
+// Одна и та же комната — это и чат (для голосового канала), и место просмотра.
+// Регистрируем его в S.chats — общий слой звонков иначе не найдёт, куда звонить.
+function voiceChat(room) {
+  const id = 'rave:' + room.id;
+  const ch = S.chats[id] || (S.chats[id] = { id, title: room.title || 'Рейв', type: 'group', members: {}, pos: 0 });
+  for (const u of room.users || []) ch.members[u] = { role: u === room.by ? 'owner' : 'member' };
+  return ch;
+}
 export const queueForDebug = () => RV.q || null;
 
 // ───────── общий источник событий
@@ -11,7 +19,7 @@ function rvOn() {
   RV.ev = true;
   on('rave', v => { if (!v || !RV.cur || v.id !== RV.cur.id) return; RV.cur = { ...RV.cur, ...v }; bump(); });
   on('rave.people', v => { if (RV.cur && v.id === RV.cur.id) { RV.cur.n = v.n; RV.cur.users = v.users; bump(); } });
-  on('rave.play', v => { if (RV.cur && v.id === RV.cur.id) { RV.cur.now = v.now; bump(); } });
+  on('rave.play', v => { if (RV.cur && v.id === RV.cur.id) { RV.cur.now = v.now; if (v.link) RV.link = v.link; else if (v.now && v.now.kind !== 'link') RV.link = null; bump(); } });
   on('rave.msg', v => { if (RV.cur && v.id === RV.cur.id) { RV.cur.chat = [...(RV.cur.chat || []), v.m].slice(-200); if (v.user) S.users[v.m.by] = { ...S.users[v.m.by], ...v.user }; bump(); } });
   on('rave.upd', () => { bump(); });
   on('rave.invite', v => {
@@ -38,6 +46,7 @@ export async function enterRave(id) {
     if (!r.in) { await rpc('rave.join', { id }); }
     const g = await rpc('rave.get', { id });
     RV.cur = { ...g.room, chat: g.chat || [] };
+    RV.link = g.link || null;      // ссылка, которая уже стоит в комнате — видно сразу при входе
     bump();
   } catch (e) { toast(e.message, 'err'); }
 }
@@ -58,6 +67,7 @@ function RavePlayer({ room }) {
   const [cur, setCur] = useState(null);
   useEffect(() => {
     let live = true;
+    if (now && now.kind === 'link') { setCur(null); return; }      // ссылку показывает отдельная ветка ниже
     if (!now || !now.item) { setCur(null); return; }
     if (now.kind === 'music') {
       loadQueue('music').then(list => { const c = (list || []).find(x => x.id === now.item); if (live) setCur(c ? { music: c } : { wait: true }); });
@@ -68,12 +78,22 @@ function RavePlayer({ room }) {
   }, [now && now.item, now && now.kind]);
   // Подводим время к комнате: если отстали больше чем на две секунды или ушли вперёд — выравниваем.
   useEffect(() => {
-    const v = vid.current; if (!v || !now) return;
+    const v = vid.current; if (!v || !now || now.kind === 'link') return;      // ссылки крутит сам сервис/сам файл
     const want = now.at + (now.paused ? 0 : (Date.now() - now.ts) / 1000);
     if (now.paused) { v.pause(); if (Math.abs(v.currentTime - now.at) > 1) v.currentTime = now.at; return; }
     if (Math.abs(v.currentTime - want) > 2) v.currentTime = Math.max(0, want);
     v.play().catch(() => { /* браузер попросит нажать */ });
   }, [now && now.ts, now && now.paused]);
+  if (now && now.kind === 'link') {
+    const L = RV.link || {};
+    if (!L.url) return html`<div class="rv-empty"><${Spinner} /></div>`;
+    if (L.kind === 'file') return html`<div class="rv-stage"><video ref=${vid} src=${L.url} playsinline preload="metadata" controls=${host} onClick=${e => { if (!host) { const v = e.currentTarget; if (v.paused) { v.currentTime = now.at + (now.paused ? 0 : (Date.now() - now.ts) / 1000); v.play().catch(() => {}); } } }}></video>
+      <span class="rv-src">${L.title}</span></div>`;
+    if (L.kind === 'embed') return html`<div class="rv-stage rv-embed"><iframe key=${L.url} src=${L.url} sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-popups" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" title=${L.title}></iframe>
+      ${L.warn === 'yt' && html`<p class="hint">YouTube в России без VPN не грузится. Если вместо видео пусто — включите VPN или откройте оригинал кнопкой ниже.</p>`}
+      <a class="rv-open" href=${L.link} target="_blank" rel="noopener noreferrer">${L.title} · открыть в ${L.site || 'сервисе'}</a></div>`;
+    return html`<div class="rv-empty"><${Empty} icon="film" title="Этот сервис не даёт встраивать видео" text=${'Откройте ссылку рядом и смотрите вместе — кнопка ниже. ' + (L.site || '')} /><a class="btn" href=${L.link} target="_blank" rel="noopener noreferrer">Открыть видео</a></div>`;
+  }
   if (!now || !now.item) {
     return html`<div class="rv-empty"><${Empty} icon="music" title="Пока тишина" text=${host ? 'Выберите клип в очереди или музыку внизу — и все в комнате увидят то же самое.' : 'Хозяин ещё не включил клип. Поболтайте пока.'} /></div>`;
   }
@@ -101,7 +121,7 @@ function playRaveTrack(t) {
 
 // ───────── комната
 export function RaveRoom() {
-  const room = RV.cur, [text, setText] = useState(''), [clips, setClips] = useState(null), [tab, setTab] = useState('queue');
+  const room = RV.cur, [text, setText] = useState(''), [clips, setClips] = useState(null), [tab, setTab] = useState('queue'), [url, setUrl] = useState('');
   const chatEnd = useRef();
   useEffect(() => { chatEnd.current && chatEnd.current.scrollIntoView({ block: 'end' }); }, [(room.chat || []).length]);
   useEffect(() => { loadQueue(room.kind).then(l => { RV.q = l; setClips(l); }); }, [room.kind]);
@@ -116,6 +136,18 @@ export function RaveRoom() {
   const host = room.host;
   const send = () => { const t = text.trim(); if (!t) return; setText(''); rpc('rave.chat', { id: room.id, text: t }).catch(e => toast(e.message, 'err')); };
   const put = c => rpc('rave.play', { id: room.id, kind: c.music ? 'music' : 'clip', item: c.id, at: 0 }).catch(e => toast(e.message, 'err'));
+  const playUrl = async () => {
+    const u = url.trim(); if (!u) return;
+    try { const r = await rpc('rave.url', { id: room.id, url: u }); RV.link = r.item; RV.cur.now = r.now; setUrl(''); bump(); }
+    catch (e) { toast(e.message, 'err'); }
+  };
+  const voice = async () => {
+    const { joinVoice, leaveVoice, RTC } = await import('./rtc.js');
+    if (RV.voice) { try { await leaveVoice(true); } catch (e) { /* уже вышли */ } RV.voice = false; bump(); return; }
+    RV.voice = true;
+    try { voiceChat(room); await joinVoice('rave:' + room.id); } catch (e) { RV.voice = false; toast(e.message || 'Не удалось включить голос', 'err'); }
+    bump();
+  };
   const invite = async () => {
     const { pickUsers } = await import('./panels.js');
     const ids = await pickUsers({ title: 'Позвать на рейв' });
@@ -127,6 +159,7 @@ export function RaveRoom() {
     <header class="rv-h">
       <button class="ib" title="Выйти из комнаты" aria-label="Назад" onClick=${() => leaveRave()}><${Icon} n="chevron-left" s=${22} /></button>
       <div class="rv-t"><b>${room.title}</b><small>${room.n} ${room.n === 1 ? 'человек' : 'в комнате'} · ${room.kind === 'music' ? 'музыка' : 'клипы'}</small></div>
+      <button class=${cx('ib', RV.voice && 'on')} title=${RV.voice ? 'Выключить голос' : 'Говорить голосом, пока смотрим'} aria-label="Голос" onClick=${voice}><${Icon} n=${RV.voice ? 'mic' : 'mic-off'} s=${20} /></button>
       <button class="ib" title="Позвать друзей" aria-label="Позвать друзей" onClick=${invite}><${Icon} n="user-plus" s=${20} /></button>
       <button class="ib" title="Свернуть комнату" aria-label="Свернуть" onClick=${() => leaveRave()}><${Icon} n="x" s=${20} /></button>
     </header>
@@ -134,7 +167,9 @@ export function RaveRoom() {
     <${RavePlayer} room=${room} />
     <div class="rv-tabs"><button class=${cx(tab === 'queue' && 'on')} onClick=${() => setTab('queue')}>Очередь</button><button class=${cx(tab === 'chat' && 'on')} onClick=${() => setTab('chat')}>Чат${(room.chat || []).length ? html`<b>${room.chat.length}</b>` : ''}</button></div>
     ${tab === 'queue' ? html`<div class="rv-queue">
-      ${!host && html`<p class="hint">Клипы переключает хозяин комнаты — ${userName(S.users[room.by] || {})}. Можно предложить свой в чате.</p>`}
+      ${host ? html`<div class="rv-url"><${Icon} n="link" s=${16} /><input placeholder="Ссылка на видео: youtube, vk, rutube, mp4" value=${url} onInput=${e => setUrl(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter') playUrl(); }} /><button class="btn sm" disabled=${!url.trim()} onClick=${playUrl}>Включить</button></div>
+        ${!clips || !clips.length ? html`<p class="hint">Скиньте ссылку — фильм или клип пойдёт у всех одновременно. Хотите обсуждение — включите микрофон вверху.</p>` : ''}`
+        : html`<p class="hint">Видео ставит хозяин — ${userName(S.users[room.by] || {})}. Включите микрофон вверху, чтобы обсуждать по ходу.</p>`}
       ${host && (!list.length ? html`<${Empty} icon="film" title="Клипов пока нет" text="Выложите клип в ленте — и он появится здесь." />` : html`<div class="rv-list">${list.map(c => html`<button class=${cx('rv-item', room.now && room.now.item === c.id && 'on')} key=${c.id} onClick=${() => put(c)}>
         <span class="rv-thumb">${c.poster ? html`<img src=${c.poster} alt="" loading="lazy" />` : html`<${Icon} n="film" s=${20} />`}</span>
         <span class="rv-it"><b>${c.title || 'Клип'}</b><small>${userName(S.users[c.by] || {})} · ${c.dur ? Math.round(c.dur) + ' с' : ''}</small></span>

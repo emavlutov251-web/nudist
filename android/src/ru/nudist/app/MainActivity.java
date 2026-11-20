@@ -83,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 32;      // 3.2: знакомства, карты на четверых, рейв, починка музыки и ленты
+    private static final int APP_VERSION = 33;      // 3.3: кино вдвоём в рейве, голос, сообщества, кириллица в оболочке
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -679,11 +679,13 @@ public class MainActivity extends Activity {
 
     private static String mimeOf(String path) {
         String p = path.toLowerCase(Locale.ROOT);
-        if (p.endsWith(".html")) return "text/html";
-        if (p.endsWith(".js") || p.endsWith(".mjs")) return "application/javascript";
-        if (p.endsWith(".css")) return "text/css";
-        if (p.endsWith(".json") || p.endsWith(".webmanifest")) return "application/manifest+json";
-        if (p.endsWith(".svg")) return "image/svg+xml";
+        // charset в самом типе: WebView без него угадывает кодировку по первым байтам и на сжатом ответе
+        // (gzip начинается с 0x1F 0x8B) показывал вместо русских букв «иероглифы» — этим страдали друзья на Xiaomi/Redmi.
+        if (p.endsWith(".html")) return "text/html; charset=utf-8";
+        if (p.endsWith(".js") || p.endsWith(".mjs")) return "application/javascript; charset=utf-8";
+        if (p.endsWith(".css")) return "text/css; charset=utf-8";
+        if (p.endsWith(".json") || p.endsWith(".webmanifest")) return "application/manifest+json; charset=utf-8";
+        if (p.endsWith(".svg")) return "image/svg+xml; charset=utf-8";
         String ext = MimeTypeMap.getFileExtensionFromUrl(p);
         String m = ext == null ? null : MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
         return m == null ? "application/octet-stream" : m;
@@ -743,7 +745,7 @@ public class MainActivity extends Activity {
                 return new WebResourceResponse(mime, "utf-8", 200, "OK", headers, new ByteArrayInputStream(bo.toByteArray()));
             }
         } catch (Throwable e) { /* отдадим как есть */ }
-        return new WebResourceResponse(mime, rel.endsWith(".woff2") ? "utf-8" : null, 200, "OK", headers, new ByteArrayInputStream(body));
+        return new WebResourceResponse(mime, textType(mime) || rel.endsWith(".woff2") ? "utf-8" : null, 200, "OK", headers, new ByteArrayInputStream(body));
     }
 
     private static byte[] readFile(File f) throws IOException {

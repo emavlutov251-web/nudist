@@ -226,6 +226,10 @@ div.hist-i { display: block; border-left: 3px solid var(--line); border-radius: 
 @media (max-width: 1180px) { .shell.with-panel { grid-template-columns: 68px 336px minmax(0, 1fr); } .shell.with-panel > .panel { position: fixed; right: 0; top: 0; bottom: 0; width: min(360px, 100vw); z-index: 50; box-shadow: var(--shadow); } }
 @media (max-width: 800px) {
   .shell, .shell.with-panel { grid-template-columns: 60px minmax(0, 1fr); } .shell > .main { display: none; }
+  /* Хаб на телефоне открывается поверх раздела — иначе чат висел снизу полосой, а в ленте под постами
+     оставалась полоска ввода из последнего чата. Пока открыт хаб, чат не показываем совсем. */
+  .shell.hub-open > .main { display: none !important; }
+  .shell.hub-open { grid-template-columns: minmax(0, 1fr); } .shell.hub-open > .rail, .shell.hub-open > .side { display: none; }
   .shell.in-chat { grid-template-columns: minmax(0, 1fr); } .shell.in-chat > .rail, .shell.in-chat > .side { display: none; } .shell.in-chat > .main { display: flex; }
   .chat-h .back { display: inline-grid; } .chat-h { padding-left: 6px; } .hide-s { display: none !important; } .rail-b, .rail-b .ava { width: 42px !important; height: 42px !important; }
   .bubble { max-width: 86%; } .msg-act { display: none !important; } .msgs { padding-left: 8px; padding-right: 8px; } .composer { padding: 6px 8px 8px; }

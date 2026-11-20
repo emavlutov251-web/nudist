@@ -6,8 +6,8 @@ const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
 const WS = require('../server/vendor/ws');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-let bad = 0, total = 0;
-const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРОВАЛ:', n, x === undefined ? '' : JSON.stringify(x).slice(0, 240)); } else if (process.env.VERBOSE) console.log('  ✓', n); };
+let bad = 0, total = 0, passed = 0;
+const ck = (n, ok, x) => { total++; passed++; if (!ok) { bad++; console.log('  ✗ ПРОВАЛ:', n, x === undefined ? '' : JSON.stringify(x).slice(0, 240)); } else if (process.env.VERBOSE) console.log('  ✓', n); };
 
 (async () => {
   const port = 3800 + Math.floor(Math.random() * 120), dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nudist-rave-')), base = `http://127.0.0.1:${port}`;
@@ -83,7 +83,36 @@ const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРО�
     ck('после ухода хозяина комнату ведёт оставшийся', g3.room.host === true, g3.room && g3.room.by);
 
     if (process.env.VERBOSE) console.log('');
-    console.log(`${total - bad}/${total} ✓`);
+        // ── Ссылка на видео и голос: свежая комната, чтобы не мешал прежний состав
+    const fresh = (await a.rpc('rave.new', { title: 'Кино вечером', kind: 'clips' })).room;
+    const rid2 = fresh.id;
+    await b.rpc('rave.join', { id: rid2 });
+        // ── Ссылка на видео: вставляешь — у всех одно и то же
+    for (const [name, url, site, kind] of [
+      ['YouTube', 'https://youtu.be/dQw4w9WgXcQ', 'YouTube', 'embed'],
+      ['VK', 'https://vk.com/video-123_456', 'VK', 'embed'],
+      ['Rutube', 'https://rutube.ru/video/0123456789abcdef0123456789abcdef/', 'Rutube', 'embed'],
+      ['свой файл', 'https://example.com/film.mp4', '', 'file'],
+    ]) {
+      const q = await a.rpc('rave.url', { id: rid2, url }).then(r => r.item, e => ({ err: e.message }));
+      ck('ссылка ' + name + ' пускается', q && q.kind === kind && (!site || q.site === site), q);
+    }
+    const junk = await a.fail('rave.url', { id: rid2, url: 'https://example.com/about' });
+    ck('неизвестный сервис отклоняется', !!junk, junk);
+    const guestUrl = await b.fail('rave.url', { id: rid2, url: 'https://youtu.be/dQw4w9WgXcQ' });
+    ck('ссылку ставит только хозяин', !!guestUrl, guestUrl);
+    const st = await b.rpc('rave.get', { id: rid2 });
+    ck('гость видит ссылку комнаты', st.now && st.now.kind === 'link' && st.link && st.link.url, st.link && st.link.url);
+    // ── Голос в комнате: тот же WebRTC, что и в звонках, но комната остаётся на экране
+    const vj = await a.rpc('rtc.join', { chat: 'rave:' + rid2, muted: true }).then(r => r, e => ({ err: e.message }));
+    ck('голос в комнате включается', vj && vj.you && !vj.err, vj.err || 'на линии');
+    const vs = await a.rpc('rtc.state', { chat: 'rave:' + rid2, muted: true }).then(() => true, e => e.message);
+    ck('состояние микрофона меняется', vs === true, vs);
+    const vg = await b.rpc('rtc.join', { chat: 'rave:' + rid2, muted: true }).then(r => r, e => ({ err: e.message }));
+    ck('второй человек слышит первого', vg && vg.peers && vg.peers.length === 1, vg.err || (vg.peers || []).length);
+    const out = await a.rpc('rtc.leave', { chat: 'rave:' + rid2 }).then(() => true, () => false);
+    ck('из голоса можно выйти', out, out);
+console.log(`${passed - bad}/${passed} ✓`);
     if (bad) process.exitCode = 1;
   } catch (e) { console.log('  ✗ ИСКЛЮЧЕНИЕ:', e.message); process.exitCode = 1; }
   finally { srv.kill('SIGKILL'); try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) {} }

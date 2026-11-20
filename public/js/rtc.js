@@ -337,11 +337,12 @@ export function VoiceRoom({ chat }) {
 /** Слой звонков: входящий вызов, окно звонка в личке и группе, свёрнутая плашка. */
 export function CallLayer() {
   const ch = RTC.chat && S.chats[RTC.chat], ring = RTC.ring, solo = ch && !ch.server && room().peers.length < 2;
+  const rave = ch && String(ch.id).indexOf('rave:') === 0;      // разговор поверх рейва: комнату не перекрываем
   const accept = v => { const d = RTC.ring; RTC.ring = null; stopRing(); if (d) join(d.chat, { video: v }); };
   const decline = () => { const d = RTC.ring; RTC.ring = null; stopRing(); if (d) rpc('call.decline', { chat: d.chat }).catch(() => {}); bump(); };
   return html`${ring && html`<div class="ringing" role="alertdialog" aria-label="Входящий звонок"><div class="ring-c"><div class="ring-a"><${Avatar} u=${ring.user} src=${ring.user.avatar} name=${userName(ring.user)} color=${ring.user.color} s=${112} /></div>
       <h2>${userName(ring.user)}</h2><p>${ring.video ? 'Входящий видеозвонок' : 'Входящий звонок'}${ring.title ? ' · ' + ring.title : ''}</p><small>${ring.video ? 'Накиньте что-нибудь. Или включите фиговый листок в эффектах.' : 'Голосом можно всё, вас не видно.'}</small>
       <div class="ring-b"><button class="cb end" onClick=${decline} aria-label="Отклонить"><${Icon} n="phone-off" s=${26} /></button><button class="cb go" onClick=${() => accept(false)} aria-label="Ответить голосом"><${Icon} n="phone" s=${26} /></button>${ring.video && html`<button class="cb go" onClick=${() => accept(true)} aria-label="Ответить с видео"><${Icon} n="video" s=${26} /></button>`}</div></div></div>`}
-    ${ch && !ch.server && (RTC.min ? html`<button class="call-pill" onClick=${() => { RTC.min = false; bump(); }}><${Icon} n="phone-call" s=${16} /><b>${chatInfo(ch).title}</b>${solo ? 'вызов…' : html`<${Timer} from=${room().started || RTC.since} />`}</button>`
+    ${ch && !ch.server && (RTC.min || rave ? html`<button class="call-pill" onClick=${() => { RTC.min = false; bump(); }}><${Icon} n="phone-call" s=${16} /><b>${chatInfo(ch).title}</b>${solo ? 'вызов…' : html`<${Timer} from=${room().started || RTC.since} />`}</button>`
       : html`<div class="call" role="dialog" aria-label="Звонок"><header><button class="ib" title="Свернуть" onClick=${() => { RTC.min = true; bump(); }}><${Icon} n="minimize-2" /></button><div><b>${chatInfo(ch).title}</b><small>${solo ? 'Звоним… гудки идут' : html`<${Timer} from=${room().started || RTC.since} /> · ${room().peers.length} на линии`}${RTC.rec ? ' · ⏺ запись' : ''}</small></div><button class="ib" title="Открыть чат" onClick=${() => { RTC.min = true; openChat(ch.id); }}><${Icon} n="message-circle" /></button></header><${Stage} chat=${ch} /><${Controls} chat=${ch} /></div>`)}`;
 }

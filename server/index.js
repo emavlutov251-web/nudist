@@ -8,6 +8,7 @@ const A = require('./auth');
 const Hub = require('./hub');
 const Rave = require('./rave');
 require('./rp');
+require('./awards');
 const GuildsSeed = require('./guilds-seed');
 const Cards = require('./cards');
 const Rp = require('./rp');
@@ -95,6 +96,11 @@ function serveStatic(req, res, rel) {
     const h = { 'content-type': MIME[ext] || 'application/octet-stream', etag, 'cache-control': ext === 'woff2' ? 'public, max-age=31536000, immutable' : /^(png|jpg|ico)$/.test(ext) ? 'public, max-age=86400' : 'no-cache', 'x-content-type-options': 'nosniff' };
     if (ext === 'html') { h['content-security-policy'] = CSP; h['referrer-policy'] = 'no-referrer'; }
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, h); return res.end(); }
+    // Текст всегда объявляем как UTF-8: без этого браузер, которому не досталось заголовка (кеш, прокси,
+    // кривой ответ в WebView), показывал «иероглифы» вместо русских букв. Это стоило нам скриншотов из чата.
+    const TEXTUAL = /^(html|js|css|json|svg|txt|webmanifest|xml|map)$/;
+    if (TEXTUAL.test(ext) && !/charset/i.test(h['content-type'])) h['content-type'] += '; charset=utf-8';
+    if (TEXTUAL.test(ext)) h['content-language'] = 'ru';
     const ae = req.headers['accept-encoding'] || '';
     if (/^(html|js|css|json|svg|webmanifest)$/.test(ext) && /\b(br|gzip)\b/.test(ae)) {      // текст отдаём сжатым: brotli на треть меньше gzip
       const enc = /\bbr\b/.test(ae) ? 'br' : 'gzip', k = enc + file + etag; let z = gzCache.get(k);
