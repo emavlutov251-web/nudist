@@ -259,9 +259,16 @@ function leaveRoom(cid, uid, connId) {
   for (const [pid, s] of r.peers) if (connId ? pid === connId : s.user === uid) { r.peers.delete(pid); changed = true; const cn = C.connById.get(pid); if (cn && !connId) cn.send('rtc.kicked', { chat: cid }); }
   if (!changed) return;
   const ch = db.chats[cid];
+  const service = String(cid).indexOf('rave:') === 0;      // служебный чат комнаты рейва: не разговор, а место в комнате
   if (!r.peers.size || (ch && ch.type === 'dm' && r.peers.size < 2 && r.answered)) {
     rooms.delete(cid);
-    if (ch && (ch.type === 'dm' || ch.type === 'group')) {
+    if (service) {
+      // Голос в рейве закончился. Историю в личку не пишем и временный чат убираем,
+      // иначе он остался бы висеть в списке чатов у всех, кто хоть раз включил микрофон.
+      for (const u of C.membersOf(ch || { members: {} })) emit(u, 'call.end', { chat: cid, quiet: true });
+      if (ch) delete db.chats[cid];
+      save();
+    } else if (ch && (ch.type === 'dm' || ch.type === 'group')) {
       const dur = r.answered ? Math.round((now() - r.answered) / 1000) : 0;
       postMessage(ch, r.by, { type: 'call', call: { dur, video: r.video, missed: !r.answered } }, { quiet: true });
       for (const u of C.membersOf(ch)) emit(u, 'call.end', { chat: cid });

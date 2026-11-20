@@ -110,8 +110,12 @@ const ck = (n, ok, x) => { total++; passed++; if (!ok) { bad++; console.log('  �
     ck('состояние микрофона меняется', vs === true, vs);
     const vg = await b.rpc('rtc.join', { chat: 'rave:' + rid2, muted: true }).then(r => r, e => ({ err: e.message }));
     ck('второй человек слышит первого', vg && vg.peers && vg.peers.length === 1, vg.err || (vg.peers || []).length);
-    const out = await a.rpc('rtc.leave', { chat: 'rave:' + rid2 }).then(() => true, () => false);
-    ck('из голоса можно выйти', out, out);
+    const out = await b.rpc('rtc.leave', { chat: 'rave:' + rid2 }).then(() => true, e => e.message);
+    ck('из голоса можно выйти', out === true, out);
+    const out2 = await a.rpc('rtc.leave', { chat: 'rave:' + rid2 }).then(() => true, e => e.message);
+    ck('выход последнего не роняет сервер', out2 === true, out2);
+    const still = await a.rpc('rave.get', { id: rid2 }).then(r => r.room && r.room.id === rid2, () => false);
+    ck('комната жива после голоса', still === true, still);
 console.log(`${passed - bad}/${passed} ✓`);
     if (bad) process.exitCode = 1;
   } catch (e) { console.log('  ✗ ИСКЛЮЧЕНИЕ:', e.message); process.exitCode = 1; }
