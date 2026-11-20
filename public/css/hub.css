@@ -315,6 +315,7 @@ article.post footer { font-size: inherit; color: inherit; }
 .rv-ctl input[type=range] { flex: 1; accent-color: #fff; }
 .rv-empty { padding: 26px 16px; flex: none; }
 .rv-music { display: flex; align-items: center; gap: 12px; padding: 18px 16px; background: linear-gradient(120deg, rgba(43,179,106,.2), rgba(199,166,255,.2)); }
+.rv-music .rv-mt { flex: 1; min-width: 0; } .rv-mt b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .rv-mt small { opacity: .75; font-size: .82em; }
 .rv-music > div { flex: 1; display: flex; flex-direction: column; } .rv-music small { opacity: .7; font-size: 12px; }
 .rv-tabs { display: flex; border-bottom: 1px solid var(--line); } .rv-tabs button { flex: 1; padding: 10px; background: none; border: 0; font-size: 14px; color: var(--ink2); border-bottom: 2px solid transparent; }
 .rv-tabs button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; } .rv-tabs b { margin-left: 5px; font-size: 11px; background: var(--accent); color: #fff; border-radius: 999px; padding: 1px 6px; }

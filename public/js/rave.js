@@ -98,7 +98,12 @@ function RavePlayer({ room }) {
   if (!now || !now.item) {
     return html`<div class="rv-empty"><${Empty} icon="music" title="Пока тишина" text=${host ? 'Выберите клип в очереди или музыку внизу — и все в комнате увидят то же самое.' : 'Хозяин ещё не включил клип. Поболтайте пока.'} /></div>`;
   }
-  if (cur && cur.music) return html`<div class="rv-music"><${Icon} n="music" s=${34} /><div><b>${cur.music.title}</b><small>${host ? 'Вы включили этот трек для всех' : 'Хозяин включил этот трек'}</small></div><button class="btn sm" onClick=${() => playRaveTrack(cur.music)}>${now.paused ? 'Пауза' : 'Слушать'}</button></div>`;
+  if (cur && cur.music) return html`<div class="rv-music">
+    <${Icon} n="music" s=${34} />
+    <div class="rv-mt"><b>${cur.music.title}</b><small>${host ? 'Этот трек слышат все в комнате — одновременно' : 'Играет у всех в комнате одновременно'}${now.paused ? ' · на паузе' : ''}</small></div>
+    ${host ? html`<button class="btn sm" onClick=${() => rpc('rave.pause', { id: room.id, paused: !now.paused, at: rvTime(now) }).catch(e => toast(e.message, 'err'))}>${now.paused ? 'Продолжить' : 'Пауза'}</button>`
+      : html`<button class="btn sm" onClick=${resumeMusic}>${RS.blocked || (RS.audio && RS.audio.paused && !now.paused) ? 'Слушать' : (now.paused ? 'Пауза' : 'Слушаем')}</button>`}
+  </div>`;
   if (cur && cur.clip) {
     const c = cur.clip;
     return html`<div class="rv-stage">
@@ -112,13 +117,57 @@ function RavePlayer({ room }) {
   return html`<div class="rv-empty"><${Spinner} /></div>`;
 }
 
-// Музыку в комнате играет тот же плеер, что и в мессенджере: трек берём из общей волны.
-let raveTrack = null;
-function playRaveTrack(t) {
-  if (!t || !t.url) return toast('Трек не найден', 'err');
-  raveTrack = t;
-  import('./media.js').then(M => M.playAudio({ id: 'rave.' + t.id, chat: 'rave', type: 'audio', media: { url: t.url, name: t.title, dur: t.dur || 0, by: t.by } }, [{ id: 'rave.' + t.id, type: 'audio', media: { url: t.url, name: t.title, dur: t.dur || 0 } }])).catch(() => toast('Не удалось включить трек', 'err'));
+// ───────── музыка в комнате: у всех одна секунда
+// Раньше трек просто включался у каждого с начала, пауза не доходила до гостей, а браузер запрещал
+// звук без нажатия — поэтому «синхронного прослушивания» не получалось. Теперь секунду считаем по серверу:
+// сервер помнит, какой трек, с какой секунды и когда включён (now.at + now.ts), а мы подгоняем свой плеер.
+const RS = { audio: null, id: null, at: 0, playing: false, ready: false };      // что сейчас играем у нас
+const rvTime = now => {
+  const n = now || (RV.cur && RV.cur.now);
+  if (!n) return 0;
+  return Math.max(0, (Number(n.at) || 0) + (n.paused ? 0 : (Date.now() - (Number(n.ts) || Date.now())) / 1000));
+};
+
+/** Подогнать свой звук под комнату: включить нужный трек, перемотать и поставить/снять паузу. */
+function syncMusic(now, clips) {
+  const o = RS.audio || (RS.audio = new Audio());
+  o.preload = 'auto';
+  if (!now || now.kind !== 'music') { try { o.pause(); } catch (e) { /* тихо */ } RS.id = null; return; }
+  const t = (clips || []).find(x => x.id === now.item);
+  if (!t || !t.url) return;
+  if (RS.id !== t.id) { RS.id = t.id; RS.at = 0; o.src = t.url; RS.ready = false; }
+  const at = rvTime(now);
+  const go = () => {
+    const d = Math.abs((o.currentTime || 0) - at);
+    if (d > 1.2) { try { o.currentTime = at; } catch (e) { /* ещё не загрузился */ } }
+    if (now.paused) { if (!o.paused) o.pause(); }
+    else if (o.paused) o.play().catch(() => { RS.blocked = true; bump(); });      // браузер ждёт нажатия
+  };
+  if (o.readyState >= 1) go(); else { o.addEventListener('canplay', go, { once: true }); o.load(); }
 }
+
+/** Нажатие «Слушать»: снимает запрет автозапуска и сразу ставит нужную секунду. */
+export function resumeMusic() {
+  const now = RV.cur && RV.cur.now;
+  if (!now || now.kind !== 'music') return;
+  RS.blocked = false;
+  const o = RS.audio || (RS.audio = new Audio());
+  o.muted = false;
+  const at = rvTime(now);
+  if (Math.abs((o.currentTime || 0) - at) > 1.2) { try { o.currentTime = at; } catch (e) { /* пусть играет как есть */ } }
+  if (now.paused) { if (!o.paused) o.pause(); bump(); return; }
+  o.play().then(() => bump()).catch(() => toast('Не получилось включить звук. Нажмите ещё раз — телефон мог включить беззвучный режим.', 'err'));
+}
+
+/** Раз в 2 секунды подтягиваем отставание; если мы уехали больше чем на 2.5 с — ровняемся. */
+function keepMusic(now, clips) {
+  if (!now || now.kind !== 'music' || !RS.audio || !RS.id) return;
+  const o = RS.audio;
+  if (o.paused || !isFinite(o.duration)) return;
+  const at = rvTime(now);
+  if (Math.abs(o.currentTime - at) > 2.5) { try { o.currentTime = at; } catch (e) { /* пропустим такт */ } }
+}
+export const raveAudio = () => RS;
 
 // ───────── комната
 export function RaveRoom() {
@@ -126,13 +175,13 @@ export function RaveRoom() {
   const chatEnd = useRef();
   useEffect(() => { chatEnd.current && chatEnd.current.scrollIntoView({ block: 'end' }); }, [(room.chat || []).length]);
   useEffect(() => { loadQueue(room.kind).then(l => { RV.q = l; setClips(l); }); }, [room.kind]);
-  // Хозяин переключил музыку — у всех она включается сама (если браузер не против).
+  // Хозяин переключил трек, поставил паузу или перемотал — у всех звук встаёт на ту же секунду.
+  useEffect(() => { if (clips) syncMusic(room.now, clips); }, [room.now && room.now.item, room.now && room.now.paused, room.now && room.now.at, room.now && room.now.ts, clips]);
+  // Раз в 2 секунды ровняем отставание: у кого связь медленнее — догонит, у кого быстрее — подождёт.
   useEffect(() => {
-    const now = room.now;
-    if (!now || now.kind !== 'music' || now.paused || !clips) return;
-    const t = clips.find(x => x.id === now.item);
-    if (t && (!raveTrack || raveTrack.id !== t.id)) playRaveTrack(t);
-  }, [room.now && room.now.item, room.now && room.now.paused, clips]);
+    const t = setInterval(() => { if (RV.cur === room) keepMusic(room.now, clips); }, 2000);
+    return () => { clearInterval(t); try { if (RS.audio) RS.audio.pause(); } catch (e) { /* тихо */ } RS.id = null; };
+  }, [!!clips]);
   if (!room) return null;
   const host = room.host;
   const send = () => { const t = text.trim(); if (!t) return; setText(''); rpc('rave.chat', { id: room.id, text: t }).catch(e => toast(e.message, 'err')); };

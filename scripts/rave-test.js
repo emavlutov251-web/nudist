@@ -116,6 +116,28 @@ const ck = (n, ok, x) => { total++; passed++; if (!ok) { bad++; console.log('  �
     ck('выход последнего не роняет сервер', out2 === true, out2);
     const still = await a.rpc('rave.get', { id: rid2 }).then(r => r.room && r.room.id === rid2, () => false);
     ck('комната жива после голоса', still === true, still);
+    // ── Синхронное прослушивание: сервер помнит трек, секунду и момент включения — по ним все ровняются
+    const mroom = await a.rpc('rave.new', { title: 'Слушаем вместе', kind: 'music' });
+    const mid = mroom.room.id;
+    await b.rpc('rave.join', { id: mid });
+    const t0 = Date.now();
+    const mp = await a.rpc('rave.play', { id: mid, kind: 'music', item: 'track_1', at: 37 });
+    ck('хозяин включает трек с 37-й секунды', mp.now && mp.now.item === 'track_1' && mp.now.at === 37, mp.now);
+    ck('сервер запомнил момент включения', Math.abs((mp.now.ts || 0) - t0) < 5000, { ts: mp.now.ts, t0 });
+    const joinLate = await b.rpc('rave.get', { id: mid });
+    const lateNow = joinLate.room.now;
+    const latePos = (lateNow.at || 0) + (lateNow.paused ? 0 : (Date.now() - lateNow.ts) / 1000);
+    ck('опоздавший встаёт на ту же секунду, а не с начала', latePos >= 37 && latePos < 45, Math.round(latePos));
+    await a.rpc('rave.pause', { id: mid, paused: true, at: 41.5 });
+    const paused = await b.rpc('rave.get', { id: mid });
+    ck('пауза хозяина видна всем', paused.room.now.paused === true && paused.room.now.at === 41.5, paused.room.now);
+    const pBoris = await b.fail('rave.pause', { id: mid, paused: false, at: 0 });
+    ck('гость не может ставить паузу', /хозяин/i.test(pBoris || ''), pBoris);
+    await a.rpc('rave.pause', { id: mid, paused: false, at: 42 });
+    const resumed = await b.rpc('rave.get', { id: mid });
+    ck('продолжили — идёт дальше с той же секунды', resumed.room.now.paused === false && resumed.room.now.at === 42, resumed.room.now);
+    const seek = await a.rpc('rave.play', { id: mid, kind: 'music', item: 'track_1', at: 90 });
+    ck('перемотка хозяина доходит до всех', seek.now.at === 90, seek.now.at);
 console.log(`${passed - bad}/${passed} ✓`);
     if (bad) process.exitCode = 1;
   } catch (e) { console.log('  ✗ ИСКЛЮЧЕНИЕ:', e.message); process.exitCode = 1; }

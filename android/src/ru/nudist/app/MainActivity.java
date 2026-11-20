@@ -83,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 35;      // 3.5: проверка скачанного интерфейса — ромбики больше не вернутся
+    private static final int APP_VERSION = 36;      // 3.6: скачанный интерфейс применяется целиком; синхронное прослушивание
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -727,10 +727,20 @@ public class MainActivity extends Activity {
                     embeddedReady = true;
                     return;
                 }
-                for (String n : ov.list()) overlayFiles.add(n);
+                listFiles(ov, "", overlayFiles);        // рекурсивно: css/… и js/… лежат в подкаталогах
             }
         } catch (Throwable e) { overlayFiles = new java.util.HashSet<String>(); }
         embeddedReady = true;
+    }
+
+    /** Все файлы каталога и его подкаталогов — путями относительно него (js/app.js, css/base.css). */
+    private static void listFiles(File dir, String prefix, java.util.Set<String> out) {
+        File[] list = dir.listFiles();
+        if (list == null) return;
+        for (File f : list) {
+            if (f.isDirectory()) listFiles(f, prefix + f.getName() + "/", out);
+            else out.add(prefix + f.getName());
+        }
     }
 
     private File overlayDirNoList() {
