@@ -44,7 +44,7 @@ function Advent() {
     if (busy) return; setBusy(true);
     try {
       const r = await rpc('advent.open', { day: d.d }); setV(r.advent); sfx('coin'); confetti();
-      toast([r.n ? `+${num(r.n)} 🍃` : '', r.item ? `рамка «${r.item}» — уже в магазине, вкладка «Украшения»` : '', r.plan ? `Pro на ${r.plan} дня включён` : '', r.gift ? `подарок ${r.gift} — в вашем профиле` : ''].filter(Boolean).join(' · '));
+      toast([r.n ? `+${num(r.n)} 🍃` : '', r.item ? `рамка «${r.item}» — уже в магазине, вкладка «Украшения»` : '', r.plan ? `${r.plan === 'plus' ? 'Plus' : r.plan} на ${r.days} дня включён` : '', r.gift ? `подарок ${r.gift} — в вашем профиле` : ''].filter(Boolean).join(' · '));
     } catch (e) { err(e); } finally { setBusy(false); }
   };
   const ticket = async () => {
@@ -93,7 +93,7 @@ function Snow() {
   if (!v) return html`<${Spinner} />`;
   return html`<div class="snowb">
     <div class="ev-row"><span>У вас <b>${v.me} ❄️</b>${v.place ? html` · место <b>${v.place}</b>` : ''}${v.awarded ? ' · итоги подведены' : ''}</span>${v.on && html`<button class="btn sm" onClick=${() => import('./growth.js').then(g => g.openInvite())}><${Icon} n="user-plus" s=${15} /> Позвать друга</button>`}</div>
-    <div class="ev-prizes">${v.prizes.map(p => html`<span class="ev-pill">${p.from}–${p.to} место · ${p.name} на месяц</span>`)}<span class="ev-pill">нужно от ${v.min} ❄️</span></div>
+    <div class="ev-prizes">${v.prizes.map(p => html`<span class="ev-pill">${p.from}–${p.to} место · ${p.name} на ${p.days} дн.</span>`)}<span class="ev-pill">нужно от ${v.min} ❄️</span></div>
     ${v.top.length ? html`<ol class="snow-top">${v.top.slice(0, 20).map((r, i) => html`<li key=${r.user.id} class=${cx(r.user.id === S.me.id && 'me')}><i>${i + 1}</i><${Avatar} u=${r.user} src=${r.user.avatar} name=${userName(r.user)} color=${r.user.color} s=${28} /><b>${userName(r.user)}</b><span>${r.n} ❄️</span></li>`)}</ol>`
       : html`<p class="ev-note">${v.on ? 'Таблица пока пустая. Первая снежинка — и вы на первом месте.' : `Гонка идёт с ${day(v.from)} по ${day(v.to - 1)}.`}</p>`}
   </div>`;

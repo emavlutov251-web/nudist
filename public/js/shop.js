@@ -96,20 +96,20 @@ function ShopModal({ id, tab: tab0 }) {
       if (await run(() => rpc('shop.giftPlan', { to: r.user.id, id: p.id }))) { toast('Подарок отправлен.'); confetti(); }
     } catch (e) { toast(e.message, 'err'); }
   };
-  const trial = async () => { if (await run(() => rpc('shop.trial'))) { toast(`Pro включён на ${d.trial.days} дня. Ничего оплачивать не нужно, по окончании он просто выключится.`); confetti(); } };
+  const trial = async () => { if (await run(() => rpc('shop.trial'))) { toast(`${TIER[d.trial.tier]} включён на ${d.trial.days} дня. Ничего оплачивать не нужно, по окончании он просто выключится.`); confetti(); } };
   const buyBundle = async b => {
     if (need(b.price)) return;
     if (!(await confirmDlg({ title: 'Набор «' + b.name + '»', text: `Купить за ${num(b.price)} 🍃? По отдельности эти вещи стоят ${num(b.full)} 🍃.${b.fresh < b.items.length ? ' Часть уже есть у вас — за неё не берём.' : ''}`, ok: 'Купить' }))) return;
     if (await run(() => rpc('shop.buyBundle', { id: b.id }))) { toast('Набор куплен.'); confetti(); sfx('coin'); }
   };
   const claim = async t => { try { const r = await rpc('season.claim', { id: t.id }); setSeason(r.season); toast(`+${num(r.n)} 🍃 за задание`); sfx('coin'); } catch (e) { toast(e.message, 'err'); } };
-  const claimPass = async (lvl, prem) => { try { const r = await rpc('season.pass.claim', lvl ? { lvl, prem } : { all: true }); setSeason(r.season); const g = r.got, items = g.filter(x => x.item).map(x => x.name), plan = g.find(x => x.plan); toast([r.n ? `+${num(r.n)} 🍃` : '', items.length ? 'украшение: ' + items.join(', ') : '', plan ? `Pro на ${plan.days} дня` : ''].filter(Boolean).join(' · ') || 'Получено'); sfx('coin'); if (items.length || plan) confetti(); load(); } catch (e) { toast(e.message, 'err'); } };
+  const claimPass = async (lvl, prem) => { try { const r = await rpc('season.pass.claim', lvl ? { lvl, prem } : { all: true }); setSeason(r.season); const g = r.got, items = g.filter(x => x.item).map(x => x.name), plan = g.find(x => x.plan); toast([r.n ? `+${num(r.n)} 🍃` : '', items.length ? 'украшение: ' + items.join(', ') : '', plan ? `${TIER[plan.plan] || plan.plan} на ${plan.days} дня` : ''].filter(Boolean).join(' · ') || 'Получено'); sfx('coin'); if (items.length || plan) confetti(); load(); } catch (e) { toast(e.message, 'err'); } };
   const buyPass = async () => {
     const pz = season.pass; if (need(pz.price)) return;
     if (!(await confirmDlg({ title: 'Премиум-дорожка сезона', text: `Открыть за ${num(pz.price)} 🍃? Действует до конца этого месяца. Награды за уже пройденные уровни можно будет забрать сразу.`, ok: 'Открыть' }))) return;
     try { const r = await rpc('season.pass.buy'); setSeason(r.season); toast('Премиум-дорожка открыта.'); confetti(); load(); } catch (e) { toast(e.message, 'err'); }
   };
-  const rw = r => r.item ? `${r.emoji} ${r.name}` : r.plan ? `🔥 Pro на ${r.days} дня` : `+${r.stars} 🍃`;
+  const rw = r => r.item ? `${r.emoji} ${r.name}` : r.plan ? `🍃 ${TIER[r.plan] || r.plan} на ${r.days} дня` : `+${r.stars} 🍃`;
   const TABS = [['cosmetics', 'Украшения'], ['plans', 'Подписка'], ['bundles', 'Наборы'], ['leaves', 'Листики'], ['season', 'Сезон'], ['gifts', 'Подарки']];
   const byName = idx => (d.items.find(i => i.id === idx) || {}).name;
   return html`<${Modal} id=${id} title="Магазин" icon="store" wide cls="shop">
@@ -124,8 +124,8 @@ function ShopModal({ id, tab: tab0 }) {
         ${d.secret.open ? html`<div class="shop-grid secret">${d.items.filter(i => i.tier === 'secret').map(card)}</div><p class="hint">Вещи тайной витрины не входят ни в один тариф и не попадают под скидки. Их можно подарить.</p>`
           : html`<div class="shop-locked"><${Icon} n="lock" s=${22} /><div><b>Закрыто</b><small>Витрина открывается, когда на счету набирается ${num(d.secret.from)} 🍃, и после этого остаётся открытой навсегда — даже если листики потрачены.${(me.stars || 0) > 0 ? ` Вам осталось ${num(Math.max(0, d.secret.from - (me.stars || 0)))} 🍃.` : ''}</small></div></div>`}`}
       ${tab === 'plans' && html`
-        ${me.tier ? html`<p class="shop-note">Ваш тариф — ${TIER[me.tier]}${me.paidUntil ? `, оплачен до ${new Date(me.paidUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}` : ''}${me.trialUntil ? `${me.paidUntil ? '; ' : ', '}пробный Pro до ${new Date(me.trialUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}` : ''}.</p>` : d.trial.can && html`<div class="shop-trial"><div><b>Pro на ${d.trial.days} дня бесплатно</b><small>Один раз на аккаунт. Карта не нужна, потом ничего не спишется.</small></div><button class="btn" disabled=${busy} onClick=${trial}>Попробовать</button></div>`}
-        ${me.tier && d.trial.can && html`<div class="shop-trial"><div><b>Pro на ${d.trial.days} дня бесплатно</b><small>Один раз на аккаунт. Оплаченный срок не тратится.</small></div><button class="btn" disabled=${busy} onClick=${trial}>Попробовать</button></div>`}
+        ${me.tier ? html`<p class="shop-note">Ваш тариф — ${TIER[me.tier]}${me.paidUntil ? `, оплачен до ${new Date(me.paidUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}` : ''}${me.trialUntil ? `${me.paidUntil ? '; ' : ', '}пробный ${TIER[me.trialTier || 'plus']} до ${new Date(me.trialUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}` : ''}.</p>` : d.trial.can && html`<div class="shop-trial"><div><b>${TIER[d.trial.tier]} на ${d.trial.days} дня бесплатно</b><small>Один раз на аккаунт. Карта не нужна, потом ничего не спишется.</small></div><button class="btn" disabled=${busy} onClick=${trial}>Попробовать</button></div>`}
+        ${me.tier && d.trial.can && html`<div class="shop-trial"><div><b>${TIER[d.trial.tier]} на ${d.trial.days} дня бесплатно</b><small>Один раз на аккаунт. Оплаченный срок не тратится.</small></div><button class="btn" disabled=${busy} onClick=${trial}>Попробовать</button></div>`}
         <div class="shop-plans">${d.plans.map(p => html`<div class=${cx('shop-plan', 'p-' + p.id, me.tier === p.id && 'cur')} key=${p.id}>
           <h3><span>${p.emoji}</span> ${p.name}${me.tier === p.id && html`<i>ваш</i>`}</h3>
           <ul>${(allPerks[p.id] ? p.perks : p.perks.slice(0, 4)).map(x => html`<li><${Icon} n="check" s=${14} /> ${x}</li>`)}</ul>
@@ -151,7 +151,7 @@ function ShopModal({ id, tab: tab0 }) {
         <div class="pass-h"><div class="pass-l"><b>Уровень ${season.pass.level}</b><small>из ${season.pass.levels}</small></div>
           <div class="pass-x"><div class="st-bar"><i style=${`width:${season.pass.level >= season.pass.levels ? 100 : season.pass.xp % season.pass.per}%`}></i></div><small>${season.pass.level >= season.pass.levels ? 'пропуск пройден' : `${season.pass.xp % season.pass.per} из ${season.pass.per} опыта до следующего уровня`}</small></div>
           ${season.pass.ready > 0 && html`<button class="btn sm" onClick=${() => claimPass()}>Забрать всё</button>`}</div>
-        ${season.pass.premium ? html`<p class="shop-note">Премиум-дорожка открыта${season.pass.auto ? ' — входит в тариф Max' : ''}.</p>` : html`<div class="shop-trial"><div><b>Премиум-дорожка</b><small>Вторая награда на каждом уровне: листики, четыре сезонных украшения и 3 дня Pro. В тарифе Max открыта бесплатно.</small></div><button class="btn" onClick=${buyPass}>${num(season.pass.price)}<${Icon} n="leaf" s=${13} cls="tx-leaf" /></button></div>`}
+        ${season.pass.premium ? html`<p class="shop-note">Премиум-дорожка открыта${season.pass.auto ? ' — входит в тариф Max' : ''}.</p>` : html`<div class="shop-trial"><div><b>Премиум-дорожка</b><small>Вторая награда на каждом уровне: листики, четыре сезонных украшения и 3 дня Plus. В тарифе Max открыта бесплатно.</small></div><button class="btn" onClick=${buyPass}>${num(season.pass.price)}<${Icon} n="leaf" s=${13} cls="tx-leaf" /></button></div>`}
         <div class="pass-t" role="list">${season.pass.track.map(t => { const open = t.lvl <= season.pass.level; return html`<div role="listitem" class=${cx('pass-r', open && 'open', t.lvl % 10 === 0 && 'big')} key=${t.lvl}>
           <b class="pass-n">${t.lvl}</b>
           ${t.gotF ? html`<span class="pass-c got"><${Icon} n="check" s=${13} /> ${rw(t.free)}</span>` : html`<button class="pass-c" disabled=${!open} onClick=${() => claimPass(t.lvl, false)}>${rw(t.free)}</button>`}

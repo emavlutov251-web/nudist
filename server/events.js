@@ -49,10 +49,10 @@ Shop.ev.sale = 'Чёрная пятница';
 
 // ───── адвент-календарь: 1–25 декабря, одно окошко в день. Пропущенное без «Золотого билета» не открыть.
 const TICKET = 500;
-const ADVENT = { 1: 50, 2: 60, 3: 50, 4: 70, 5: 60, 6: 80, 7: { item: 'frame_snow', alt: 300 }, 8: 50, 9: 60, 10: 70, 11: 50, 12: 80, 13: 60, 14: { plan: 3, alt: 150 }, 15: 50, 16: 70, 17: 60, 18: 80, 19: 50, 20: 100, 21: 70, 22: 80, 23: 100, 24: 150, 25: { gift: 'tree', n: 200 } };
+const ADVENT = { 1: 50, 2: 60, 3: 50, 4: 70, 5: 60, 6: 80, 7: { item: 'frame_snow', alt: 300 }, 8: 50, 9: 60, 10: 70, 11: 50, 12: 80, 13: 60, 14: { plan: 'plus', days: 3, alt: 150 }, 15: 50, 16: 70, 17: 60, 18: 80, 19: 50, 20: 100, 21: 70, 22: 80, 23: 100, 24: 150, 25: { gift: 'tree', n: 200 } };
 const adv = u => { const y = year(); if (!u.advent || u.advent.y !== y) u.advent = { y, got: [] }; return u.advent; };
 const adventDay = () => { const w = win('advent'), t = T(); return t < w[0] ? 0 : t >= w[1] ? 26 : Math.floor((t - w[0]) / DAY) + 1; };
-const prizeText = (d, x2) => { const p = ADVENT[d]; if (typeof p === 'number') return `${p * (x2 ? 2 : 1)} 🍃`; if (p.item) return 'рамка «Снежинка» ❄️'; if (p.plan) return `Pro на ${p.plan} дня`; return `подарок 🎄 Ёлка и ${p.n * (x2 ? 2 : 1)} 🍃`; };
+const prizeText = (d, x2) => { const p = ADVENT[d]; if (typeof p === 'number') return `${p * (x2 ? 2 : 1)} 🍃`; if (p.item) return 'рамка «Снежинка» ❄️'; if (p.plan) return `Plus на ${p.days} дня`; return `подарок 🎄 Ёлка и ${p.n * (x2 ? 2 : 1)} 🍃`; };
 function adventView(u) {
   const a = adv(u), today = adventDay(), w = win('advent');
   return { from: w[0], to: w[1], today: today >= 1 && today <= 25 ? today : 0, over: today > 25, ticket: !!a.ticket, price: TICKET,
@@ -73,7 +73,7 @@ H['advent.open'] = (c, p) => {
   const pr = ADVENT[d], k = a.ticket ? 2 : 1, out = { day: d };
   if (typeof pr === 'number') { out.n = pr * k; }
   else if (pr.item) { if (Shop.owns(u, pr.item)) out.n = pr.alt; else { Shop.own(u, pr.item); out.item = Shop.CATALOG[pr.item].name; } }
-  else if (pr.plan) { if ((C.TIERS[C.tierOf(u)] || 0) >= C.TIERS.pro) out.n = pr.alt; else { u.trialUntil = Math.max(u.trialUntil || 0, Date.now()) + pr.plan * DAY; out.plan = pr.plan; } }
+  else if (pr.plan) { if ((C.TIERS[C.tierOf(u)] || 0) >= C.TIERS.plus) out.n = pr.alt; else { u.trialTier = 'plus'; u.trialUntil = Math.max(u.trialUntil || 0, Date.now()) + pr.days * DAY; out.plan = pr.plan; out.days = pr.days; } }
   else if (pr.gift) {
     out.n = pr.n * k; const g = Gifts.BY.get(pr.gift), bot = sys();
     if (g && bot && Gifts.ofUser(u.id).length < Gifts.KEEP) { const x = { id: newId(), g: g.id, from: bot.id, to: u.id, ts: Date.now(), text: 'Из адвент-календаря', free: true }; db.gifts[x.id] = x; out.gift = `${g.e} ${g.name}`; }
@@ -123,7 +123,7 @@ function drawSanta() {
 }
 
 // ───── «Снежный ком»: гонка приглашений в декабре. Снежинка — за друга, который пришёл по ссылке и написал несколько сообщений.
-const SNOW = { msgs: 5, perDay: 10, min: 3, leaf: 10, prizes: [[3, 'max', 'Max'], [10, 'pro', 'Pro'], [100, 'plus', 'Plus']] };
+const SNOW = { msgs: 5, perDay: 10, min: 3, leaf: 10, prizes: [[3, 'plus', 'Plus', 30], [10, 'plus', 'Plus', 14], [100, 'plus', 'Plus', 7]] };
 const snow = () => { const y = year(); if (!db.meta.snow || db.meta.snow.y !== y) db.meta.snow = { y, pts: {}, awarded: 0 }; return db.meta.snow; };
 const board = () => { const s = snow(); return Object.entries(s.pts).filter(([i, n]) => n > 0 && db.users[i] && !db.users[i].deleted).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)); };
 A.hooks.onInvite.push((inv, u) => { if (on('snow')) u.snowBy = { y: year(), by: inv.id, n: 0 }; });
@@ -142,7 +142,7 @@ R.hook.sent = (uid, chat) => {
 function snowView(u) {
   const s = snow(), w = win('snow'), b = board(), place = b.findIndex(([i]) => i === u.id);
   return { from: w[0], to: w[1], on: on('snow'), awarded: !!s.awarded, me: s.pts[u.id] || 0, place: place < 0 ? 0 : place + 1, min: SNOW.min, msgs: SNOW.msgs, leaf: SNOW.leaf,
-    prizes: SNOW.prizes.map(([to, , name], i) => ({ from: i ? SNOW.prizes[i - 1][0] + 1 : 1, to, name })),
+    prizes: SNOW.prizes.map(([to, , name, days], i) => ({ from: i ? SNOW.prizes[i - 1][0] + 1 : 1, to, name, days })),
     top: b.slice(0, 100).map(([i, n]) => ({ user: C.pubUser(db.users[i], u.id), n })) };
 }
 H['snow.get'] = c => snowView(db.users[c.uid]);
@@ -151,9 +151,10 @@ function awardSnow() {
   s.awarded = T(); const b = board();
   b.forEach(([i, n], k) => {
     const u = db.users[i], leaves = n * SNOW.leaf, pr = n >= SNOW.min ? SNOW.prizes.find(p => k < p[0]) : null; credit(u, leaves);
-    if (pr) Shop.grantPlan(u, pr[1], 30, { noBoosts: true }); if (pr && k < 10) u.snowWin = s.y;
+    const bonus = pr ? Shop.grantRewardPlan(u, pr[1], pr[3], { noBoosts: true }) : null; if (pr && k < 10) u.snowWin = s.y;
     Shop.touch(u);
-    tell(u, `❄️ **«Снежный ком» закончился.** Ваше место — ${k + 1}, снежинок — ${n}.\nСнежинки превратились в ${leaves} 🍃.${pr ? `\nПриз: «Нудист ${pr[2]}» на 30 дней${k < 10 ? ' и золотой значок рядом с именем' : ''}.` : `\nДля призового тарифа нужно было минимум ${SNOW.min} снежинки.`}`);
+    const prize = pr ? (bonus.stars ? `\nПриз: ещё ${bonus.stars} 🍃 вместо подписки — ваш тариф выше Plus${k < 10 ? ' и золотой значок рядом с именем' : ''}.` : `\nПриз: «Нудист ${pr[2]}» на ${pr[3]} дней${k < 10 ? ' и золотой значок рядом с именем' : ''}.`) : `\nДля призового тарифа нужно было минимум ${SNOW.min} снежинки.`;
+    tell(u, `❄️ **«Снежный ком» закончился.** Ваше место — ${k + 1}, снежинок — ${n}.\nСнежинки превратились в ${leaves} 🍃.${prize}`);
   });
   save(); console.log(`[events] Снежный ком: награждено ${b.length}`);
 }
@@ -196,9 +197,9 @@ const LIST = [
   { id: 'oct', e: '🎃', name: 'Хэллоуин', about: 'Коллекция «Монстры»: подарки Тыква, Призрак и Гроб, эффекты «Паутина» и «Летучие мыши», рамка «Вампир». Трое лучших в «Ночи тыкв» получают рамку бесплатно.', go: 'shop' },
   { id: 'bf', e: '🖤', name: 'Чёрная пятница на пляже', about: `Все обычные украшения в магазине — со скидкой ${BF_OFF} %. Только на этой неделе: рамка «Чёрный лист», эффект «Золотой песок», тема «Ночной пляж» и подарок «Чёрная жемчужина» тиражом 50 штук.`, go: 'shop' },
   { id: 'winter', e: '❄️', name: 'Зимняя коллекция', about: 'Подарки: Снежок, Глинтвейн, Шарф, Ёлка, Олень и «Дед Мороз в шортах» тиражом 50 штук. В магазине — рамки «Снежинка» и «Подарочная лента», тема «Новый год». После 14 января исчезнут с витрины; купленное остаётся.', go: 'shop' },
-  { id: 'advent', e: '🎁', name: 'Адвент-календарь', about: 'Каждый день с 1 по 25 декабря — одно окошко с листиками. 7-го — рамка «Снежинка», 14-го — Pro на три дня, 25-го — Ёлка в профиль. Пропустили день — окошко сгорает, если нет «Золотого билета».' },
+  { id: 'advent', e: '🎁', name: 'Адвент-календарь', about: 'Каждый день с 1 по 25 декабря — одно окошко с листиками. 7-го — рамка «Снежинка», 14-го — Plus на три дня, 25-го — Ёлка в профиль. Пропустили день — окошко сгорает, если нет «Золотого билета».' },
   { id: 'santa', e: '🎅', name: 'Тайный Санта', about: `Запись до 24 декабря. 25-го каждому достаётся случайный подопечный — подарите ему подарок на ${SANTA.min}–${SANTA.max} 🍃. Кто кому дарил, остаётся тайной.` },
-  { id: 'snow', e: '☃️', name: 'Снежный ком', about: `Зовите друзей весь декабрь. За каждого, кто пришёл по вашей ссылке и написал ${SNOW.msgs} сообщений, — снежинка ❄️. 1 января: места 1–3 — Max на месяц, 4–10 — Pro, 11–100 — Plus (нужно минимум ${SNOW.min} снежинки), десятке — золотой значок. Каждая снежинка ещё и превращается в ${SNOW.leaf} 🍃.` },
+  { id: 'snow', e: '☃️', name: 'Снежный ком', about: `Зовите друзей весь декабрь. За каждого, кто пришёл по вашей ссылке и написал ${SNOW.msgs} сообщений, — снежинка ❄️. 1 января: места 1–3 — Plus на 30 дней, 4–10 — Plus на 14 дней, 11–100 — Plus на 7 дней (нужно минимум ${SNOW.min} снежинки), десятке — золотой значок. Каждая снежинка ещё и превращается в ${SNOW.leaf} 🍃.` },
   { id: 'ny', e: '🎆', name: 'Голый Новый год', about: `С 20:00 31 декабря на 48 часов: эффект «Фейерверк», рамка «Корона 2027», подарок «Шампанское». Раз в час в общем чате падает мандарин 🍊 — первый поймавший получает ${TANG.n} 🍃. Каждый буст группы считается за два.`, go: 'shop' },
 ];
 function list() {
