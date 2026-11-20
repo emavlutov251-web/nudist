@@ -65,6 +65,7 @@ const FEED_KEEP = 50, FEED_IDLE = 12 * 3600e3, FEED_WAIT = 40000;      // лен
 function feedAdd(uid, p) {
   const f = feeds.get(uid); if (!f) return;
   const it = { id: nextId(), title: String(p.title || 'Нудист').slice(0, 80), body: String(p.body || '').slice(0, 200), tag: String(p.tag || ''), ts: now() };
+  if (p.click) it.click = String(p.click).slice(0, 20);
   f.q.push(it); if (f.q.length > FEED_KEEP) f.q.splice(0, f.q.length - FEED_KEEP);
   for (const w of [...f.waiters]) w.done([it]);
 }
@@ -87,7 +88,8 @@ function updateItem(u) {      // напоминание об обновлени�
   const apk = apkInfo(); if (!apk.code || !u.appVer || u.appVer >= apk.code) return null;
   const t = u.updTold; if (t && t.c === apk.code && now() - t.at < UPD_EVERY) return null;
   u.updTold = { c: apk.code, at: now() }; save();
-  return { id: nextId(), title: 'Вышло обновление «Нудиста» ' + apk.name, body: (apk.news[0] ? apk.news[0] + '. ' : '') + 'Откройте приложение — оно предложит обновиться.', tag: 'update', ts: now() };
+  // click: 'update' — страница по нажатию откроет окно обновления (иначе тег приняли бы за идентификатор чата)
+  return { id: nextId(), title: 'Вышло обновление «Нудиста» ' + apk.name, body: (apk.news[0] ? apk.news[0] + '. ' : '') + 'Нажмите, чтобы скачать и установить.', tag: 'update', click: 'update', ts: now() };
 }
 function poll(req, res, url, a, json) {
   if (!a) return json(res, 401, { error: 'Нужна авторизация' });
@@ -96,7 +98,7 @@ function poll(req, res, url, a, json) {
   const raw = url.searchParams.get('since'), since = Number(raw);
   if (raw === null || !Number.isFinite(since) || since <= 0) return json(res, 200, { last: nextId(), items: [] });      // первое обращение: старое не пересказываем
   if (fresh) { try { for (const it of missed(a.u, since, f.tz)) f.q.push(it); } catch (e) { console.warn('[notify]', e.message); } }
-  const upd = updateItem(a.u); if (upd) f.q.push(upd);
+  const upd = updateItem(a.u); if (upd) f.q.unshift(upd);      // первым: обновление важнее накопившихся сообщений
   const ready = f.q.filter(x => x.id > since); if (ready.length) return json(res, 200, { last: ready[ready.length - 1].id, items: ready });
   if (f.waiters.size >= 5) return json(res, 429, { error: 'Слишком много ожидающих запросов' });
   const w = { done(items) { if (w.over) return; w.over = true; clearTimeout(w.t); f.waiters.delete(w); f.at = now(); try { json(res, 200, { last: items.length ? items[items.length - 1].id : since, items }); } catch (e) { /* телефон уже отключился */ } } };

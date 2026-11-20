@@ -227,6 +227,25 @@ function Welcome() {
     <div class="row"><button class="btn ghost" onClick=${() => { const c = Object.values(S.chats).find(x => x.type === 'saved'); c ? openChat(c.id) : openUser(S.me.id); }}><${Icon} n="bookmark" s=${16} /> Избранное</button><button class="btn ghost" onClick=${() => { S.ui.boss = true; bump(); }}><${Icon} n="table" s=${16} /> Прикрыться</button></div></div>`;
 }
 function Toasts() { return html`<div class="toasts" aria-live="polite">${S.toasts.map(t => html`<div key=${t.id} class=${cx('toast', t.kind)}>${t.text}</div>`)}</div>${S.ui.update && !S.modals.length && html`<div class="upd-bar" role="status"><span>Вышла новая версия «Нудиста»</span><button class="btn sm" onClick=${S.ui.update}>Обновить</button></div>`}`; }
+// Постоянная плашка «есть новая версия» для старой сборки: окно можно случайно закрыть, а плашка висит,
+// пока человек не обновится. Нажатие открывает окно обновления — с кнопкой скачивания.
+function ApkBar() {
+  const [st, setSt] = useState(() => ({ show: false, name: '' }));
+  useEffect(() => {
+    let live = true;
+    const tick = async () => {
+      try {
+        if (!(window.NudistApp && window.NudistApp.version)) return;
+        const V = await import('./version.js'); const v = await V.versionInfo(); const mine = V.apkCode(), latest = Number(v && v.apk && v.apk.code) || 0;
+        if (live) setSt({ show: !!latest && mine > 0 && mine < latest && !local.get('upd.bar.done'), name: (v.apk && v.apk.name) || '' });
+      } catch (e) { /* тихо */ }
+    };
+    tick(); const t = setInterval(tick, 60e3);
+    return () => { live = false; clearInterval(t); };
+  }, []);
+  if (!st.show || S.ui.chat) return null;      // в хабе оставляем: человек и там должен видеть, что есть новая версия
+  return html`<div class="upd-bar" role="status"><span>Новая версия ${st.name} — обновитесь</span><button class="btn sm" onClick=${async () => { local.set('upd.bar.done', '1'); setSt(s => ({ ...s, show: false })); const G = await import('./growth.js'); G.showUpdateNow(0); }}>Обновить</button></div>`;
+}
 // В приложении для Android низ экрана занят нативной панелью разделов (её рисует оболочка).
 // Меню, окна и подсказки должны заканчиваться выше неё, иначе кнопки уезжают под панель.
 export const navH = () => (window.NudistApp && window.NudistApp.nav ? Number(document.documentElement.style.getPropertyValue('--nav-h')) || 56 : 0);
@@ -269,7 +288,7 @@ function App() {
     <${SnowFx} />
   </div>
   <${Dock} />
-  <${CallLayer} /><${Modals} />${S.viewer && html`<${MediaViewer} />`}${S.storyView && html`<${StoryViewer} />`}<${Menu} /><${Toasts} />${S.ui.boss && html`<${BossScreen} />`}`;
+  <${CallLayer} /><${Modals} />${S.viewer && html`<${MediaViewer} />`}${S.storyView && html`<${StoryViewer} />`}<${Menu} /><${Toasts} /><${ApkBar} />${S.ui.boss && html`<${BossScreen} />`}`;
 }
 
 // ═════ Глобальные клавиши и ссылки ═════
@@ -301,6 +320,14 @@ for (const ev of ['dragover', 'drop']) addEventListener(ev, e => { const t = e.t
 // Страница не должна уезжать: если что-то всё же прокрутило окно (фокус в поле, клавиатура), возвращаем на место.
 addEventListener('scroll', () => { if (scrollX || scrollY) scrollTo(0, 0); }, { passive: true });
 async function handleHash(first) {
+  // Нажали уведомление «Вышло обновление» — сразу показываем окно обновления, а не чат.
+  // Так человек, у которого стоит старая сборка, попадает ровно туда, где можно скачать новую.
+  if (/^#update(=\d+)?$/.test(location.hash)) {
+    const code = Number(location.hash.split('=')[1]) || 0;
+    history.replaceState(history.state, '', location.pathname);
+    import('./growth.js').then(g => g.showUpdateNow(code)).catch(() => {});
+    return;
+  }
   if (/^#hub(=\w+)?$/.test(location.hash)) { const t = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); openHub(['feed', 'video', 'user', 'events', 'music', 'clips', 'live', 'apps', 'help'].includes(t) ? t : 'music'); return; }
   if (location.hash === '#events') { history.replaceState(history.state, '', location.pathname); openHub('events'); return; }
   if (/^#shop(=\w+)?$/.test(location.hash)) { const tab = location.hash.split('=')[1]; history.replaceState(history.state, '', location.pathname); import('./shop.js').then(m => m.openShop(tab)); return; }

@@ -414,6 +414,23 @@ function prefetchApk(info) {
 }
 
 /** Спросить сервер, что выложено, и показать просьбу обновиться, если есть что. */
+/**
+ * Нажали уведомление «Вышло обновление» — показываем окно обновления немедленно,
+ * не глядя ни на «Позже», ни на то, что человек сейчас читает. Это прямой запрос человека.
+ */
+export async function showUpdateNow(code) {
+  try {
+    const v = await (await fetch('/api/version', { cache: 'no-store' })).json();
+    if (v && v.apk) { U.apk = v.apk; prefetchApk(v.apk); }
+  } catch (e) { /* офлайн — покажем то, что уже знаем */ }
+  const info = U.apk || { code: code || 0, name: '', news: [] };
+  local.set('upd.later', '0');                      // «Позже» больше не откладывает: человек сам позвал окно
+  U.apkLater = 0;
+  if (inApp() && Number(info.code) > appVer()) openModal(UpdateDlg, { info });
+  else if (S.ui && S.ui.update) openModal(SiteUpdateDlg);      // сборка свежая, но интерфейс — старый
+  else toast('У вас уже последняя версия — обновлять нечего');
+}
+
 export async function checkUpdate() {
   const t = Date.now(); if (t - U.at < 20e3) return ask(); U.at = t;
   let v; try { v = await (await fetch('/api/version', { cache: 'no-store' })).json(); } catch (e) { U.at = 0; return; }

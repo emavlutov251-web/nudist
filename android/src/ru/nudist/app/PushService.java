@@ -32,6 +32,7 @@ public class PushService extends Service {
     static final String PREFS = "nudist", K_TOKEN = "pushToken", K_SINCE = "pushSince";
     static final String CH_MSG = "messages", CH_BG = "background";
     static final String ACTION_OPEN = "ru.nudist.app.OPEN_CHAT", EXTRA_CHAT = "chat";
+    static final String ACTION_UPDATE = "ru.nudist.app.OPEN_UPDATE";      // нажали «Вышло обновление»
     private static final int ID_BG = 1;
     private static final int TYPE_REMOTE_MESSAGING = 1 << 9;      // ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING (API 34)
 
@@ -200,7 +201,7 @@ public class PushService extends Service {
             if (items != null && !quiet) {
                 for (int i = 0; i < items.length(); i++) {
                     JSONObject it = items.getJSONObject(i);
-                    show(it.optString("tag", ""), it.optString("title", "Нудист"), it.optString("body", ""));
+                    show(it.optString("tag", ""), it.optString("title", "Нудист"), it.optString("body", ""), it.optString("click", ""));
                 }
             }
             long last = o.optLong("last", since);
@@ -232,9 +233,16 @@ public class PushService extends Service {
         return b;
     }
 
-    private PendingIntent openIntent(String chat) {
+    private PendingIntent openIntent(String chat) { return openIntent(chat, false); }
+
+    private PendingIntent openIntent(String chat, boolean update) {
         Intent i = new Intent(this, MainActivity.class);
         i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        if (update) {
+            // Отдельное действие и свой адрес: нажатие на «Вышло обновление» открывает окно обновления, а не чат.
+            i.setAction(ACTION_UPDATE);
+            return PendingIntent.getActivity(this, 4321, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        }
         if (chat != null) {
             i.setAction(ACTION_OPEN);
             i.putExtra(EXTRA_CHAT, chat);
@@ -243,7 +251,9 @@ public class PushService extends Service {
         return PendingIntent.getActivity(this, 0, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
-    private void show(String tag, String title, String body) {
+    private void show(String tag, String title, String body) { show(tag, title, body, ""); }
+
+    private void show(String tag, String title, String body, String click) {
         if (tag.length() == 0) tag = "misc";
         List<String> lines;
         synchronized (shown) {
@@ -262,7 +272,7 @@ public class PushService extends Service {
                 .setAutoCancel(true)
                 .setCategory("call".equals(tag) ? Notification.CATEGORY_CALL : Notification.CATEGORY_MESSAGE)
                 .setVisibility(Notification.VISIBILITY_PRIVATE)
-                .setContentIntent(openIntent("call".equals(tag) || "misc".equals(tag) || "test".equals(tag) ? null : tag));
+                .setContentIntent(openIntent("update".equals(click) || "call".equals(tag) || "misc".equals(tag) || "test".equals(tag) ? null : tag, "update".equals(click)));
         if (Build.VERSION.SDK_INT < 26) b.setPriority(Notification.PRIORITY_HIGH).setDefaults(Notification.DEFAULT_ALL);
         if (lines.size() > 1) {
             Notification.InboxStyle st = new Notification.InboxStyle().setBigContentTitle(title);

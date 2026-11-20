@@ -83,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 38;      // 3.8: обновление без хлопот — сборка качается сама, ставится одним нажатием
+    private static final int APP_VERSION = 39;      // 3.9: уведомление об обновлении открывает окно обновления; плашка на главной
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -137,8 +137,8 @@ public class MainActivity extends Activity {
             server = builtIn;
             prefs.edit().putString("server", server).apply();
         }
-        if (old != null) migrate(old, server, chatFrom(getIntent()));
-        else if (server != null) open(server, chatFrom(getIntent()));
+        if (old != null) migrate(old, server, chatFrom(getIntent()), updateFrom(getIntent()));
+        else if (server != null) open(server, chatFrom(getIntent()), updateFrom(getIntent()));
         if (server == null || ACTION_CHANGE_SERVER.equals(getIntent().getAction())) showSetup(null);
         clearShareDir();      // остатки с прошлого раза
         if (state == null) takeShare(getIntent());
@@ -166,6 +166,10 @@ public class MainActivity extends Activity {
         if (ACTION_CHANGE_SERVER.equals(intent.getAction())) showSetup(null);
         takeShare(intent);
         final String chat = chatFrom(intent);
+        if (updateFrom(intent) && web != null) {
+            try { web.evaluateJavascript("(function(){try{location.hash='#update';}catch(e){}})()", null); } catch (Throwable e) { /* ещё не загрузилась */ }
+            return;
+        }
         if (chat != null && web != null) {
             // Нажали на уведомление, приложение уже открыто: просим мессенджер перейти в нужный чат.
             try {
@@ -329,6 +333,11 @@ public class MainActivity extends Activity {
         f.delete();
     }
 
+    /** Нажали уведомление «Вышло обновление» — открываем приложение сразу на окне обновления. */
+    private static boolean updateFrom(Intent intent) {
+        return intent != null && PushService.ACTION_UPDATE.equals(intent.getAction());
+    }
+
     /** Чат из нажатого уведомления. Идентификатор проверяем: он попадает в адрес страницы. */
     private static String chatFrom(Intent intent) {
         if (intent == null || !PushService.ACTION_OPEN.equals(intent.getAction())) return null;
@@ -379,7 +388,7 @@ public class MainActivity extends Activity {
                     if (!moving) return;
                     moving = false;
                     if (json != null && json.length() > 2 && json.length() < 400000) prefs.edit().putString("move", json).apply();
-                    open(moveServer, moveChat);
+                    open(moveServer, moveChat, false);
                 }
             });
         }
@@ -1590,7 +1599,7 @@ public class MainActivity extends Activity {
 
     /** Открывает сервер и, пока страница грузится, показывает заставку: спящий сервер отвечает до минуты. */
     private void open(String server) {
-        open(server, null);
+        open(server, null, false);
     }
 
     /** Был ли этот адрес прежним адресом сервера (список вшит при сборке). */
@@ -1608,7 +1617,7 @@ public class MainActivity extends Activity {
      * и кладём туда прочитанное (applyMove). Не получилось прочитать — переносим хотя бы ключ сеанса, который приложение
      * и так хранит для уведомлений.
      */
-    private void migrate(String old, final String server, final String chat) {
+    private void migrate(String old, final String server, final String chat, final boolean update) {
         moving = true;
         moveServer = server;
         moveChat = chat;
@@ -1624,7 +1633,7 @@ public class MainActivity extends Activity {
             public void run() {
                 if (!moving) return;      // страница уже ответила
                 moving = false;
-                open(server, chat);
+                open(server, chat, update);
             }
         }, 4000);
     }
@@ -1646,7 +1655,7 @@ public class MainActivity extends Activity {
         } catch (Throwable e) { /* не вышло — человек просто войдёт заново */ }
     }
 
-    private void open(String server, String chat) {
+    private void open(String server, final String chat, final boolean update) {
         LinearLayout box = newPanel("loading");
         // Знак «Нудиста» крупно и по центру: при запуске сразу видно, что открылось именно приложение,
         // а не пустое тёмное окно. На Android 12+ это уже рисует система (см. styles.xml), ниже — мы сами.
@@ -1675,7 +1684,7 @@ public class MainActivity extends Activity {
         tip.setGravity(Gravity.CENTER_HORIZONTAL);
         tip.setPadding(0, dp(14), 0, 0);
         box.addView(tip);
-        web.loadUrl(server + "/" + (chat == null ? "" : "#c=" + chat));
+        web.loadUrl(server + "/" + (update ? "#update" : chat == null ? "" : "#c=" + chat));
     }
 
     private void showSetup(String problem) {

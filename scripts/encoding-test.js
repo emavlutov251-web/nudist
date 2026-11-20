@@ -63,6 +63,14 @@ const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРО�
     const growth = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'growth.js'), 'utf8');
     ck('окно обновления умеет качать в фоне', /updateFetch/.test(growth) && /updateInstall/.test(growth), '');
     ck('сборка качается заранее, до открытия окна', /prefetchApk/.test(growth), '');
+    // ── путь обновления для старой сборки: видимая плашка, окно и переход из уведомления
+    const appjs = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'app.js'), 'utf8');
+    ck('на главной есть плашка «новая версия»', /function ApkBar/.test(appjs), '');
+    ck('плашка ведёт в окно обновления', /showUpdateNow/.test(appjs), '');
+    ck('переход из уведомления #update обрабатывается', /#update/.test(appjs) && /showUpdateNow/.test(fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'growth.js'), 'utf8')), '');
+    const pushjs = fs.readFileSync(path.join(__dirname, '..', 'server', 'push.js'), 'utf8');
+    ck('уведомление об обновлении несёт click=update', /click: 'update'/.test(pushjs), '');
+    ck('напоминание об обновлении идёт первым', /f\.q\.unshift\(upd\)/.test(pushjs), '');
     if (process.env.VERBOSE) console.log('');
     console.log(`${total - bad}/${total} ✓`);
     if (bad) process.exitCode = 1;
