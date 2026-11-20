@@ -1,5 +1,8 @@
-# Проверка, что приложение для Android собирается из исходников. Запускается, когда меняется папка android/.
-# Подпись здесь временная: боевую сборку подписывает владелец своим ключом (android/nudist.keystore в репозиторий не входит).
+# Сборка приложения для Android из исходников. Запускается, когда меняется папка android/.
+# Подпись постоянная: ключ лежит в секретах репозитория (NUDIST_KEYSTORE_B64, NUDIST_KEYSTORE_PASS) и
+# восстанавливается в файл перед сборкой. Без этого нельзя: RuStore принимает обновление только с той же
+# подписью, а одноразовый ключ (как было до 1.9) ломает обновления поверх установленного приложения.
+# Полученный файл и отпечаток сертификата остаются в артефакте сборки.
 name: Сборка Android
 
 on:
@@ -27,8 +30,28 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platforms;android-34 build-tools;34.0.0'
-      - name: Собрать и проверить подпись
+      - name: Восстановить ключ подписи
+        env:
+          KEY_B64: ${{ secrets.NUDIST_KEYSTORE_B64 }}
         run: |
           cd android
-          rm -f nudist.keystore
-          ANDROID_SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}" NUDIST_KEYSTORE_PASS=temporary-ci-key SERVER_URL=https://example.org MIGRATE_FROM=https://old.example.org bash ./build.sh
+          [ -n "$KEY_B64" ] || { echo "::error::В секретах нет NUDIST_KEYSTORE_B64 — сборка была бы подписана чужим ключом"; exit 1; }
+          echo "$KEY_B64" | base64 -d > nudist.keystore
+          chmod 600 nudist.keystore
+      - name: Собрать и проверить подпись
+        env:
+          NUDIST_KEYSTORE_PASS: ${{ secrets.NUDIST_KEYSTORE_PASS }}
+        run: |
+          cd android
+          ANDROID_SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}" SERVER_URL=https://95-174-95-148.sslip.io MIGRATE_FROM=https://nudist.onrender.com bash ./build.sh
+          echo "=== отпечаток сертификата (должен всегда совпадать) ==="
+          "$ANDROID_SDK"/build-tools/34.0.0/apksigner verify --print-certs nudist-android.apk | grep SHA-256 | head -1
+          echo "=== файл для выкладки ==="
+          cp nudist-android.apk ../public/nudist.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nudist-apk
+          path: |
+            android/nudist-android.apk
+            public/nudist.apk
+          if-no-files-found: error
