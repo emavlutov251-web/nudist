@@ -71,3 +71,24 @@ html.native-nav .menu-bg { bottom: var(--nav-pad); }
 html.native-nav .story-ed, html.native-nav .viewer { padding-bottom: var(--nav-pad); }
 /* Во время звонка и просмотра историй панель тоже не должна закрывать кнопки */
 html.native-nav .rtc, html.native-nav .call { padding-bottom: var(--nav-pad); }
+
+/* ── Настройки → Версия: какая сборка стоит, что выложено и что нового.
+   Нужно, чтобы человек сам видел свою версию и мог проверить обновления. */
+.ver-hero { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-l); background: var(--panel); }
+.ver-hero > div { flex: 1; min-width: 0; }
+.ver-hero b { display: block; font-size: 1.12em; }
+.ver-hero small { color: var(--ink2); }
+.ver-leaf { flex: none; width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; color: #fff; background: linear-gradient(150deg, #2BB36A, #12784A); box-shadow: 0 6px 16px rgba(43, 179, 106, .28); }
+.ver-tag { flex: none; font-size: .82em; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+.ver-tag.ok { color: #1E7A4E; background: color-mix(in srgb, #2BB36A 18%, transparent); }
+.ver-tag.warn { color: #8A5A00; background: color-mix(in srgb, #FFB52E 26%, transparent); }
+.ver-tag.test { color: var(--ink2); background: var(--hover, rgba(127, 127, 127, .14)); }
+.ver-row { cursor: default; }
+.ver-row small { word-break: break-word; }
+.ver .note.warn { margin: 4px 0 0; flex-wrap: wrap; align-items: flex-start; }   /* .note — это flex-строка: текст и кнопка идут друг под другом */
+.ver .note.warn p { flex: 1 1 100%; min-width: 0; }
+.ver .note.warn .btn { flex: none; }
+.ver-more p { margin: 4px 0 0; }
+.ver-news { margin: 4px 0 0; padding-left: 20px; color: var(--ink2); line-height: 1.5; }
+.ver-actions { margin-top: 4px; }
+.ver .hint.err { color: var(--danger, #E5484D); }

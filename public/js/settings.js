@@ -6,8 +6,9 @@ import { QR, StarsModal, StatusDlg, FolderEditor, showProfile } from './panels.j
 import { backHooks } from './back.js';
 import { openShop, hasItem, SHOP_THEMES, EVENT_THEMES } from './shop.js';
 import { i18n } from './i18n.js';
+import { Version } from './version.js';
 
-const TABS = [['profile', 'user', 'Профиль'], ['account', 'key-round', 'Аккаунт'], ['privacy', 'lock', 'Приватность'], ['biz', 'store', 'Бизнес'], ['devices', 'monitor-smartphone', 'Устройства'], ['notif', 'bell', 'Уведомления'], ['look', 'palette', 'Оформление'], ['chats', 'message-circle', 'Чаты и медиа'], ['folders', 'folder', 'Папки'], ['calls', 'phone', 'Звонки'], ['data', 'database', 'Данные'], ['adv', 'flask-conical', 'Продвинутые'], ['admins', 'shield', 'Администраторы']];
+const TABS = [['profile', 'user', 'Профиль'], ['account', 'key-round', 'Аккаунт'], ['privacy', 'lock', 'Приватность'], ['biz', 'store', 'Бизнес'], ['devices', 'monitor-smartphone', 'Устройства'], ['notif', 'bell', 'Уведомления'], ['look', 'palette', 'Оформление'], ['chats', 'message-circle', 'Чаты и медиа'], ['folders', 'folder', 'Папки'], ['calls', 'phone', 'Звонки'], ['data', 'database', 'Данные'], ['adv', 'flask-conical', 'Продвинутые'], ['version', 'leaf', 'Версия'], ['admins', 'shield', 'Администраторы']];
 export function openSettings(tab) { openModal(Settings, { tab }); }
 function Settings({ id, tab: t0 }) {
   const [tab, setTab] = useState(t0 || (window.innerWidth < 720 ? '' : 'profile')), me = S.me, cur = TABS.find(t => t[0] === tab);
@@ -16,7 +17,7 @@ function Settings({ id, tab: t0 }) {
     h.depth = inTab; backHooks.set(id, h); bump();
     return () => backHooks.delete(id);
   }, [tab]);
-  const Body = { profile: Profile, account: Account, privacy: Privacy, devices: Devices, notif: Notif, look: Look, chats: Chats, folders: Folders, calls: Calls, data: Data, adv: Adv, admins: Admins, biz: Biz }[tab];
+  const Body = { profile: Profile, account: Account, privacy: Privacy, devices: Devices, notif: Notif, look: Look, chats: Chats, folders: Folders, calls: Calls, data: Data, adv: Adv, admins: Admins, biz: Biz, version: Version }[tab];
   return html`<${Modal} id=${id} title=${cur ? cur[2] : 'Настройки'} icon="settings" wide cls=${cx('settings', tab && 'in-tab')}>
     <div class="set"><nav class="set-nav" aria-label="Разделы настроек">
       <button class="set-me" onClick=${() => setTab('profile')}><${Avatar} u=${me} src=${me.avatar} name=${userName(me)} color=${me.color} s=${44} /><span><b>${userName(me)} <${Badges} list=${me.badges} s=${13} /></b><small>${me.username ? '@' + me.username : me.phone || ''}</small></span></button>
@@ -379,6 +380,8 @@ function Adv() {
     <${Set} k="beta" label="Бета-функции" hint="Включает экспериментальное. Сейчас там пусто, но галочка греет душу." />
     <label class="fld"><span>Заголовок экрана «Прикрыться»</span><input maxlength="60" value=${S.settings.bossTitle} onInput=${e => setSetting({ bossTitle: e.target.value })} /><small class="dim">Двойной Esc прячет мессенджер за скучной таблицей. Заголовок вкладки тоже меняется.</small></label>
     <h5>Горячие клавиши</h5><div class="keys">${KEYS.map(([k, l]) => html`<div><kbd>${k}</kbd><span>${l}</span></div>`)}</div>
+    <h5>Эта сборка</h5>
+    <div class="list"><button class="li" onClick=${() => openModal(Settings, { tab: 'version' })}><${Icon} n="leaf" /><span><b>Версия и обновления</b><small>Какая сборка стоит, что выложено и что нового</small></span><${Icon} n="chevron-right" s=${16} /></button></div>
     <h5>Разработчикам</h5>
     <p class="hint">Бота создаёт @botbatya: команда <code class="mono">/newbot</code> выдаст токен. Дальше — HTTP Bot API, совместимое по духу с Telegram:</p>
     <pre class="code mono">${`curl ${location.origin}/bot<ТОКЕН>/getMe\ncurl ${location.origin}/bot<ТОКЕН>/getUpdates?timeout=25\ncurl -H 'Content-Type: application/json' \\\n  -d '{"chat_id":"<ID>","text":"Привет, голые люди!"}' \\\n  ${location.origin}/bot<ТОКЕН>/sendMessage`}</pre>

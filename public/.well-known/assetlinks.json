@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ru.nudist.app",
+      "sha256_cert_fingerprints": [
+        "67:66:F7:D3:0D:A3:64:CA:CA:2D:8E:34:F3:AE:13:34:7B:5A:B5:E9:E7:36:EA:15:CC:8D:E3:DA:4B:77:00:B5"
+      ]
+    }
+  }
+]

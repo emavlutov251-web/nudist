@@ -30,6 +30,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Ссылки — открываются в приложении, если сайт подтвердил владение через /.well-known/assetlinks.json -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="nudist.app" android:pathPrefix="/" />
+            </intent-filter>
             <!-- «Поделиться» аудио из любой программы: файл попадает в «Мою музыку» -->
             <intent-filter android:label="@string/share_music">
                 <action android:name="android.intent.action.SEND" />

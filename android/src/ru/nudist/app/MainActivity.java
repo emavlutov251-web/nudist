@@ -74,7 +74,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 20;      // 2.0: нижняя панель нарисована в самом приложении (требование RuStore) приложение само переезжает на новый адрес сервера (старый, nudist.onrender.com, отключён)
+    private static final int APP_VERSION = 30;      // 3.0: экран версии и обновлений, заставка при запуске, отклик панели, ссылки nudist.app открываются в приложении
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -528,7 +528,7 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setSupportMultipleWindows(false);
-        s.setUserAgentString(s.getUserAgentString() + " NudistAndroid/1.5");
+        s.setUserAgentString(s.getUserAgentString() + " NudistAndroid/" + APP_VERSION);
         web.setFocusable(true);          // без этого страница не получает высоту окна и рисует окна до самого низа
 
         CookieManager.getInstance().setAcceptCookie(true);
@@ -884,6 +884,7 @@ public class MainActivity extends Activity {
             item.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
+                    v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);      // короткий отклик: панель ощущается своей
                     navTap(key);
                     setNavSection(key);
                 }
@@ -1126,8 +1127,33 @@ public class MainActivity extends Activity {
 
     private void open(String server, String chat) {
         LinearLayout box = newPanel("loading");
-        box.addView(text("🍃 Нудист", 34, C_INK, true));
-        box.addView(text("Открываю…\nЕсли сервер спал, первое открытие занимает до минуты.", 16, C_DIM, false));
+        // Знак «Нудиста» крупно и по центру: при запуске сразу видно, что открылось именно приложение,
+        // а не пустое тёмное окно. На Android 12+ это уже рисует система (см. styles.xml), ниже — мы сами.
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.splash_logo);
+        LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(dp(96), dp(96));
+        llp.gravity = Gravity.CENTER_HORIZONTAL;
+        llp.bottomMargin = dp(18);
+        box.addView(logo, llp);
+        TextView name = text("Нудист", 30, C_INK, true);
+        name.setGravity(Gravity.CENTER_HORIZONTAL);
+        box.addView(name);
+        TextView sub = text("Открываю…\nЕсли сервер спал, первое открытие занимает до минуты.", 15, C_DIM, false);
+        sub.setGravity(Gravity.CENTER_HORIZONTAL);
+        box.addView(sub);
+        java.util.Random rnd = new java.util.Random();
+        String[] tips = {
+            "Нам нечего скрывать.",
+            "Двойной Esc — и на экране скучный отчёт.",
+            "Секретные чаты: без следов на сервере.",
+            "Листики растут за хорошие дела.",
+            "Звонки — групповые тоже.",
+            "Истории живут сутки."
+        };
+        TextView tip = text(tips[rnd.nextInt(tips.length)], 13, C_LEAF, false);
+        tip.setGravity(Gravity.CENTER_HORIZONTAL);
+        tip.setPadding(0, dp(14), 0, 0);
+        box.addView(tip);
         web.loadUrl(server + "/" + (chat == null ? "" : "#c=" + chat));
     }
 
