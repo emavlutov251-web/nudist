@@ -4,6 +4,7 @@ import { hubFirstHint } from './hints.js';
 import { openChat, showChannel, sendPayload } from './store.js';
 import { playAudio, AudioBar } from './media.js';
 import { GameButtons, RotateHint } from './gamefull.js';
+import { Raves, RaveRoom, RV, loadRaves } from './rave.js';
 import { Cover, tagCover, spendEnergy, EnergyPill } from './perks.js';
 import { openLobby } from './lobby.js';
 import { openMiniApp } from './panels.js';
@@ -14,7 +15,7 @@ import { Events } from './events.js';
 const TABS = [['events', 'party-popper', 'События'], ['music', 'music', 'Музыка'], ['apps', 'gamepad-2', 'Игры'], ['help', 'life-buoy', 'Поддержка']];
 // «Лента» — отдельная вкладка внизу. В ней три раздела: общая лента (люди и каналы), «Видео» (клипы, ролики каналов и эфиры) и свои записи.
 const FEED_TABS = [['feed', 'list', 'Лента'], ['video', 'film', 'Видео'], ['user', 'user', 'Мои']];
-const VID = { mode: 'clips' };      // что открыто в «Видео»: клипы или эфиры
+const VID = { mode: 'clips' };      // что открыто в «Видео»: клипы, эфиры или рейв
 const isStaff = () => ['moderator', 'admin', 'superadmin'].includes((S.me || {}).admin);
 const err = e => toast(e.message || String(e), 'err');
 let MB = 45;      // предел размера файла, сервер уточняет
@@ -287,15 +288,18 @@ function Clips({ on }) {
 function Video() {
   const pager = useRef(), [mode, setM] = useState(VID.mode);
   const set = m => { if (VID.mode !== m) { VID.mode = m; setM(m); } };
-  const go = m => { set(m); const el = pager.current; if (el) el.scrollTo({ left: m === 'live' ? el.clientWidth : 0, behavior: 'smooth' }); };
-  useEffect(() => { loadLives(); const t = setInterval(() => { if (!LV.cur) loadLives(); }, 20000); return () => clearInterval(t); }, []);
-  useEffect(() => { const el = pager.current; if (el && VID.mode === 'live') el.scrollLeft = el.clientWidth; }, [!!LV.cur]);
-  const onScroll = () => { const el = pager.current; if (el && el.clientWidth) set(el.scrollLeft > el.clientWidth / 2 ? 'live' : 'clips'); };
+  const idx = m => m === 'clips' ? 0 : m === 'rave' ? 1 : 2;      // порядок страниц: клипы, рейв, эфиры
+  const go = m => { set(m); const el = pager.current; if (el) el.scrollTo({ left: idx(m) * el.clientWidth, behavior: 'smooth' }); };
+  useEffect(() => { loadLives(); loadRaves(); const t = setInterval(() => { if (!LV.cur) loadLives(); }, 20000); return () => clearInterval(t); }, []);
+  useEffect(() => { const el = pager.current; if (el && VID.mode !== 'clips') el.scrollLeft = idx(VID.mode) * el.clientWidth; }, [!!LV.cur]);
+  const onScroll = () => { const el = pager.current; if (el && el.clientWidth) { const i = Math.round(el.scrollLeft / el.clientWidth); set(i === 0 ? 'clips' : i === 1 ? 'rave' : 'live'); } };
   if (LV.cur) return html`<${LiveRoom} />`;
+  if (RV.cur) return html`<div class="vid vid-rave"><${RaveRoom} /></div>`;
   return html`<div class="vid">
-    <div class="vid-sw" role="tablist" aria-label="Клипы или эфиры"><button role="tab" aria-selected=${mode === 'clips'} class=${cx(mode === 'clips' && 'on')} onClick=${() => go('clips')}>Клипы</button><button role="tab" aria-selected=${mode === 'live'} class=${cx(mode === 'live' && 'on')} onClick=${() => go('live')}>Эфиры${LIVE.n > 0 && html`<b>${LIVE.n}</b>`}</button></div>
+    <div class="vid-sw" role="tablist" aria-label="Клипы, рейв или эфиры"><button role="tab" aria-selected=${mode === 'clips'} class=${cx(mode === 'clips' && 'on')} onClick=${() => go('clips')}>Клипы</button><button role="tab" aria-selected=${mode === 'rave'} class=${cx(mode === 'rave' && 'on')} onClick=${() => go('rave')}>Рейв</button><button role="tab" aria-selected=${mode === 'live'} class=${cx(mode === 'live' && 'on')} onClick=${() => go('live')}>Эфиры${LIVE.n > 0 && html`<b>${LIVE.n}</b>`}</button></div>
     <div class="vpager" ref=${pager} onScroll=${onScroll}>
       <div class="vpane"><${Clips} on=${mode === 'clips'} /></div>
+      <div class="vpane"><${Raves} /></div>
       <div class="vpane"><${Lives} /></div>
     </div>
   </div>`;

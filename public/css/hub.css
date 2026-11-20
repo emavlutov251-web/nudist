@@ -292,3 +292,46 @@ article.post footer { font-size: inherit; color: inherit; }
 .chip { padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 13px; color: var(--ink); }
 .chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .lbl { display: block; margin: 12px 0 4px; font-size: 13px; font-weight: 600; } .lbl small { font-weight: 400; opacity: .65; margin-left: 6px; }
+
+/* ───── Рейв: вместе смотреть и слушать */
+.rv-lobby { padding: 12px; overflow: auto; height: 100%; }
+.rv-hero { border-radius: 16px; padding: 16px; background: linear-gradient(140deg, rgba(43,179,106,.14), rgba(123,184,255,.14)); border: 1px solid var(--line); margin-bottom: 14px; }
+.rv-hero > b { font-size: 18px; } .rv-hero p { margin: 6px 0 12px; font-size: 13px; line-height: 1.45; opacity: .8; }
+.rv-hero-b { display: flex; flex-wrap: wrap; gap: 8px; } .rv-hero-b .btn { display: inline-flex; align-items: center; gap: 6px; }
+.rv-rooms { display: grid; gap: 8px; } .rv-room { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); text-align: left; }
+.rv-rb { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; background: var(--hover); flex: none; }
+.rv-rt { flex: 1; min-width: 0; display: flex; flex-direction: column; } .rv-rt b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .rv-rt small { font-size: 12px; opacity: .7; }
+.rv-rn { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; opacity: .7; }
+/* комната */
+.rv { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--bg); z-index: 3; }
+.rv-h { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.rv-t { flex: 1; min-width: 0; display: flex; flex-direction: column; } .rv-t b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .rv-t small { font-size: 12px; opacity: .65; }
+.rv-people { display: flex; gap: 4px; padding: 6px 10px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.rv-stage { position: relative; background: #000; flex: none; }
+.rv-stage video { width: 100%; max-height: 46vh; display: block; object-fit: contain; background: #000; }
+.rv-ctl { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: linear-gradient(transparent, rgba(0,0,0,.6)); }
+.rv-ctl button { color: #fff; background: none; border: 0; display: grid; place-items: center; }
+.rv-ctl input[type=range] { flex: 1; accent-color: #fff; }
+.rv-empty { padding: 26px 16px; flex: none; }
+.rv-music { display: flex; align-items: center; gap: 12px; padding: 18px 16px; background: linear-gradient(120deg, rgba(43,179,106,.2), rgba(199,166,255,.2)); }
+.rv-music > div { flex: 1; display: flex; flex-direction: column; } .rv-music small { opacity: .7; font-size: 12px; }
+.rv-tabs { display: flex; border-bottom: 1px solid var(--line); } .rv-tabs button { flex: 1; padding: 10px; background: none; border: 0; font-size: 14px; color: var(--ink2); border-bottom: 2px solid transparent; }
+.rv-tabs button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; } .rv-tabs b { margin-left: 5px; font-size: 11px; background: var(--accent); color: #fff; border-radius: 999px; padding: 1px 6px; }
+.rv-queue { flex: 1; overflow: auto; padding: 10px; } .rv-queue .hint { margin: 0 0 8px; }
+.rv-list { display: grid; gap: 6px; }
+.rv-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); text-align: left; }
+.rv-item.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.rv-thumb { width: 54px; height: 40px; border-radius: 8px; overflow: hidden; display: grid; place-items: center; background: var(--hover); flex: none; } .rv-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.rv-it { flex: 1; min-width: 0; display: flex; flex-direction: column; } .rv-it b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .rv-it small { font-size: 12px; opacity: .65; }
+/* чат комнаты */
+.rv-chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.rv-msgs { flex: 1; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.rv-m { max-width: 88%; align-self: flex-start; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px; font-size: 14px; }
+.rv-m.my { align-self: flex-end; background: rgba(43,179,106,.14); border-color: rgba(43,179,106,.3); }
+.rv-m b { display: block; font-size: 11px; opacity: .6; font-weight: 600; margin-bottom: 2px; } .rv-m span { white-space: pre-wrap; word-break: break-word; }
+.rv-send { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); } .rv-send input { flex: 1; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+@media (max-width: 520px) { .rv-stage video { max-height: 38vh; } }
+.rv-card { margin: 6px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(120deg, rgba(43,179,106,.1), rgba(123,184,255,.1)); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.rv-card b { font-size: 14px; } .rv-card small { font-size: 12px; opacity: .7; } .rv-card .btn { margin-top: 2px; }
+.vid-rave { position: relative; }
+.vid-rave .rv { position: absolute; }

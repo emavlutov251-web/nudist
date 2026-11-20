@@ -29,6 +29,7 @@ import { CapCard, NearBar, NearCard } from './calm.js';
 import { Photo, Gif, VideoMsg, RoundMsg, VoiceMsg, AudioMsg, FileMsg, LocMsg } from './media.js';
 import { showProfile, chatActions, openMiniApp, JoinPreview, shareLeaves, E2eeInfo } from './panels.js';
 import { LobbyCard } from './lobby.js';
+import { RaveCard } from './rave.js';
 import { Composer, EmojiPicker, ForwardModal } from './composer.js';
 import { GiftCard } from './gifts.js';
 import { memberOf } from './guildui.js';
@@ -298,6 +299,7 @@ function Msg({ m, prev, chat, list, flat, thread, onJump, root }) {
       ${m.duel && html`<${DuelCard} m=${m} />`}
       ${m.lobby && html`<${LobbyCard} m=${m} chat=${chat} />`}
       ${m.cap && html`<${CapCard} m=${m} chat=${chat} />`}
+      ${m.rave && html`<${RaveCard} m=${m} />`}
       ${m.ask && m.from !== S.me.id && html`<div class="bub-ask">${m.answer && html`<p>${m.answer.text}</p>`}<button class="btn sm ghost" onClick=${ev => { ev.stopPropagation(); answerAsk({ id: m.id, text: String(m.text || '').replace(/^🍃 \*\*Анонимный вопрос\*\*\n\n/, ''), answer: m.answer && m.answer.text }); }}><${Icon} n=${m.answer ? 'pencil' : 'reply'} s=${14} /> ${m.answer ? 'Изменить ответ' : 'Ответить в историях'}</button></div>`}
       ${m.tips > 0 && html`<div class="tipchip" title=${`Чаевые автору: ${m.tipc || 1} раз`}><${Icon} n="coins" s=${13} /> ${m.tips} <${Icon} n="leaf" s=${12} /></div>`}
       ${canThread && html`<button class="thr" onClick=${e => { e.stopPropagation(); openChat(chat.id, { thread: m.id, keepServer: true }); }}><${Icon} n="message-square-text" s=${15} /> ${m.tcount ? `${m.tcount} ${chat.type === 'channel' ? plural(m.tcount, ['комментарий', 'комментария', 'комментариев']) : plural(m.tcount, ['ответ', 'ответа', 'ответов'])}` : 'Прокомментировать'}<${Icon} n="chevron-right" s=${15} /></button>`}
