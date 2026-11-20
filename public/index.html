@@ -6,7 +6,7 @@
 <title>Нудист — мессенджер, которому нечего скрывать</title>
 <meta name="description" content="Нудист: чаты, группы, каналы, серверы и звонки. С мемами, фиговыми листками и кнопкой «Прикрыться».">
 <meta name="theme-color" content="#14251C">
-<meta name="nudist-web" content="3.7">
+<meta name="nudist-web" content="3.8">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Нудист">
@@ -59,5 +59,32 @@
 <body>
 <div id="app"><div class="splash"><p>Снимаем лишнее…</p></div></div>
 <noscript><p style="padding:24px;font-family:sans-serif">Нудисту нужен JavaScript. Без него он совсем голый — и не работает.</p></noscript>
+<script>
+// ───── страховка от «показали текст вместо страницы»
+// Бывает, что WebView (или прокси) отдаёт наш же index.html как обычный текст: тогда человек видит
+// разметку и стили файлом. Скрипт видит, что страница не собралась, и перерисовывает её сам.
+// Ничего не грузим заново — берём текст этой же страницы и разбираем его как HTML.
+(function () {
+  if (document.getElementById('app')) return;                       // страница собралась — всё хорошо
+  var t = document.body ? (document.body.textContent || '') : '';
+  if (t.indexOf('<html') < 0 && t.indexOf('<!doctype') < 0) return;  // обычная пустая страница — не наш случай
+  try {
+    var doc = new DOMParser().parseFromString(t, 'text/html');
+    if (!doc || !doc.querySelector('#app')) return;
+    document.head.innerHTML = doc.head.innerHTML;                    // стили и шрифты
+    document.body.innerHTML = doc.body.innerHTML;                    // разметка приложения и сценарии
+    var scripts = document.querySelectorAll('script[src]'), done = 0;
+    if (!scripts.length) return;
+    for (var i = 0; i < scripts.length; i++) {                       // вставленные через innerHTML модули сами не запускаются
+      var old = scripts[i], ns = document.createElement('script');
+      for (var a = 0; a < old.attributes.length; a++) ns.setAttribute(old.attributes[a].name, old.attributes[a].value);
+      ns.async = false;
+      ns.onload = ns.onerror = function () { if (++done >= scripts.length) ready(); };
+      old.parentNode.replaceChild(ns, old);
+    }
+    function ready() { try { window.dispatchEvent(new Event('DOMContentLoaded')); window.dispatchEvent(new Event('load')); } catch (e) {} }
+  } catch (e) { /* пусть видно как есть — приложение всё равно перезапустится */ }
+})();
+</script>
 </body>
 </html>

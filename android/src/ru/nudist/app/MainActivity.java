@@ -83,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 36;      // 3.6: скачанный интерфейс применяется целиком; синхронное прослушивание
+    private static final int APP_VERSION = 37;      // 3.7: если WebView показал файл вместо страницы — приложение перерисовывает её само
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -97,6 +97,8 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private PermissionRequest pendingRequest;
     private boolean mainFrameFailed;
+    private String lastMainUrl;          // адрес главного документа (для проверки, что показали страницу, а не текст)
+    private int mainChecks;               // сколько раз уже перезагружали: защита от бесконечного цикла
     /** Переезд на новый адрес: пока true, ждём от страницы прежнего адреса её хранилище (см. migrate). */
     private boolean moving;
     private String moveServer, moveChat;
@@ -787,6 +789,46 @@ public class MainActivity extends Activity {
         } finally { try { if (in != null) in.close(); } catch (Throwable ignored) { } }
     }
 
+    /**
+     * Проверка главной страницы после загрузки.
+     * Бывает, что WebView получает наш index.html с типом «обычный текст» (так приходит кешированный документ
+     * после перезагрузки, а VPN-прокси умеет испортить заголовок). Тогда человек видит вместо приложения
+     * разметку файлом: теги и стили простынёй. Скрипты в такой странице не выполняются,
+     * поэтому спасает только приложение: замечаем по содержимому и один раз перерисовываем из памяти.
+     */
+    private void checkMainFrame(final String url) {
+        if (web == null) return;
+        web.evaluateJavascript("(function(){try{"
+                + "var b=document.body;if(!b)return 'x';"
+                + "var t=(b.textContent||'');while(t.length&&t.charCodeAt(0)<33)t=t.slice(1);t=t.slice(0,40);"
+                + "if(t.indexOf('<!doctype')===0||t.indexOf('<html')===0)return 'text';"      // нам показали файл, а не страницу
+                + "if(document.getElementById('app')||document.getElementById('start'))return 'ok';"
+                + "return t.length>0?'ok':'empty';"      // пустая главная — это экран загрузки или ошибки, не трогаем
+                + "}catch(e){return \"ok\"}})()", new android.webkit.ValueCallback<String>() {
+            @Override public void onReceiveValue(String v) {
+                if (v == null || !v.contains("text")) return;
+                if (mainChecks >= 2) return;
+                mainChecks++;
+                String server = prefs.getString("server", null);
+                if (server == null) return;
+                Uri u = Uri.parse(server + "/");
+                WebResourceResponse r = embeddedResponse(u, server);      // берём свежую встроенную страницу
+                if (r == null) { mainChecks = 0; return; }
+                String html;
+                try {
+                    java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                    byte[] buf = new byte[8192]; int n;
+                    java.io.InputStream in = r.getData();
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                    in.close();
+                    html = new String(out.toByteArray(), StandardCharsets.UTF_8);
+                } catch (Throwable e) { mainChecks = 0; return; }
+                try { html = new String(personalizeIndex(html.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8); } catch (Throwable e) { /* как есть */ }
+                web.loadDataWithBaseURL(server + "/", html, "text/html", "utf-8", url);
+            }
+        });
+    }
+
     /** Что кешируем в памяти: код и шрифты (их много и они мелкие), картинки читаем по мере надобности. */
     private static boolean cachedStatic(String p) {
         return p.endsWith(".js") || p.endsWith(".css") || p.endsWith(".woff2") || p.endsWith(".svg") || p.endsWith(".json") || p.endsWith(".webmanifest");
@@ -915,6 +957,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 mainFrameFailed = false;
+                lastMainUrl = url;
             }
 
             @Override
@@ -942,6 +985,7 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 if (!mainFrameFailed) applyMove(url);
                 if (!mainFrameFailed && panel != null && ("error".equals(panel.getTag()) || "loading".equals(panel.getTag()))) hidePanel();
+                if (!mainFrameFailed) checkMainFrame(url);
             }
         });
 
