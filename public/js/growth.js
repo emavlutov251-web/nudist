@@ -280,10 +280,7 @@ function AppPush({ id, app }) {
       ${enabled && !st.allowed && html`<div class="note warn"><span>Телефон запрещает «Нудисту» показывать уведомления.</span><button class="btn sm" onClick=${() => app.askNotify()}>Разрешить</button></div>`}
       ${enabled && !st.battery && html`<div class="note"><span>Телефон экономит батарею и может усыплять приложение: уведомления будут опаздывать. Снимите ограничение.</span><button class="btn sm" onClick=${() => app.askBattery()}>Снять</button></div>`}
       ${enabled && html`<p class="hint">Пока уведомления включены, в шторке висит тихая строка «Нудист на связи»: так Android разрешает приложению ждать сообщения. Её можно скрыть: долгое нажатие на неё → выключить «Связь с сервером». На Xiaomi, Huawei, Honor и Samsung дополнительно включите приложению «Автозапуск» в настройках телефона.</p>
-        ${inApp() && appVer() > 0 && appVer() < 44 && html`<div class="note warn"><b>Одно действие один раз — и обновление пойдёт гладко</b>
-        <p>В вашей сборке есть ошибка: при обновлении телефон мог открыть ранее скачанный файл и поставить старую версию. Поставьте ${info.name} один раз со страницы в браузере — дальше обновления будут ставиться сами.</p>
-        <button class="btn" onClick=${() => { try { if (window.NudistApp.updateInBrowser) { window.NudistApp.updateInBrowser(); return; } } catch (e) { /* старая сборка */ } location.href = '/start?download=1'; }}><${Icon} n="download" s=${16} /> Открыть страницу в браузере</button>
-        <p class="hint">Или вручную: откройте ${location.host}/start в Chrome и нажмите «Скачать APK». Файл nudist.apk в «Загрузках» телефона лучше удалить — именно он и ставился вместо новой версии.</p></div>`}
+  
       <div class="ask-btns"><button class="btn" disabled=${busy || !st.allowed} onClick=${test}><${Icon} n="bell-ring" s=${16} /> Проверить</button></div>`}
     </div>
   <//>`;
@@ -369,6 +366,10 @@ function UpdateDlg({ id, info }) {
         ${auto.state === 'stale' && html`<p class="hint"><b>В телефоне лежал старый файл обновления</b> — мы его выбросили и качаем ${info.name} заново.</p>`}
         ${auto.state === 'ready' && html`<p class="hint">Если после «Установить» телефон пишет, что установка запрещена, — разрешите «Нудисту» установку приложений в настройках телефона и нажмите снова.</p>`}
       </div>` : ''}
+      ${inApp() && appVer() > 0 && appVer() < 44 && html`<div class="note warn"><b>Одно действие один раз — и обновление пойдёт гладко</b>
+        <p>В вашей сборке есть ошибка: при обновлении телефон мог открыть ранее скачанный файл и поставить старую версию. Поставьте ${info.name} один раз со страницы в браузере — дальше обновления будут ставиться сами.</p>
+        <button class="btn" onClick=${() => { try { if (window.NudistApp.updateInBrowser) { window.NudistApp.updateInBrowser(); return; } } catch (e) { /* старая сборка */ } location.href = '/start?download=1'; }}><${Icon} n="download" s=${16} /> Открыть страницу в браузере</button>
+        <p class="hint">Или вручную: откройте ${location.host}/start в Chrome и нажмите «Скачать APK». Файл nudist.apk в «Загрузках» телефона лучше удалить — именно он и ставился вместо новой версии.</p></div>`}
       <div class="ask-btns">
         ${inApp() && auto && auto.state === 'ready'
           ? html`<button class="btn" onClick=${() => window.NudistApp.updateInstall()}><${Icon} n="download" s=${16} /> Установить</button>`
