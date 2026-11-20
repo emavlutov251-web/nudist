@@ -318,6 +318,9 @@ const server = http.createServer(async (req, res) => {
           const ses = sessionOf(req);
           if (!ses || !ses.u) return json(res, 401, { error: 'Нужна авторизация' });
           try {
+            // Только методы чтения и правил «про себя». Удаление аккаунта и чатов по обычному запросу — нет:
+            // такая кнопка не должна срабатывать без явного действия в интерфейсе (мессенджер-«линк» мог бы её дёрнуть).
+            if (!/^me\.(set|tg|bind|ghost|incog|near|quiet|notif|settings|list|sync)/.test(m)) return json(res, 403, { error: 'Это действие доступно только из приложения (по защищённому соединению)' });
             const r = await R.H[m]({ uid: ses.u.id, id: 'http:' + ses.u.id + ':' + Date.now(), send: () => {}, raw: () => {} }, body || {});
             return json(res, 200, r || {});
           } catch (e) {
