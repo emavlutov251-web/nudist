@@ -166,7 +166,10 @@ function serveIndex(req, res) {
   }
   const h = { 'content-type': MIME.html, etag: c.etag, 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff', 'content-security-policy': CSP, 'referrer-policy': 'no-referrer', vary: 'accept-encoding' };
   if (req.headers['if-none-match'] === c.etag) { res.writeHead(304, h); return res.end(); }
-  const gz = /\bgzip\b/.test(req.headers['accept-encoding'] || ''), body = gz ? c.gz : c.raw; if (gz) h['content-encoding'] = 'gzip'; h['content-length'] = body.length;
+  // Встроенному браузеру приложения — всегда без сжатия: старые WebView (и VPN-прокси) теряют заголовок
+  // Content-Encoding, и человек видит вместо страницы ромбики с вопросами. Это была причина жалоб друзей.
+  const app = /NudistAndroid/i.test(String(req.headers['user-agent'] || ''));
+  const gz = !app && /\bgzip\b/.test(req.headers['accept-encoding'] || ''), body = gz ? c.gz : c.raw; if (gz) h['content-encoding'] = 'gzip'; else delete h.vary; h['content-length'] = body.length;
   res.writeHead(200, h); res.end(req.method === 'HEAD' ? undefined : body);
 }
 // ───── офлайн-кеш оболочки (service worker)
