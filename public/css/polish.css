@@ -56,12 +56,18 @@ body { overscroll-behavior-x: none; }
 html.native-nav .nav { display: none !important; }
 html.native-nav .side { padding-bottom: 0 !important; }
 
-/* ── Приложение для Android: низ экрана занят нативной панелью (её рисует оболочка).
-   Высоту сообщает js/appnative.js в --nav-h. Все плавающие слои заканчиваются выше неё. */
-html.native-nav { --nav-h: 56px; }
-html.native-nav .overlay { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)); }
-html.native-nav .toasts { bottom: calc(var(--nav-h) + 12px); }
-html.native-nav .hintbar { top: calc(10px + env(safe-area-inset-top, 0px)); }
-html.native-nav .upd-bar { bottom: calc(var(--nav-h) + 12px); }
-html.native-nav .menu-bg { bottom: var(--nav-h); }
-html.native-nav .story-ed, html.native-nav .viewer { padding-bottom: var(--nav-h); }
+/* ── Приложение для Android: низ экрана (или низ страницы) занят нативной панелью разделов.
+   Высоту считает js/appnative.js и кладёт в --nav-h. Все плавающие слои заканчиваются выше неё.
+   --nav-h: 0 — в браузере; в старых сборках 1.9 панель занимала больше, там высоту не угадать,
+   поэтому окна дополнительно ужимаются по видимой части экрана (см. .overlay ниже). */
+html.native-nav { --nav-h: 0px; --nav-pad: 0px; }
+/* Окна заканчиваются выше панели: отступ снизу и потолок высоты считаются от --nav-pad,
+   который js/appnative.js берёт из высоты панели (в старых сборках — с запасом). */
+html.native-nav .overlay { padding-bottom: var(--nav-pad); }
+html.native-nav .modal { max-height: calc(100dvh - var(--nav-pad) - 20px); }
+html.native-nav .toasts { bottom: calc(var(--nav-pad) + 8px); }
+html.native-nav .upd-bar { bottom: calc(var(--nav-pad) + 8px); }
+html.native-nav .menu-bg { bottom: var(--nav-pad); }
+html.native-nav .story-ed, html.native-nav .viewer { padding-bottom: var(--nav-pad); }
+/* Во время звонка и просмотра историй панель тоже не должна закрывать кнопки */
+html.native-nav .rtc, html.native-nav .call { padding-bottom: var(--nav-pad); }

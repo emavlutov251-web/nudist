@@ -263,6 +263,11 @@ public class MainActivity extends Activity {
          */
         /** Что происходит в мессенджере: {section, unread, authed}. Приложение показывает нижнюю панель и значок непрочитанного. */
         @JavascriptInterface
+        public int navHeight() {
+            return NAV_H;
+        }
+
+        @JavascriptInterface
         public void nav(final String json) {
             if (json == null || json.length() > 500) return;
             navState(json);
@@ -524,6 +529,8 @@ public class MainActivity extends Activity {
         s.setAllowContentAccess(false);
         s.setSupportMultipleWindows(false);
         s.setUserAgentString(s.getUserAgentString() + " NudistAndroid/1.5");
+        web.setFocusable(true);          // без этого страница не получает высоту окна и рисует окна до самого низа
+
         CookieManager.getInstance().setAcceptCookie(true);
         web.addJavascriptInterface(new Bridge(), "NudistApp");
 
@@ -608,6 +615,19 @@ public class MainActivity extends Activity {
 
         root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         buildNavBar();      // панель поверх страницы: она остаётся на месте, даже когда сервер недоступен
+        // Страница узнаёт высоту панели (navigator.nudistNavH) и не рисует окна и меню под неё.
+        // Свойство снимается вместе с веб-представлением, поэтому закрываем им внимание: панель одна на всё приложение.
+        web.addJavascriptInterface(new NavHeight(), "nudistNavH");
+        web.setFocusableInTouchMode(true);
+        web.requestFocus();
+    }
+
+    /** Высота нижней панели в пикселях — странице, чтобы окна и меню заканчивались выше неё. */
+    private class NavHeight {
+        @JavascriptInterface
+        public int px() {
+            return NAV_H;
+        }
     }
 
     private static boolean sameOrigin(Uri a, Uri b) {

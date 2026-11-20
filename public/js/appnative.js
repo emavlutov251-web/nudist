@@ -25,6 +25,21 @@ const SETTINGS_MODAL = m => {
   return /Settings/.test(n);
 };
 
+// Сколько места панель занимает поверх страницы, в пикселях CSS (--nav-pad).
+// Два случая:
+//  · приложение 2.0+ укорачивает само веб-представление (navigator.nudistNavH есть) — страница
+//    и так заканчивается над панелью, отступ не нужен, иначе он удвоится;
+//  · приложение 1.9 панель рисует поверх страницы и высоту не сообщает — берём с запасом,
+//    чтобы кнопки в окнах не уезжали под панель (было жалобой: не нажать «Скачать»).
+function applyNavHeight() {
+  const root = document.documentElement;
+  const appResized = typeof navigator !== 'undefined' && navigator.nudistNavH !== undefined;
+  let pad = 0;
+  if (!appResized) pad = nativeNav() ? 112 : 0;   // 1.9: 56dp панель + системная полоса, с запасом
+  root.style.setProperty('--nav-h', pad + 'px');
+  root.style.setProperty('--nav-pad', pad + 'px');
+}
+
 /** Текущий раздел для панели: chats | feed | hub | shop | profile */
 function section() {
   if (!S.me) return 'auth';
@@ -70,6 +85,9 @@ window.nudistNavTap = navTap;
 if (app()) {
   // Панель рисует приложение: убираем отступ под веб-панель, иначе внизу останется пустая полоса.
   try { document.documentElement.classList.add('native-nav'); } catch (e) { /* не страшно */ }
+  applyNavHeight();
+  window.addEventListener('resize', applyNavHeight);
+  window.addEventListener('orientationchange', () => setTimeout(applyNavHeight, 300));
   local.set('hint.welcome-1', true);      // «внизу — Чаты, Лента, Хаб…»: панель теперь своя, подсказка не нужна
   on('init', () => setTimeout(push, 300));
   setInterval(push, 1500);
