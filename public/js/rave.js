@@ -121,8 +121,14 @@ function RavePlayer({ room }) {
   if (cur && cur.music) return html`<div class="rv-music">
     <${Icon} n="music" s=${34} />
     <div class="rv-mt"><b>${cur.music.title}</b><small>${host ? 'Этот трек слышат все в комнате — одновременно' : 'Играет у всех в комнате одновременно'}${now.paused ? ' · на паузе' : ''}</small></div>
-    ${host ? html`<button class="btn sm" onClick=${() => rpc('rave.pause', { id: room.id, paused: !now.paused, at: rvTime(now) }).catch(e => toast(e.message, 'err'))}>${now.paused ? 'Продолжить' : 'Пауза'}</button>`
+    ${host ? html`<div class="rv-mbtns">
+        <button class="btn sm" onClick=${() => rpc('rave.pause', { id: room.id, paused: !now.paused, at: rvTime(now) }).catch(e => toast(e.message, 'err'))}>${now.paused ? 'Продолжить' : 'Пауза'}</button>
+        <button class="ib sm" title="С начала — тоже у всех" aria-label="С начала" onClick=${() => rpc('rave.pause', { id: room.id, paused: now.paused, at: 0 }).catch(e => toast(e.message, 'err'))}><${Icon} n="rotate-ccw" s=${16} /></button>
+      </div>`
       : html`<button class="btn sm" onClick=${resumeMusic}>${RS.blocked || (RS.audio && RS.audio.paused && !now.paused) ? 'Слушать' : (now.paused ? 'Пауза' : 'Слушаем')}</button>`}
+    ${host && html`<input class="rv-mseek" type="range" min="0" max=${Math.max(1, Math.round(cur.music.dur || 600))} step="1" value=${Math.round(rvTime(now))}
+      onChange=${e => { const at = Math.max(0, Number(e.target.value)); rpc('rave.pause', { id: room.id, paused: now.paused, at }).catch(err => toast(err.message, 'err')); }}
+      title="Перемотка — у всех сразу" />`}
   </div>`;
   if (cur && cur.clip) {
     const c = cur.clip;

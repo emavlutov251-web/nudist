@@ -388,3 +388,6 @@ html.native-nav .call { padding-bottom: calc(18px + var(--nav-pad)); }
 .dt-bubble::before { content: ''; position: absolute; top: -6px; right: 64px; width: 11px; height: 11px; background: var(--panel);
   border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
 .dt-bubble b { display: block; margin-bottom: 2px; }
+
+.rv-mbtns { display: flex; align-items: center; gap: 6px; }
+.rv-mseek { width: 100%; margin: 10px 0 0; accent-color: var(--accent); }
