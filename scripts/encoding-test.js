@@ -120,7 +120,10 @@ const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРО�
     const rs = fs.readFileSync(path.join(__dirname, '..', 'server', 'rave.js'), 'utf8');
     ck('версию скачанной сборки читаем из самого файла', /getPackageArchiveInfo/.test(mj) && /apkCodeOf/.test(mj), '');
     ck('старый файл не считается готовым к установке', /code <= APP_VERSION\) \{ f\.delete\(\); return false; \}/.test(mj), '');
-    ck('скачан не тот файл — не ставим', /apkCodeOf\(tmp\) != latestCode/.test(mj), '');
+    ck('скачан не тот файл — не ставим и говорим «устарел»', /tmpCode != latestCode/.test(mj) && /stale/.test(mj), '');
+    ck('версию читаем и у ещё не переименованного файла (.part)', /probe-/.test(mj), '');
+    ck('в старых сборках есть честный обход через браузер', /appVer\(\) < 44/.test(fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'growth.js'), 'utf8')), '');
+    ck('есть честный путь «скачать в браузере»', /updateInBrowser/.test(mj) && /openSiteUpdate/.test(mj), '');
     ck('комната без людей живёт ещё несколько минут', /GRACE/.test(rs) && /r\.exp = now\(\) \+ GRACE/.test(rs), '');
     ck('после переподключения человек сам возвращается в комнату', /async function rejoin/.test(rj) && /on\('init', \(\) => \{ const id = roomToRestore\(\)/.test(rj), '');
     ck('комната запоминается на устройстве, а «Выйти» её забывает', /local\.set\(LAST, id\)/.test(rj) && /local\.set\(LAST, null\)/.test(rj), '');

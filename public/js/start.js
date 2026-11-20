@@ -68,6 +68,9 @@
 
   if (os === 'ios') { if ($('apk')) $('apk').hidden = true; if ($('apkText')) $('apkText').hidden = true; if ($('ios')) $('ios').hidden = false; }
   if (os === 'desktop') { var l = $('apkLabel'); if (l) l.textContent = 'Скачать APK на этот компьютер'; }
+  // Пришли из приложения по кнопке «Скачать в браузере»: сразу показываем шаги и не заставляем искать кнопку.
+  var wantDownload = /[?&]download=1/.test(location.search);
+  if (wantDownload && $('steps')) { $('steps').hidden = false; }
 
   if ($('apk')) $('apk').addEventListener('click', function () { track('apk'); if ($('steps')) $('steps').hidden = false; });
   if ($('web')) $('web').addEventListener('click', function () { track('open'); });

@@ -280,7 +280,11 @@ function AppPush({ id, app }) {
       ${enabled && !st.allowed && html`<div class="note warn"><span>Телефон запрещает «Нудисту» показывать уведомления.</span><button class="btn sm" onClick=${() => app.askNotify()}>Разрешить</button></div>`}
       ${enabled && !st.battery && html`<div class="note"><span>Телефон экономит батарею и может усыплять приложение: уведомления будут опаздывать. Снимите ограничение.</span><button class="btn sm" onClick=${() => app.askBattery()}>Снять</button></div>`}
       ${enabled && html`<p class="hint">Пока уведомления включены, в шторке висит тихая строка «Нудист на связи»: так Android разрешает приложению ждать сообщения. Её можно скрыть: долгое нажатие на неё → выключить «Связь с сервером». На Xiaomi, Huawei, Honor и Samsung дополнительно включите приложению «Автозапуск» в настройках телефона.</p>
-        <div class="ask-btns"><button class="btn" disabled=${busy || !st.allowed} onClick=${test}><${Icon} n="bell-ring" s=${16} /> Проверить</button></div>`}
+        ${inApp() && appVer() > 0 && appVer() < 44 && html`<div class="note warn"><b>Одно действие один раз — и обновление пойдёт гладко</b>
+        <p>В вашей сборке есть ошибка: при обновлении телефон мог открыть ранее скачанный файл и поставить старую версию. Поставьте ${info.name} один раз со страницы в браузере — дальше обновления будут ставиться сами.</p>
+        <button class="btn" onClick=${() => { try { if (window.NudistApp.updateInBrowser) { window.NudistApp.updateInBrowser(); return; } } catch (e) { /* старая сборка */ } location.href = '/start?download=1'; }}><${Icon} n="download" s=${16} /> Открыть страницу в браузере</button>
+        <p class="hint">Или вручную: откройте ${location.host}/start в Chrome и нажмите «Скачать APK». Файл nudist.apk в «Загрузках» телефона лучше удалить — именно он и ставился вместо новой версии.</p></div>`}
+      <div class="ask-btns"><button class="btn" disabled=${busy || !st.allowed} onClick=${test}><${Icon} n="bell-ring" s=${16} /> Проверить</button></div>`}
     </div>
   <//>`;
 }
@@ -362,6 +366,7 @@ function UpdateDlg({ id, info }) {
         ${auto.state === 'downloading' && html`<p class="upd-prog"><span><i style=${`width:${auto.percent}%`}></i></span><b>${auto.percent}%</b></p><p class="hint">Скачиваем новую версию в фоне. Можно закрыть окно — загрузка продолжится.</p>`}
         ${auto.state === 'ready' && html`<p class="hint">Новая версия уже в телефоне. Нажмите «Установить» — телефон попросит разрешение, это его защита.</p>`}
         ${auto.state === 'fail' && html`<p class="hint">Не получилось скачать в фоне (связь оборвалась). Можно скачать кнопкой ниже.</p>`}
+        ${auto.state === 'stale' && html`<p class="hint"><b>В телефоне лежал старый файл обновления</b> — мы его выбросили и качаем ${info.name} заново.</p>`}
         ${auto.state === 'ready' && html`<p class="hint">Если после «Установить» телефон пишет, что установка запрещена, — разрешите «Нудисту» установку приложений в настройках телефона и нажмите снова.</p>`}
       </div>` : ''}
       <div class="ask-btns">
@@ -370,6 +375,7 @@ function UpdateDlg({ id, info }) {
           : inApp() && auto && auto.state === 'downloading'
             ? html`<button class="btn" disabled><${Icon} n="download" s=${16} /> Скачиваем… ${auto.percent}%</button>`
             : html`<a class="btn" href="/nudist.apk" download="nudist.apk" onClick=${e => downloadTap(e)}><${Icon} n="download" s=${16} /> ${step ? 'Скачать ещё раз' : 'Скачать и установить'}</a>`}
+        ${inApp() && html`<button class="btn ghost" onClick=${() => { try { window.NudistApp.updateInBrowser ? window.NudistApp.updateInBrowser() : (location.href = '/start?download=1'); } catch (e) { location.href = '/start?download=1'; } }}>Скачать в браузере</button>`}
         <button class="btn ghost" onClick=${() => { local.set('upd.later', String(Date.now())); closeModal(id); }}>Позже</button></div>
       <p class="hint">Пока стоит старая версия, окно будет появляться при каждом заходе. Не скачивается — откройте ${location.host}/start в браузере телефона.</p>
     </div>
@@ -384,6 +390,10 @@ function UpdateDlg({ id, info }) {
 async function downloadTap(e) {
   if (!inApp() || !window.NudistApp || !window.NudistApp.updateFetch) return;      // браузер — обычное скачивание
   e.preventDefault();
+  // В приложении 4.4+ есть готовая связка «скачать и, если не выйдет, открыть браузер».
+  try {
+    if (window.NudistApp.updateOrBrowser) { window.NudistApp.updateOrBrowser(); return; }
+  } catch (x) { /* старые сборки — идём старым путём ниже */ }
   try { window.NudistApp.updateFetch(); } catch (x) { location.href = '/nudist.apk'; return; }
   const t0 = Date.now();
   while (Date.now() - t0 < 90e3) {
@@ -395,7 +405,9 @@ async function downloadTap(e) {
     }
     if (st === 'fail') break;
   }
-  toast('Не получилось скачать сборку. Проверьте связь и попробуйте ещё раз', 'err');
+  // Не вышло — не оставляем человека ни с чем: открываем страницу скачивания в браузере телефона.
+  toast('Не получилось поставить внутри приложения — открываем страницу скачивания в браузере', 'err');
+  setTimeout(() => { location.href = '/start?download=1'; }, 700);
 }
 
 function SiteUpdateDlg({ id }) {

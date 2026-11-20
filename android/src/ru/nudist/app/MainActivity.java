@@ -396,6 +396,18 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() { @Override public void run() { installUpdate(); } });
         }
 
+        /** Скачать обновление, а если не выйдет — открыть страницу скачивания в браузере (там старых файлов нет). */
+        @JavascriptInterface
+        public void updateOrBrowser() {
+            runOnUiThread(new Runnable() { @Override public void run() { updateOrElse(); } });
+        }
+
+        /** Открыть страницу /start в браузере телефона: последний надёжный путь, когда установка капризничает. */
+        @JavascriptInterface
+        public void updateInBrowser() {
+            runOnUiThread(new Runnable() { @Override public void run() { openSiteUpdate(); } });
+        }
+
         /** Страница собралась: заставка больше не нужна. Зовётся из интерфейса при каждом запуске. */
         @JavascriptInterface
         public void pageReady() {
@@ -987,8 +999,20 @@ public class MainActivity extends Activity {
     /** Какая сборка на самом деле лежит в файле. Раньше доверяли отметке «что предложил сервер» — и ставили старый файл. */
     private int apkCodeOf(File f) {
         try {
-            android.content.pm.PackageInfo pi = getPackageManager().getPackageArchiveInfo(f.getAbsolutePath(), 0);
-            return pi == null ? 0 : pi.versionCode;
+            File probe = f;
+            // getPackageArchiveInfo смотрит на расширение: файл «update.apk.part» он не разберёт.
+            // Для проверки даём ему временную копию с .apk, потом убираем — иначе «скачан не тот файл».
+            if (!f.getName().endsWith(".apk")) {
+                probe = new File(getCacheDir(), "probe-" + System.nanoTime() + ".apk");
+                java.io.FileInputStream in = new java.io.FileInputStream(f);
+                java.io.FileOutputStream out = new java.io.FileOutputStream(probe);
+                try { byte[] b = new byte[16384]; int n; while ((n = in.read(b)) > 0) out.write(b, 0, n); }
+                finally { try { in.close(); } catch (Throwable ignored) { } try { out.close(); } catch (Throwable ignored) { } }
+            }
+            android.content.pm.PackageInfo pi = getPackageManager().getPackageArchiveInfo(probe.getAbsolutePath(), 0);
+            int code = pi == null ? 0 : pi.versionCode;
+            if (probe != f) probe.delete();
+            return code;
         } catch (Throwable e) { return 0; }
     }
 
@@ -1052,7 +1076,12 @@ public class MainActivity extends Activity {
                         while ((n = in.read(buf)) > 0) { out.write(buf, 0, n); got += n; if (total > 0) updatePercent = (int) (got * 100 / total); }
                     } finally { try { out.close(); } catch (Throwable ignored) { } try { in.close(); } catch (Throwable ignored) { } c.disconnect(); }
                     if (total > 0 && got < total) { tmp.delete(); updateState = "fail"; return; }      // обрыв — попробуем позже
-                    if (apkCodeOf(tmp) != latestCode) { tmp.delete(); updateState = "fail"; return; }      // пришёл не тот файл — не ставим
+                    int tmpCode = apkCodeOf(tmp);
+                    if (tmpCode != latestCode) {      // пришёл не тот файл: старый кеш прокси или ошибка сервера — не ставим
+                        tmp.delete();
+                        updateState = (tmpCode > 0 && tmpCode <= APP_VERSION) ? "stale" : "fail";
+                        return;
+                    }
                     File dst = updateFile();
                     dst.delete();
                     if (!tmp.renameTo(dst)) { tmp.delete(); updateState = "fail"; return; }
@@ -1078,6 +1107,8 @@ public class MainActivity extends Activity {
             toast("Скачанная сборка устарела — качаем заново");
             fetchUpdate(); return;
         }
+        // Совсем без версии (битый или чужой файл) ставить нельзя.
+        if (fileCode <= 0) { f.delete(); updateState = "idle"; toast("Файл обновления испорчен — скачайте заново"); fetchUpdate(); return; }
         // Android 8+: пока для «Нудиста» не включено «Установка неизвестных приложений», система молча гасит
         // запрос на установку, и человек видел, что кнопка ничего не делает. Сначала сами открываем этот экран.
         if (!canInstall()) { openInstallSettings(); return; }
@@ -1329,6 +1360,13 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** Страница скачивания в браузере телефона — с вопросительным знаком, чтобы браузер не отдал старый кеш. */
+    private void openSiteUpdate() {
+        String server = prefs.getString("server", "");
+        if (server == null || server.length() == 0) { toast("Адрес сервера не задан"); return; }
+        openExternal(Uri.parse(server + "/start?download=1&t=" + System.currentTimeMillis()));
+    }
+
     private static boolean sameOrigin(Uri a, Uri b) {
         if (a.getHost() == null || b.getHost() == null) return false;
         return a.getHost().equalsIgnoreCase(b.getHost()) && port(a) == port(b);
@@ -1345,6 +1383,14 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             toast("Нечем открыть ссылку");
         }
+    }
+
+    /**
+     * «Обновить» из окна: качаем сами и открываем установщик. Если не выходит — предлагаем
+     * скачать файл в браузере телефона, где нет ни нашего хранилища, ни старых файлов.
+     */
+    private void updateOrElse() {
+        try { fetchUpdate(); } catch (Throwable e) { openSiteUpdate(); }
     }
 
     private void download(String url, String userAgent, String disposition, String mime) {
