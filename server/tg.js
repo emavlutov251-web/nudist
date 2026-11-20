@@ -186,17 +186,16 @@ const dayMsk = t => new Date((t || now()) + 3 * 3600e3).toISOString().slice(0, 1
 setInterval(() => {
   const due = db.meta.tgNewsDue; if (!due || isNight()) return;
   delete db.meta.tgNewsDue;
-  newsAnnounce(require('./push').apkInfo(), { force: true, wall: due.wall, by: due.by })
+  newsAnnounce(require('./push').apkInfo(), { force: true, by: due.by })
     .then(r => console.log('[tg] утренняя доставка обновления:', r.sent, 'из', r.total || 0))
     .catch(e => console.warn('[tg] утренняя доставка:', e.message));
 }, 60e3).unref();
 const isNight = () => { const h = new Date(now() + 3 * 3600e3).getUTCHours(); return h >= 23 || h < 9; };
 const appUrl = () => SITE + '/start';
-function newsText(it, apk) {
+function newsText(apk) {
   const head = '🍃 Вышло обновление «Нудиста» ' + apk.name + '!';
   const list = (apk.news || []).filter(Boolean).slice(0, 5).map(x => '· ' + String(x).slice(0, 300)).join('\n');
-  const tail = it.wall ? 'Привяжите Telegram к аккаунту — «Нудист» → Настройки → Аккаунт → Telegram. Входить в аккаунт станет можно без пароля, а сообщения из «Нудиста» будут приходить сюда же.'
-    : 'Скачать и поставить поверх старой версии: данные и вход сохранятся.';
+  const tail = 'Скачать и поставить поверх старой версии: данные и вход сохранятся. Если бот вам больше не нужен — заблокируйте его, и мы перестанем писать.';
   return [head, list, tail, appUrl()].filter(Boolean).join('\n\n');
 }
 async function newsSend(uid, text) {
@@ -210,19 +209,17 @@ async function newsSend(uid, text) {
   }
 }
 // Пуш нового обновления: сперва в Telegram (если есть ключ бота), дальше лента телефона и браузерные пуши — это делает push.js.
-// it.force — прислать сейчас, не спрашивая про ночь; it.wall — это не обновление, а просьба привязать Telegram.
+// it.force — прислать сейчас, не спрашивая про ночь.
 async function newsAnnounce(apk, it) {
-  it = it || {};
+  it = it || {};      // it.force — прислать сейчас, не спрашивая про ночь
   const t = token();
   if (!ON || !t) return { ok: false, sent: 0, error: 'не настроен бот: нет ключа' };
   const mirror = !TG_API_REAL.test(TG);
   if (!mirror && process.env.TG_NEWS !== 'on') return { ok: false, sent: 0, error: 'выключено: на сервере не задано TG_NEWS=on' };
-  if (!it.force && isNight()) { if (it) db.meta.tgNewsDue = { wall: !!it.wall, by: it.by || '', at: now() }; save(); return { ok: true, sent: 0, skipped: 'ночная тишина 23:00–9:00 — отправится утром само' }; }
+  if (!it.force && isNight()) { db.meta.tgNewsDue = { by: it.by || '', at: now() }; save(); return { ok: true, sent: 0, skipped: 'ночная тишина 23:00–9:00 — отправится утром само' }; }
   let day = db.meta.tgNewsDay; if (!day || day.d !== dayMsk()) day = db.meta.tgNewsDay = { d: dayMsk(), n: 0 };
-  // «Напомнить про Telegram» — не новость про сборку: у неё своя карта отметок и свой дневной лимит на человека.
-  // Так напоминание не «съедает» слот обновления и наоборот: оба сообщения ограничены — одно в день на каждую тему.
-  if (!it.wall && day.n >= 2 && !it.force) return { ok: false, sent: 0, error: 'сегодня уже было две рассылки' };
-  const text = newsText(it, apk), sentMap = (it.wall ? (db.meta.tgWallSent = db.meta.tgWallSent || {}) : (db.meta.tgNewsSent = db.meta.tgNewsSent || {})), today = dayMsk();
+  if (day.n >= 2 && !it.force) return { ok: false, sent: 0, error: 'сегодня уже было две рассылки' };
+  const text = newsText(apk), sentMap = (db.meta.tgNewsSent = db.meta.tgNewsSent || {}), today = dayMsk();
   const targets = Object.values(db.users).filter(u => !u.deleted && !u.bot && u.tg && u.tg.id && !(sentMap[u.id] && dayMsk(sentMap[u.id].at) === today)).map(u => u.id);
   const out = { ok: true, sent: 0, failed: 0, total: targets.length, errors: [] };
   for (const id of targets) {
@@ -231,7 +228,7 @@ async function newsAnnounce(apk, it) {
     else if (r !== 'нет telegram') { out.failed++; if (out.errors.length < 5) out.errors.push(id + ': ' + r); }
   }
   for (const k of Object.keys(sentMap)) if (now() - (sentMap[k].at || 0) > 40 * 86400e3) delete sentMap[k];      // файл не растёт
-  if (out.sent) { if (!it.wall) day.n++; db.meta.tgNews = { at: now(), by: it.by || '', code: apk.code, name: apk.name, sent: out.sent, wall: !!it.wall }; }
+  if (out.sent) { day.n++; db.meta.tgNews = { at: now(), by: it.by || '', code: apk.code, name: apk.name, sent: out.sent }; }
   save();
   return out;
 }

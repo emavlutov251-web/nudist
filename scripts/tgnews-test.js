@@ -120,11 +120,6 @@ const TOKEN = '123456:TEST-only-token', sent = [];
     // ── только что зарегистрированный — не получил вчерашних отметок: его просим привязать, но он без tg
     ck('лента: без открытых телефонов карточек нет', out.feed === 0, out.feed);
 
-    // ── «аккаунт потерян»: бот шлёт просьбу привязать Telegram всем привязавшим (wall) — текст отличается
-    sent.length = 0;
-    const wall = await adm.rpc('admin.news', { wall: 'i', force: 'i' });
-    ck('напоминание про Telegram ушло', wall.tg && wall.tg.sent === 3, wall.tg);
-    ck('в напоминании — инструкция привязки', /Настройки → Аккаунт → Telegram/.test(sent[0].text), sent[0] && sent[0].text.slice(0, 200));
 
   } finally { srv.kill(); mock.close(); }
   await sleep(300);
