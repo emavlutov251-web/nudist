@@ -342,7 +342,7 @@ function UpdateDlg({ id, info }) {
       ${oldSign && html`<div class="note warn"><b>Важно: подпись приложения сменилась</b> (этого требует RuStore, иначе обновления не принимаются).<ol class="steps"><li>Вспомните пароль — он понадобится для входа: переписка и аккаунт на сервере, их удаление приложения не затрагивает.</li><li>Скачайте и откройте <b>nudist.apk</b>. Если телефон скажет «Приложение не установлено» — это ожидаемо.</li><li>Тогда удалите «Нудист» и установите скачанный файл заново. Войдите: имя и пароль, всё на месте.</li></ol><p class="hint">Забыли пароль? Напишите в поддержку из приложения до удаления или на navlutove05@gmail.com — поможем.</p></div>`}
       ${(info.news || []).length > 0 && html`<ul class="upd-news">${info.news.map(n => html`<li>${n}</li>`)}</ul>`}
       ${step === 1 && html`<ol class="steps"><li>Дождитесь загрузки файла nudist.apk (${info.size || 'он маленький'}).</li><li>Откройте его из шторки или из папки «Загрузки» и нажмите «Обновить». Если телефон спросит про установку из этого источника — разрешите.</li></ol>`}
-      <div class="ask-btns"><a class="btn" href="/nudist.apk" download="nudist.apk" onClick=${() => setStep(1)}><${Icon} n="download" s=${16} /> ${step ? 'Скачать ещё раз' : 'Скачать и установить'}</a><button class="btn ghost" onClick=${() => closeModal(id)}>Позже</button></div>
+      <div class="ask-btns"><a class="btn" href="/nudist.apk" download="nudist.apk" onClick=${() => setStep(1)}><${Icon} n="download" s=${16} /> ${step ? 'Скачать ещё раз' : 'Скачать и установить'}</a><button class="btn ghost" onClick=${() => { local.set('upd.later', String(Date.now())); closeModal(id); }}>Позже</button></div>
       <p class="hint">Пока стоит старая версия, окно будет появляться при каждом заходе. Не скачивается — откройте ${location.host}/start в браузере телефона.</p>
     </div>
   <//>`;
@@ -366,6 +366,8 @@ export function offerSiteUpdate(run) { clearTimeout(U.hard); S.ui.update = run |
 const shown = () => S.modals.some(m => m.c === UpdateDlg || m.c === SiteUpdateDlg);
 async function ask(fresh) {
   if (shown() || !S.ready || !S.me || await inCall() || shown()) return;
+  // Не мешаем: если человек читает чат, смотрит хаб или что-то подтверждает — окно обновления подождёт.
+  if ((S.modals || []).length || S.ui.chat || S.ui.hub) return;
   const t = Date.now(), apk = U.apk;
   if (inApp() && apk && Number(apk.code) > appVer()) { if (fresh === 'apk' || t - U.apkLater > APK_AGAIN) { U.apkLater = t; openModal(UpdateDlg, { info: apk }); } return; }      // сначала сборка: с ней обновится и всё остальное
   if (S.ui.update && (fresh === true || t - U.siteLater > SITE_AGAIN)) { U.siteLater = t; openModal(SiteUpdateDlg); }
@@ -378,6 +380,8 @@ export async function checkUpdate() {
   // берём подсказку сервера (русский для СНГ, английский для остальных) и запоминаем.
   try { if (v.ui && !localStorage.getItem('nudist.lang') && window.NudistI18n) window.NudistI18n.setLang(v.ui === 'en' ? 'en' : 'ru'); } catch (e) { /* не страшно */ }
   const newer = !U.apk || Number(v.apk && v.apk.code) > Number(U.apk.code); if (v.apk && v.apk.code) U.apk = v.apk;
+  // Нажали «Позже» — не показываем то же окно при каждом заходе: только через сутки и не поверх других окон.
+  const postponed = Number(local.get('upd.later') || 0) > t - 864e5;
   if (inApp() && !U.told) { U.told = true; rpc('app.hello', { v: appVer() }).catch(() => { U.told = false; }); }      // сервер запомнит сборку и напомнит об обновлении в шторке
   if (v.build) {
     if (!U.build) U.build = v.build;
@@ -387,7 +391,7 @@ export async function checkUpdate() {
       else offerSiteUpdate();
     }
   }
-  ask(newer ? 'apk' : undefined);
+  ask(newer && !postponed ? 'apk' : undefined);
 }
 on('init', d => { if (d && d.build) { if (!U.build) U.build = d.build; else if (d.build !== U.build) U.at = 0; } setTimeout(checkUpdate, 2500); });
 if (typeof document !== 'undefined') {

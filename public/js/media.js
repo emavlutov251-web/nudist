@@ -1,7 +1,7 @@
 // Медиа: фото/видео/кружочки/голосовые/аудио/файлы, просмотрщик, плеер, истории.
 import { html, useState, useEffect, useRef, S, bump, rpc, call, toast, Icon, Avatar, cx, fmtDur, fmtSize, download, Modal, closeModal, openModal, userName, fmtShort, pickFile, upload, compressImage, addUsers, confirmDlg, Spinner, Empty, lastSeen, plural, showMenu } from './lib.js';
 import { Cover } from './perks.js';
-import { mediaUrl, openUser } from './store.js';
+import { mediaUrl, forgetMedia, openUser } from './store.js';
 
 export function useMediaUrl(media) {
   const [u, setU] = useState(media && !media.ek ? media.url : null);
@@ -36,8 +36,20 @@ export function RoundMsg({ m }) {
 }
 
 // ───── общий аудиоплеер
+let loadedBlob = null;      // какой зашифрованный файл сейчас лежит в памяти плеера
 const audio = new Audio(); audio.preload = 'metadata';
 const P = () => S.player;
+// Ссылки на медиа живут на сервере не вечно и могут протухнуть, а связь — пропасть посреди трека.
+// Тогда перезапрашиваем адрес и продолжаем с того же места, а не молчим: раньше плеер просто замолкал.
+let refused = 0, retryUrl = null;
+audio.onerror = async () => {
+  const p = P(); if (!p || !p.m) { return; }
+  if (++refused > 3) { refused = 0; return toast('Не удалось воспроизвести трек. Попробуйте другой.', 'err'); }
+  const at = audio.currentTime || 0;
+  // Зашифрованный файл расшифровываем заново (fresh): прежний blob-адрес уже мёртв, и повтор с ним не сработал бы.
+  try { retryUrl = await mediaUrl(p.m.media, true); audio.src = retryUrl; audio.currentTime = at; await audio.play(); }
+  catch (e) { /* следующая попытка по нажатию */ }
+};
 audio.ontimeupdate = () => { if (P()) { P().t = audio.currentTime; bump(); } };
 audio.onplay = () => { if (P()) { P().on = true; bump(); } };
 audio.onpause = () => { if (P()) { P().on = false; bump(); } };
@@ -47,7 +59,9 @@ export async function playAudio(m, queue) {
   if (p && p.id === m.id) { audio.paused ? audio.play() : audio.pause(); return; }
   if (S.dock) S.dock = null;      // вставка с чужого сайта (Яндекс Музыка, YouTube) выключается: два звука сразу не нужны
   S.player = { id: m.id, chat: m.chat, kind: m.type, title: m.type === 'voice' ? 'Голосовое · ' + userName(S.users[m.from]) : (m.media.name || 'Аудио'), dur: m.media.dur || 0, cover: m.media.cover, radio: !!m.media.radio, t: 0, on: false, rate: (p && p.kind === 'voice' && m.type === 'voice' && p.rate) || 1, repeat: p ? p.repeat : false, shuffle: p ? p.shuffle : false, queue: (queue || [m]).filter(x => x.type === m.type), m };
-  try { audio.src = await mediaUrl(m.media); audio.playbackRate = S.player.rate; await audio.play(); } catch (e) { toast('Не удалось воспроизвести', 'err'); }
+  refused = 0; retryUrl = null;
+  if (loadedBlob && loadedBlob !== m.media.url) forgetMedia(loadedBlob);      // прошлый расшифрованный файл больше не нужен
+  try { audio.src = await mediaUrl(m.media); loadedBlob = m.media.ek ? m.media.url : null; audio.playbackRate = S.player.rate; await audio.play(); } catch (e) { toast('Не удалось воспроизвести. Проверьте, что есть интернет, и нажмите ещё раз.', 'err'); }
   bump();
 }
 function step(d, auto) { const p = P(); if (!p) return; const q = p.queue; let i = q.findIndex(x => x.id === p.id); if (p.shuffle && q.length > 1) { let j; do j = Math.floor(Math.random() * q.length); while (j === i); i = j; } else i += d; if (i < 0 || i >= q.length) { if (auto) { p.on = false; p.t = 0; bump(); } return; } const keep = { repeat: p.repeat, shuffle: p.shuffle, queue: q }; playAudio(q[i], q).then(() => Object.assign(S.player, keep)); }
@@ -82,8 +96,13 @@ function NowPlaying({ id }) {
       <button class=${cx('ib', p.repeat && 'act')} onClick=${() => { p.repeat = !p.repeat; bump(); }} title="Повтор" aria-label="Повтор"><${Icon} n="repeat" s=${18} /></button></div><//>`;
 }
 /** Полоска плеера. Она одна на всё приложение и видна везде: над чатом, над списком чатов (на телефоне) и в «Хабе». */
+// Полоска плеера. В приложении она выше нижней панели, в «Хабе» — своя; но на одном экране
+// должна быть одна: раньше при ошибке воспроизведения старый плеер не закрывался и полоски накладывались.
+const BAR_HOST = {};
 export function AudioBar({ side }) {
   const p = P(); if (!p) return null;
+  const where = side ? 'side' : 'main';
+  useEffect(() => { BAR_HOST[where] = true; return () => { delete BAR_HOST[where]; }; });
   return html`<div class=${cx('audiobar', side && 'ab-side')}>${p.kind !== 'voice' && html`<button class="ab-cov" onClick=${() => openModal(NowPlaying)} title="Открыть плеер" aria-label="Открыть плеер"><${Cover} src=${p.cover} seed=${p.title} s=${34} radio=${p.radio} /></button>`}<button class="ib sm" onClick=${() => step(-1)} title="Предыдущий"><${Icon} n="skip-back" s=${16} /></button><button class="ib sm" onClick=${() => audio.paused ? audio.play() : audio.pause()}><${Icon} n=${p.on ? 'pause' : 'play'} s=${18} /></button><button class="ib sm" onClick=${() => step(1)} title="Следующий"><${Icon} n="skip-forward" s=${16} /></button>
     <div class="ab-m"><b onClick=${() => p.kind !== 'voice' && openModal(NowPlaying)}>${p.title}</b><div class="ab-seek" onClick=${e => { const r = e.currentTarget.getBoundingClientRect(); seekAudio((e.clientX - r.left) / r.width); }}><i style=${`width:${Math.min(100, p.t / (p.dur || audio.duration || 1) * 100)}%`}></i></div></div>
     <span class="ab-t">${fmtDur(p.t)}</span>

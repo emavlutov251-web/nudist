@@ -12,10 +12,13 @@ const Hub = require('./hub');
 const Perks = require('./perks');
 const { db, now, need, str, id } = C;
 const H = R.H;
+const seatsOf = g => Math.max(2, Math.min(4, Number(g && g.seats) || 2));      // сколько человек за столом: 2 или 4
 
 // Игры лобби: потолок очков (как в дуэлях) и предел раунда в секундах. pvp — общий стол; остальные — гонка за счётом.
 const GAMES = {
   beer: { cap: 600, pvp: true, how: 'Настоящий поединок за одним столом: оба выбирают ход, потом открываются.' },
+  cards: { cap: 900, pvp: true, seats: 4, how: 'Карточный стол на четверых: по кругу сбрасываем карты, «Нудист в купальнике» пропускает ход. Кто первым останется без карт — победил.' },
+  rp: { cap: 1200, seats: 4, how: 'Нудищево вчетвером: у каждого своя жизнь в провинции, кто больше заработал — тот и молодец.' },
   royale: { cap: 240, how: 'Старт одновременно, у каждого своя баня. Больше бананов — победа.' },
   catch: { cap: 300, how: 'Старт одновременно, у каждого своё поле. Счёт соперника виден вживую.' },
   run: { cap: 300, how: 'Старт одновременно, у каждого своя дорожка. Счёт соперника виден вживую.' },
@@ -24,7 +27,7 @@ const GAMES = {
   g2048: { cap: 180, how: 'Одинаковое начало у обоих, три минуты. У кого счёт больше.' },
 };
 const game = a => { const g = GAMES[a], d = Hub.DUELS[a], app = (Hub.APPS || []).find(x => x.id === a); return g && d && app ? { id: a, name: d.name, e: d.e, unit: d.unit, max: d.max, url: app.url, ...g } : null; };
-const gamesView = () => Object.keys(GAMES).map(game).filter(Boolean).map(g => ({ id: g.id, name: g.name, e: g.e, unit: g.unit, url: g.url, cap: g.cap, pvp: !!g.pvp, how: g.how }));
+const gamesView = () => Object.keys(GAMES).map(game).filter(Boolean).map(g => ({ id: g.id, name: g.name, e: g.e, unit: g.unit, url: g.url, cap: g.cap, pvp: !!g.pvp, seats: seatsOf(g), how: g.how }));
 
 const MAXP = 2, COUNTDOWN = 4000, OFF_MS = Number(process.env.LOBBY_OFF_MS) || 40e3, IDLE_MS = 30 * 60e3;
 const CAP_S = Number(process.env.LOBBY_CAP_S) || 0;      // для проверок: общий предел раунда в секундах вместо своего у каждой игры
@@ -83,7 +86,9 @@ H['lobby.get'] = (c, p) => view(get(c, p.id));
 H['lobby.invite'] = (c, p) => {
   const L = get(c, p.id), u = db.users[c.uid], g = game(L.app);
   const o = db.users[str(p.to, 32)]; need(o && !o.deleted && !o.bot && o.id !== u.id, 'Позвать можно только живого человека, и не себя');
-  need(!L.players.has(o.id), 'Этот человек уже в лобби'); need(L.players.size < MAXP, 'В лобби уже двое. Больше стол не вмещает.');
+  need(!L.players.has(o.id), 'Этот человек уже в лобби');
+  const seats = seatsOf(g);
+  need(L.players.size < seats, seats > 2 ? `За столом уже ${seats} человека — больше не помещается.` : 'В лобби уже двое. Больше стол не вмещает.');
   need(!L.inv[o.id] || now() - L.inv[o.id] > 20e3, 'Приглашение уже отправлено. Дайте человеку пару секунд.');
   A.limit('lobbyinv:' + u.id, 40, 3600e3);
   const ch = C.openDm(u.id, o.id); R.checkSend(c, ch, { type: 'text' });
@@ -97,7 +102,9 @@ H['lobby.join'] = (c, p) => {
   const lid = str(p.id, 32), L = lobbies.get(lid);
   if (!L) { if (p.chat && p.mid) { const ch = db.chats[str(p.chat, 60)]; if (ch && C.isMember(ch, c.uid)) markOver(ch.id, str(p.mid, 32), lid); } need(false, 'Это лобби уже закрыто. Позовите друга заново.'); }
   if (L.players.has(c.uid)) return view(L);
-  need(L.inv[c.uid], 'В это лобби вас не звали'); need(L.players.size < MAXP, 'В лобби уже двое');
+  need(L.inv[c.uid], 'В это лобби вас не звали');
+  const seats = seatsOf(game(L.app));
+  need(L.players.size < seats, seats > 2 ? `За столом уже ${seats} человека` : 'В лобби уже двое');
   leave(c.uid);
   L.players.set(c.uid, { id: c.uid, ready: false, score: 0, done: false, wins: 0, off: 0 }); byUser.set(c.uid, L.id);
   tell(L);
@@ -114,7 +121,7 @@ H['lobby.ready'] = (c, p) => {
   const L = get(c, p.id), me = L.players.get(c.uid); need(L.state === 'idle', 'Раунд уже идёт');
   if (p.on !== false && !Perks.has(db.users[c.uid], L.app)) return { energy: false, ...view(L) };      // не ошибка: окно само предложит подождать или восполнить
   me.ready = p.on !== false;
-  if (L.players.size >= 2 && [...L.players.values()].every(q => q.ready)) start(L); else tell(L);
+  if (L.players.size >= 2 && [...L.players.values()].every(q => q.ready)) start(L); else tell(L);      // хозяин + хотя бы один гость
   return view(L);
 };
 H['lobby.score'] = (c, p) => {

@@ -32,6 +32,16 @@ html .folders::-webkit-scrollbar, html .stories::-webkit-scrollbar, html .chrow:
 
 /* ───── «Видео»: клипы и эфиры на чёрном, между ними — свайп вбок */
 .hub-video .hub-b { overflow: hidden; background: #000; }
+/* Клипы: чёрный фон должен доходить до низа экрана. Раньше под лентой просвечивал список чатов
+   (на телефоне это выглядело как «в ленте вылез чат»). Тянем фон на всю высоту окна и убираем подсказку поверх видео. */
+.hub-video { background: #000; }
+.hub-video .clips-wrap { flex: 1 1 auto; }
+@media (max-width: 800px) {
+  /* Лента клипов на телефоне: тёмный фон доходит до низа экрана, под ним не просвечивает список чатов */
+  .hub.hub-video { bottom: 0; padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); background: #000; }
+  .hub.hub-video .hub-b { background: #000; }
+}
+.hub-video .hint-tip, .hub-video .tips, .hub-video .coach { display: none; }
 .vid { position: relative; flex: 1; min-height: 0; display: flex; background: #000; color: #fff; }
 .vpager { flex: 1; min-width: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior: contain; }
 .vpane { position: relative; flex: 0 0 100%; min-width: 0; height: 100%; display: flex; scroll-snap-align: start; scroll-snap-stop: always; }

@@ -3,6 +3,7 @@ import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avata
 import { hubFirstHint } from './hints.js';
 import { openChat, showChannel, sendPayload } from './store.js';
 import { playAudio, AudioBar } from './media.js';
+import { GameButtons, RotateHint } from './gamefull.js';
 import { Cover, tagCover, spendEnergy, EnergyPill } from './perks.js';
 import { openLobby } from './lobby.js';
 import { openMiniApp } from './panels.js';
@@ -420,6 +421,7 @@ const TILE = { breath: '#2f9e6a', listopad: '#107C10', g2048: '#0078D7', saper: 
 export async function launchApp(app, chatId) {
   if (app.url && app.cat === 'games' && !(await spendEnergy(app))) return;      // игра тратит единицу энергии; утилиты и игры событий — нет
   const rec = [app.id].concat((local.get('apps.recent') || []).filter(i => i !== app.id)).slice(0, 6); local.set('apps.recent', rec);
+  if (app.id === 'cards') return openCards({ seats: 4 });      // карточный стол: сначала сервер раздаёт места, потом окно
   if (app.url) openModal(AppFrame, { app, chat: chatId || null }); else if (app.bot) openMiniApp(app.bot);
 }
 // Листик — герой рисованных игр
@@ -443,6 +445,10 @@ function Records({ id, app }) {
 }
 function AppFrame({ id, app, chat, duel }) {
   const fr = useRef(), [res, setRes] = useState(null), [dv, setDv] = useState(duel || null), [busy, setBusy] = useState(false), live = useRef({});
+  useEffect(() => { CARDS.frame = fr.current; return () => { if (CARDS.frame === fr.current) CARDS.frame = null; }; }, []);
+  // Игры открываются на весь экран: в узкой рамке посреди экрана играть неудобно, особенно на телефоне.
+  const [full, setFull] = useState(app.cat === 'games' && local.get('game.full') !== '0');
+  const shrink = () => { setFull(false); local.set('game.full', '0'); };      // человек сам свернул — запоминаем выбор
   live.current = { dv, busy };
   const D = DUEL[app.id], n2 = (n, f) => n + ' ' + plural(n, f);
   // Вызвать человека: выбираем соперника, вызов с нашим результатом уходит ему в личку. Листиков на кону нет — только честь.
@@ -458,14 +464,29 @@ function AppFrame({ id, app, chat, duel }) {
     const onMsg = async e => {
       if (!fr.current || e.source !== fr.current.contentWindow || e.origin !== location.origin || !e.data) return;
       const d = e.data, reply = x => fr.current && fr.current.contentWindow.postMessage(x, location.origin), cid = chat || S.ui.chat, c = S.chats[cid];
-      if (d.nudist === 'ready') { const th = document.documentElement.dataset.theme; reply({ nudist: 'init', name: userName(S.me), theme: th === 'dark' || (th !== 'light' && th !== 'tan' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light', canSend: !!c }); }
+      if (d.nudist === 'ready') {
+        const th = document.documentElement.dataset.theme;
+        reply({ nudist: 'init', name: userName(S.me), theme: th === 'dark' || (th !== 'light' && th !== 'tan' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light', canSend: !!c });
+        const g = app.cardsId && CARDS.last[app.cardsId];
+        if (g) reply({ nudist: 'cards.state', v: g, me: (S.me || {}).id });
+      }
       if (d.nudist === 'send') {
         const text = String(d.text || '').slice(0, 2000); if (!text) return;
         if (!c) return reply({ nudist: 'error', text: 'Сначала откройте чат' });
         if (!(await confirmDlg({ title: `Отправить в чат?`, text, ok: 'Отправить' }))) return;
         try { await sendPayload(cid, { text }); reply({ nudist: 'sent' }); } catch (x) { reply({ nudist: 'error', text: x.message }); }
       }
-      if (d.nudist === 'earn') { try { reply({ nudist: 'earned', ...(await rpc('apps.earn', { app: app.id, what: String(d.what) })) }); } catch (x) { reply({ nudist: 'error', text: x.message }); } }
+      if (d.nudist === 'earn') { try { reply({ nudist: 'earned', ...(await rpc('apps.earn', { app: 'cards', what: String(d.what) })) }); } catch (x) { reply({ nudist: 'error', text: x.message }); } }
+      // Карточный стол живёт на сервере: страница присылает ход, получает ответ и новое состояние стола.
+      // Так правила и колода остаются на сервере — из браузера их не подкрутить.
+      if (d.nudist === 'cards') {
+        try { const r = await rpc('cards.' + String(d.m).replace(/^cards\./, ''), { ...(d.p || {}), id: (d.p && d.p.id) || null }); reply({ nudist: 'cards.reply', id: d.id, r }); }
+        catch (x) { reply({ nudist: 'cards.reply', id: d.id, e: x.message }); }
+      }
+      if (d.nudist === 'cards.invite') {
+        try { const { pickUsers } = await import('./panels.js'); const ids = await pickUsers({ title: 'Кого позвать за стол?', noBots: true, exclude: [S.me.id] }); if (ids && ids[0]) await rpc('cards.invite', { id: app.cardsId, to: ids[0] }); }
+        catch (x) { toast(x.message, 'err'); }
+      }
       if (d.nudist === 'score') { try { reply({ nudist: 'top', ...(await rpc('apps.score', { app: app.id, t: String(d.t || ''), score: d.score })) }); } catch (x) { /* таблица не обязательна для игры */ } }
       if (d.nudist === 'result' && DUEL[app.id]) {
         const n = Math.max(0, Math.floor(Number(d.score) || 0)), cur = live.current.dv;
@@ -488,8 +509,28 @@ function AppFrame({ id, app, chat, duel }) {
     : dv && res == null ? html`<div class=${cx('duel-bar', won > 0 ? 'win' : won < 0 ? 'lose' : '')}><span>${won > 0 ? html`<${Icon} n="crown" s=${14} /> Победа!` : won < 0 ? 'Поражение.' : 'Ничья.'} ${mineB ? dv.sb : dv.sa} против ${mineB ? dv.sa : dv.sb} ${D[0]}</span>${mineB && html`<button class="btn sm" disabled=${busy} onClick=${() => challenge(dv.a, dv.sb)}>Реванш</button>`}</div>`
     : res != null ? html`<div class="duel-bar two"><span>Ваш результат: <b>${n2(res, D[1])}</b> ${D[0]}</span><button class="btn sm" onClick=${together}><${Icon} n="gamepad-2" s=${14} /> С другом</button><button class="btn sm ghost" disabled=${busy} title="Друг сыграет позже и попробует побить ваш результат" onClick=${() => challenge(null, res)}><${Icon} n="shield" s=${13} /> Вызов</button></div>`
     : html`<div class="duel-bar two"><span>Вдвоём веселее</span>${BOARD.includes(app.id) && html`<button class="btn sm ghost" title="Рекорды недели" aria-label="Рекорды недели" onClick=${() => openModal(Records, { app })}><${Icon} n="crown" s=${15} /></button>`}<button class="btn sm" onClick=${together}><${Icon} n="gamepad-2" s=${14} /> Играть с другом</button></div>`;
-  return html`<${Modal} id=${id} title=${app.title} icon="app-window" cls="miniapp nopad"><div class="miniapp-col"><iframe ref=${fr} title=${app.title} src=${app.url} sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer"></iframe>${bar}</div><//>`;
+  return html`<${Modal} id=${id} title=${app.title} icon="app-window" cls=${cx('miniapp nopad', full && 'gamefull')}><div class="miniapp-col"><iframe ref=${fr} title=${app.title} src=${app.url} sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer"></iframe>${bar}</div>
+    ${full && html`<${GameButtons} onShrink=${shrink} /><${RotateHint} />`}
+  <//>`;
 }
+// ───── карточный стол «Нудист в купальнике»
+// Игра живёт в отдельном приложении, а правила — на сервере. Здесь только открываем стол и пересылаем ему состояние.
+const CARDS = { frame: null, last: {} };
+export async function openCards(opts) {
+  const p = opts || {};
+  let g;
+  try { g = p.id ? await rpc('cards.join', { id: p.id }) : await rpc('cards.new', { seats: Number(p.seats) || 4 }); }
+  catch (e) { toast(e.message, 'err'); return; }
+  CARDS.last[g.id] = g;      // страница заберёт состояние сразу после загрузки, не дожидаясь следующего события
+  openModal(AppFrame, { app: { id: 'cards', title: 'Нудист в купальнике', url: '/miniapps/cards.html?g=' + g.id, cat: 'games', cardsId: g.id }, chat: null });
+}
+const cardsToFrame = (f, d) => { if (!d) return; CARDS.last[d.id] = d; if (f && f.contentWindow) { try { f.contentWindow.postMessage({ nudist: 'cards.state', v: d, me: (S.me || {}).id }, location.origin); } catch (e) { /* игра закрыта */ } } };
+on('cards', d => cardsToFrame(CARDS.frame, d));
+on('cards.invite', async d => {
+  if (!(await confirmDlg({ title: 'Играем в карты?', text: `${userName(S.users[d.from] || { name: d.fromName })} зовёт за стол «Нудист в купальнике». Мест: ${d.n} из ${d.seats}.`, ok: 'Сесть за стол' }))) return;
+  rpc('cards.join', { id: d.id }).then(() => openModal(AppFrame, { app: { id: 'cards', title: 'Нудист в купальнике', url: '/miniapps/cards.html?g=' + d.id, cat: 'games', cardsId: d.id }, chat: null })).catch(e => toast(e.message, 'err'));
+});
+
 // Каталог: и вкладка, и окно из «скрепки» в чате.
 export function AppsCatalog({ chat, onPick }) {
   const [list, setList] = useState(APPS), [q, setQ] = useState('');

@@ -1,0 +1,96 @@
+/* «Нудист в купальнике» — карточный стол. Тёмный зал, зелёное сукно, карты с крупными цифрами.
+   Всё рассчитано и на вертикальный телефон, и на горизонтальный: в полноэкранном режиме стола видно больше. */
+:root { --felt: #123024; --felt2: #0d2419; --card-r: 10px; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body { background: radial-gradient(120% 90% at 50% 0%, #1b4632 0%, var(--felt) 45%, var(--felt2) 100%); color: #EAF3EC;
+  font-family: 'Golos Text', 'Segoe UI', system-ui, sans-serif; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+#app { height: 100%; display: flex; flex-direction: column; }
+
+/* ── шапка стола */
+.top { display: flex; align-items: center; gap: 8px; padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 6px; flex: none; }
+.top b { font-weight: 600; } .top .sp { flex: 1; }
+.top button { background: rgba(255, 255, 255, .1); color: #EAF3EC; border: 0; border-radius: 9px; padding: 7px 12px; font-size: 13px; font-weight: 600; }
+.top button:hover { background: rgba(255, 255, 255, .18); }
+.turn-me { background: #2BB36A !important; color: #06170F !important; }
+
+/* ── стол: соперники сверху, свои карты снизу */
+.table { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.foes { display: flex; justify-content: center; align-items: flex-start; gap: 14px; padding: 4px 10px 0; flex: none; flex-wrap: wrap; }
+.foe { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 74px; opacity: .95; }
+.foe.turn { opacity: 1; }
+.foe .av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #06170F; font-size: 16px; }
+.foe.turn .av { box-shadow: 0 0 0 3px #FFD166, 0 0 18px rgba(255, 209, 102, .55); }
+.foe .nm { font-size: 12px; max-width: 86px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.foe .cnt { font-size: 11px; opacity: .75; }
+.foe .hand-mini { display: flex; margin-top: 2px; }
+.foe .hand-mini i { width: 8px; height: 13px; border-radius: 2px; background: linear-gradient(160deg, #f4f7f5, #cfd9d3); margin-left: -4px; box-shadow: 0 1px 2px rgba(0, 0, 0, .35); }
+.foe.out .hand-mini { display: none; }
+
+/* ── центр: колода и верхняя карта */
+.mid { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 22px; padding: 6px 12px; }
+.pile { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.pile small { font-size: 11px; opacity: .65; }
+.deck { width: 62px; height: 92px; border-radius: var(--card-r); background: repeating-linear-gradient(45deg, #1f6b45 0 6px, #174d33 6px 12px); border: 3px solid #EAF3EC; box-shadow: 0 4px 14px rgba(0, 0, 0, .45); display: grid; place-items: center; cursor: pointer; position: relative; }
+.deck:active { transform: scale(.96); } .deck span { font-size: 26px; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .5)); }
+.deck i { position: absolute; inset: 3px; border-radius: 7px; border: 1px dashed rgba(255, 255, 255, .25); }
+.deck[data-off] { opacity: .45; pointer-events: none; }
+
+/* ── сама карта */
+.card { position: relative; width: 62px; height: 92px; border-radius: var(--card-r); background: #F7FAF8; color: #12261B;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .4); display: grid; place-items: center; border: 3px solid #fff; overflow: hidden; }
+.card.r { background: linear-gradient(160deg, #FF7B6B, #E14B3B); color: #fff; border-color: #FFC9C0; }
+.card.y { background: linear-gradient(160deg, #FFD166, #E9A93B); color: #33240A; border-color: #FFE7B0; }
+.card.g { background: linear-gradient(160deg, #55D98B, #22945A); color: #06170F; border-color: #B7F0CC; }
+.card.b { background: linear-gradient(160deg, #6FA8FF, #3566D6); color: #fff; border-color: #C3D8FF; }
+.card.w { background: conic-gradient(from 210deg, #E14B3B, #E9A93B, #22945A, #3566D6, #E14B3B); color: #fff; border-color: #fff; }
+.card .v { font-weight: 800; font-size: 30px; line-height: 1; }
+.card .k { font-size: 22px; line-height: 1; }
+.card .w4k { font-size: 15px; font-weight: 800; letter-spacing: .5px; }
+.card .corner { position: absolute; top: 3px; left: 5px; font-size: 12px; font-weight: 800; opacity: .85; }
+.card .corner.b2 { top: auto; left: auto; bottom: 3px; right: 5px; transform: rotate(180deg); }
+.card.big { width: 84px; height: 124px; } .card.big .v { font-size: 42px; } .card.big .k { font-size: 30px; }
+.color-dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255, 255, 255, .55); }
+
+/* ── своя рука */
+.hand { flex: none; display: flex; justify-content: center; align-items: flex-end; padding: 14px 8px calc(10px + env(safe-area-inset-bottom, 0px)); overflow-x: auto; overflow-y: hidden; min-height: 150px; scrollbar-width: none; }
+.hand::-webkit-scrollbar { display: none; }
+.hand .slot { flex: none; transition: transform .14s; margin-left: -12px; }
+.hand .slot:first-child { margin-left: 0; }
+.hand .slot.ok { cursor: pointer; } .hand .slot.ok:hover { transform: translateY(-12px); }
+.hand .slot.no { filter: saturate(.35) brightness(.75); }
+.hand .slot.up { transform: translateY(-16px); }
+.hand .slot.up .card { box-shadow: 0 0 0 3px #FFD166, 0 8px 18px rgba(0, 0, 0, .5); }
+
+/* ── окна: заказ цвета, итог, приглашение */
+.sheet { position: fixed; inset: 0; z-index: 20; background: rgba(4, 10, 7, .72); display: grid; place-items: center; padding: 20px; }
+.sheet .box { background: #10291E; border: 1px solid rgba(255, 255, 255, .12); border-radius: 16px; padding: 20px; max-width: 340px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
+.sheet h2 { margin: 0 0 6px; font-size: 19px; } .sheet p { margin: 0 0 14px; opacity: .85; font-size: 14px; }
+.colors { display: flex; justify-content: center; gap: 12px; margin: 6px 0 4px; }
+.colors button { width: 56px; height: 56px; border-radius: 14px; border: 3px solid rgba(255, 255, 255, .3); }
+.colors button:active { transform: scale(.95); }
+.colors .r { background: linear-gradient(160deg, #FF7B6B, #E14B3B); }
+.colors .y { background: linear-gradient(160deg, #FFD166, #E9A93B); }
+.colors .g { background: linear-gradient(160deg, #55D98B, #22945A); }
+.colors .b { background: linear-gradient(160deg, #6FA8FF, #3566D6); }
+.btns { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.btns button { background: #2BB36A; color: #06170F; border: 0; border-radius: 11px; padding: 11px 18px; font-weight: 700; font-size: 15px; }
+.btns button.alt { background: rgba(255, 255, 255, .14); color: #EAF3EC; }
+.btns button:active { transform: scale(.97); }
+
+/* ── журнал ходов */
+.log { flex: none; padding: 0 12px 4px; font-size: 12px; opacity: .72; line-height: 1.35; max-height: 3.2em; overflow: hidden; }
+.log div:last-child { opacity: 1; }
+
+/* ── «Нудист!» */
+.nud-btn { position: fixed; right: 12px; bottom: calc(168px + env(safe-area-inset-bottom, 0px)); z-index: 6; background: #FFD166; color: #33240A; border: 0; border-radius: 50%; width: 66px; height: 66px; font-weight: 800; font-size: 13px; box-shadow: 0 8px 20px rgba(0, 0, 0, .45); animation: pop .5s; }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ── горизонтальный телефон: стол шире, карты мельче по высоте */
+@media (orientation: landscape) and (max-height: 520px) {
+  .foes { gap: 10px; padding-top: 0; }
+  .foe .av { width: 32px; height: 32px; font-size: 14px; }
+  .mid { gap: 16px; }
+  .card { width: 52px; height: 78px; } .card .v { font-size: 25px; } .card.big { width: 66px; height: 98px; }
+  .hand { min-height: 96px; }
+  .log { display: none; }
+}

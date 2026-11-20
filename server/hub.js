@@ -44,7 +44,9 @@ H['music.add'] = (c, p) => {
 H['music.list'] = (c, p) => {
   const u = me(c), q = str(p.q, 60).toLowerCase(), tab = p.tab === 'all' ? 'all' : 'my';
   let list;
-  if (tab === 'my') list = cleanLib(u).map(i => db.tracks[i]);
+  // Своя музыка — это и загруженные треки, и те, что человек добавил из общей волны. Раньше список собирался
+  // только по «выложенным» трекам, и у того, кто держал свои записи закрытыми, экран оставался пустым.
+  if (tab === 'my') list = cleanLib(u).map(i => db.tracks[i]).filter(Boolean);
   else { list = []; const t = now(); for (const k in db.tracks) if (db.tracks[k].pub && db.tracks[k].ts <= t) list.push(db.tracks[k]); list.sort((a, b) => (b.plays || 0) - (a.plays || 0) || b.ts - a.ts); }
   if (q) list = list.filter(t => (t.title + ' ' + t.artist).toLowerCase().includes(q));
   const off = int(p.off, 0, 1e6), page = list.slice(off, off + 100);
@@ -231,6 +233,7 @@ const APPS = [
   { id: 'catch', title: 'Пляжный ловец', about: 'Листик ловит ракушки и мороженое и уворачивается от крабов. Рекорды недели', cat: 'games', emoji: '🍃', art: 'catch', url: '/miniapps/catch.html' },
   { id: 'run', title: 'Пляжная пробежка', about: 'Бег с двойным прыжком: перепрыгивайте крабов, собирайте листики', cat: 'games', emoji: '🏃', art: 'run', url: '/miniapps/run.html' },
   { id: 'pairs', title: 'Пляжные пары', about: 'Найдите все пары рисованных карточек за меньшее число ходов', cat: 'games', emoji: '🃏', art: 'pairs', url: '/miniapps/pairs.html' },
+  { id: 'cards', title: 'Нудист в купальнике', about: 'Карточный стол на 2–4 человек: сбрасываем карты по цвету и числу, кто первым останется без карт — победил', cat: 'games', emoji: '🃏', url: '/miniapps/cards.html' },
   { id: 'rp', title: 'Нудищево РП', about: 'Жизнь в провинции: почта, завод, шаурма, пляж со спасателями и мечта о «бэхе»', cat: 'games', emoji: '🏘️', url: '/miniapps/rp.html' },
   { id: 'lot', title: 'Жребий', about: 'Монетка, кубик и «кто идёт за пиццей»', cat: 'tools', emoji: '🎲', url: '/miniapps/lot.html' },
   { id: 'breath', title: 'Подышать', about: 'Минута спокойного дыхания: «квадрат», 4-7-8 и долгий выдох. Помогает, когда тревожно', cat: 'tools', emoji: '🌬️', url: '/miniapps/breath.html' },
@@ -279,7 +282,7 @@ H['duel.done'] = (c, p) => {
 };
 // Листики за игры. Игры идут в браузере, и проверить честность партии сервер не может,
 // поэтому главный предохранитель — потолок на день по каждой игре (как у «Листопада»).
-const EARN = { g2048: { cap: 15, what: { 128: 1, 256: 2, 512: 3, 1024: 5, 2048: 10 } }, saper: { cap: 12, what: { win: 4 } }, royale: { cap: 10, what: { win: 5 } }, beer: { cap: 8, what: { win: 2 } }, shooter: { cap: 8, what: { w5: 2, w10: 4 } }, rp: { cap: 8, what: { job: 1 } }, catch: { cap: 6, what: { p15: 1, p40: 2, p80: 3 } }, run: { cap: 6, what: { p15: 1, p40: 2, p80: 3 } }, pairs: { cap: 6, what: { win: 2, ace: 2 } } };
+const EARN = { cards: { cap: 10, what: { win: 3 } }, g2048: { cap: 15, what: { 128: 1, 256: 2, 512: 3, 1024: 5, 2048: 10 } }, saper: { cap: 12, what: { win: 4 } }, royale: { cap: 10, what: { win: 5 } }, beer: { cap: 8, what: { win: 2 } }, shooter: { cap: 8, what: { w5: 2, w10: 4 } }, rp: { cap: 8, what: { job: 1 } }, catch: { cap: 6, what: { p15: 1, p40: 2, p80: 3 } }, run: { cap: 6, what: { p15: 1, p40: 2, p80: 3 } }, pairs: { cap: 6, what: { win: 2, ace: 2 } } };
 const EARN_DAY = 30;      // и общий потолок на день по всем играм вместе
 const earnRate = new Map();      // пользователь → { t, n }: не больше 20 наград в минуту
 H['apps.earn'] = (c, p) => {

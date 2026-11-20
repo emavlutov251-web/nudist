@@ -792,6 +792,7 @@ public class MainActivity extends Activity {
         web.setBackgroundColor(C_BG);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
+        s.setGeolocationEnabled(true);      // «Я рядом»: страница просит координаты один раз по нажатию
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
@@ -963,6 +964,8 @@ public class MainActivity extends Activity {
         for (String res : request.getResources()) {
             if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(res)) need.add(Manifest.permission.RECORD_AUDIO);
             if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(res)) need.add(Manifest.permission.CAMERA);
+            // Старый WebView присылает «android.webkit.resource.GEOLOCATION» строкой, новый — через GeolocationPermissions.
+            if (res != null && res.toLowerCase(java.util.Locale.ROOT).contains("geolocation")) need.add(Manifest.permission.ACCESS_FINE_LOCATION);
         }
         List<String> missing = new ArrayList<String>();
         for (String p : need) if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) missing.add(p);
@@ -980,6 +983,7 @@ public class MainActivity extends Activity {
         for (String res : request.getResources()) {
             if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(res) && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) ok.add(res);
             if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(res) && checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) ok.add(res);
+            if (res != null && res.toLowerCase(java.util.Locale.ROOT).contains("geolocation") && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) ok.add(res);
         }
         if (ok.isEmpty()) request.deny();
         else request.grant(ok.toArray(new String[0]));

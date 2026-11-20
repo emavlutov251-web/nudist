@@ -2,6 +2,8 @@
 // Классы (объявлены в css/base.css): .il — основной штрих (цвет текста темы), .is — зелёный акцент, .iss — мягкая мятная заливка, .isf — зелёный акцент-заливка, .ig — золотой штрих, .igf — золотая заливка.
 // Иконки наследуют цвет через переменные темы, поэтому одинаково хороши на светлом и тёмном «пляже».
 export const ICONS={
+  "rotate-cw": '<path class="il" d="M20 12a8 8 0 1 1-2.6-5.9"/><path class="il" d="M20 4v4.5h-4.5"/><path class="igf" d="M12 8.2l3.4 3.8L12 15.8l-3.4-3.8Z"/>',
+  "rotate-ccw": '<path class="il" d="M4 12a8 8 0 1 0 2.6-5.9"/><path class="il" d="M4 4v4.5h4.5"/>',
   "newspaper": '<path class="il" d="M4 6h13v13a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 4 19Z"/><path class="il" d="M17 9h2.5a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2"/><path class="iss" d="M7 9.5h7V13H7z"/><path class="il" d="M7 15.7h7M7 18.3h4.5"/><circle class="igf" cx="12.6" cy="11.2" r=".8"/>',
   "gem": '<path class="il" d="M7 4.5h10l3.3 4.3L12 20 3.7 8.8Z"/><path class="is" d="M3.7 8.8h16.6M12 20 8.6 8.8 12 4.5l3.4 4.3Z"/><path class="igf" d="M19 2.6l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7Z"/>',
   "credit-card": '<rect class="il" x="2.5" y="5" width="19" height="14" rx="2.5"/><path class="is" d="M2.5 9.5h19"/><rect class="igf" x="6" y="13" width="4.6" height="2.7" rx=".8"/>',

@@ -40,7 +40,10 @@ function dismissActive() {
 // Подсказка может не поместиться (открыто видео/история/«Прикрыться» или показана другая) — тогда откладываем, не теряем.
 // Пока открыто окно (настройки, магазин, профиль), меню или звонок — подсказка подождёт:
 // иначе она ложится поверх окна и закрывает кнопки, как было с «Включите push-уведомления».
-const busy = () => !!(S.modals && S.modals.length) || !!(S.menu) || !!(S.dock && S.dock.open);
+// Занят экран: открыто окно, меню, вставка или человек смотрит клипы/играет — тогда не мешаем.
+const busy = () => !!(S.modals && S.modals.length) || !!(S.menu) || !!(S.dock && S.dock.open)
+  || !!(S.ui && (S.ui.feed === 'video' || S.ui.game))
+  || !!(document.querySelector && document.querySelector('.miniapp.gamefull, .overlay .miniapp'));
 function canShow(id, { gap = 20e3, per = 2, force = false } = {}) {
   if (seen(id)) return false;
   if (active || S.viewer || S.storyView || S.ui.boss || busy()) return false;
@@ -112,6 +115,9 @@ function remindNotif() {
 // ─── Заход в приложение ───
 export function appEntryHints() {
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+  // В приложении подсказка «Ctrl+K» бессмысленна, а в полноэкранной ленте клипов вообще закрывает видео — там молчим.
+  if (!coarse && window.NudistApp) return remindNotif();
+  if (S.ui && (S.ui.hub === 'feed' || S.ui.feed === 'video')) return remindNotif();
   hint('welcome-1', coarse ? 'Внизу — «Чаты», «Лента», «Хаб» и «Магазин». Поиск по всем чатам — значок сверху.' : 'Ctrl+K — поиск · Ctrl+, — настройки · двойной щелчок по сообщению — быстрый ответ · Esc — закрыть панель.', { icon: '👋', delay: 2500, per: 2, gap: 0 });
   remindNotif();
 }

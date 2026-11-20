@@ -66,12 +66,22 @@ export async function encryptFile(blob) {
   return { blob: new Blob([ct], { type: 'application/octet-stream' }), k: b64(await subtle.exportKey('raw', key)), iv: b64(iv) };
 }
 const blobCache = new Map();
-export async function mediaUrl(media) {
+// Зашифрованные файлы: расшифровываем целиком и держим blob-адрес. У таких файлов адрес живёт в памяти вкладки,
+// поэтому после перезапуска приложения или неудачной загрузки он становится мёртвым — и трек «не играет».
+// Поэтому: не кешируем больше ~40 последних файлов и умеем расшифровать заново, если старый адрес не открылся.
+const BLOB_MAX = 40;
+const blobPut = (k, u) => {
+  if (blobCache.has(k)) { try { URL.revokeObjectURL(blobCache.get(k)); } catch (e) { /* уже освобождён */ } blobCache.delete(k); }
+  blobCache.set(k, u);
+  while (blobCache.size > BLOB_MAX) { const first = blobCache.keys().next().value; try { URL.revokeObjectURL(blobCache.get(first)); } catch (e) { /* пусто */ } blobCache.delete(first); }
+};
+export const forgetMedia = url => { if (url && blobCache.has(url)) { try { URL.revokeObjectURL(blobCache.get(url)); } catch (e) { /* пусто */ } blobCache.delete(url); } };
+export async function mediaUrl(media, fresh) {
   if (!media || !media.ek) return media && media.url;
-  if (blobCache.has(media.url)) return blobCache.get(media.url);
+  if (!fresh && blobCache.has(media.url)) return blobCache.get(media.url);
   const key = await subtle.importKey('raw', unb64(media.ek), 'AES-GCM', false, ['decrypt']);
   const pt = await subtle.decrypt({ name: 'AES-GCM', iv: unb64(media.eiv) }, key, await (await fetch(media.url)).arrayBuffer());
-  const u = URL.createObjectURL(new Blob([pt], { type: media.mime || 'application/octet-stream' })); blobCache.set(media.url, u); return u;
+  const u = URL.createObjectURL(new Blob([pt], { type: media.mime || 'application/octet-stream' })); blobPut(media.url, u); return u;
 }
 
 // ───── чаты

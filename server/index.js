@@ -23,9 +23,11 @@ require('./calm');
 require('./perks');
 require('./quiet');
 require('./lobby');
+require('./cards');
 const Tg = require('./tg');
 require('./tgpacks');
 require('./nearby');
+require('./dating');
 require('./biz');
 require('./fcm');
 require('./tunes');
@@ -232,9 +234,15 @@ function handleUpload(req, res) {
   const out = fs.createWriteStream(tmp); let size = 0, dead = false;
   req.on('data', d => { size += d.length; if (size > max && !dead) { dead = true; out.destroy(); fs.unlink(tmp, () => {}); json(res, 413, { error: `Файл больше ${maxMb} МБ` }); req.destroy(); } });
   req.pipe(out);
+  // Обрыв на середине загрузки. Раньше при обрыве (соединение закрылось до конца файла) поток ещё дописывался,
+  // и на диск попадал обрезанный или пустой файл, а клиент получал «всё готово». Такие «битые» треки потом
+  // просто молчали. Теперь незавершённая загрузка честно отменяется и не попадает в хранилище.
   req.on('aborted', () => { if (!dead) { dead = true; out.destroy(); fs.unlink(tmp, () => {}); } });
+  req.on('close', () => { if (!dead && !req.complete) { dead = true; out.destroy(); fs.unlink(tmp, () => {}); } });
   out.on('finish', async () => {
     if (dead) return;
+    // Пустой файл — почти всегда следствие сорванной загрузки. Пусть человек повторит, а не получит нерабочий трек.
+    if (!size) { fs.unlink(tmp, () => {}); return json(res, 400, { error: 'Файл пришёл пустым. Попробуйте загрузить ещё раз.' }); }
     if (!free) { upAdd('u' + a.u.id, size); upAdd('i' + ip, size); }
     try { await Cloud.putUpload(fname, tmp); }
     catch (e) { console.error('[cloud] файл не сохранён:', e.message); fs.unlink(tmp, () => {}); return json(res, e.full ? 507 : 502, { error: e.full ? 'Хранилище файлов заполнено. Удалите ненужные треки и клипы или напишите в поддержку.' : 'Не удалось сохранить файл в хранилище. Попробуйте ещё раз.' }); }

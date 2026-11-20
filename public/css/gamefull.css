@@ -1,0 +1,26 @@
+/* Полноэкранная игра: окно разворачивается на весь экран, чат остаётся под ним.
+   На телефоне игра сама просит повернуть телефон горизонтально (см. js/gamefull.js) — так удобнее играть. */
+
+.miniapp.gamefull { width: 100vw; height: 100vh; height: 100dvh; max-width: none; max-height: none; border-radius: 0; }
+.miniapp.gamefull .modal-h { display: none; }             /* заголовок не нужен: в игре свои кнопки */
+.miniapp.gamefull .modal-b { padding: 0; }
+.miniapp.gamefull iframe { border-radius: 0; background: #10161a; }
+.miniapp.gamefull .duel-bar { font-size: 13px; }
+
+/* Кнопки в углу полноэкранной игры: свернуть обратно и повернуть */
+.gf-btns { position: fixed; top: calc(8px + env(safe-area-inset-top, 0px)); right: 8px; z-index: 60; display: flex; }
+.gf-btns > * + * { margin-left: 6px; }
+.gf-btns button { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; background: rgba(12, 20, 16, .66); color: #fff; backdrop-filter: blur(6px); }
+.gf-btns button:hover { background: rgba(12, 20, 16, .85); }
+.miniapp.gamefull .gf-btns { display: flex; }
+
+/* Подсказка «поверните телефон» — только пока экран вертикальный */
+.gf-rotate { position: fixed; left: 0; right: 0; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 60; display: none; justify-content: center; pointer-events: none; }
+.gf-rotate span { display: flex; align-items: center; background: rgba(12, 20, 16, .72); color: #fff; padding: 9px 16px; border-radius: 999px; font-size: 13px; backdrop-filter: blur(6px); }
+.gf-rotate span svg { margin-right: 8px; }
+@media (orientation: portrait) and (max-height: 900px) { .miniapp.gamefull .gf-rotate { display: flex; } }
+
+/* Если телефон всё же повернули — интерфейс не должен «прыгать» под вырезом */
+@supports (padding: env(safe-area-inset-left)) {
+  .miniapp.gamefull { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+}
