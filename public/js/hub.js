@@ -11,6 +11,7 @@ import { openLobby } from './lobby.js';
 import { openMiniApp } from './panels.js';
 import { Feed, Viewers } from './feed.js';
 import { openDock, ytDock, oldShell } from './dock.js';
+import { Vid } from './media.js';
 import { Events } from './events.js';
 
 const TABS = [['events', 'party-popper', 'События'], ['communities', 'users', 'Сообщества'], ['music', 'music', 'Музыка'], ['apps', 'gamepad-2', 'Игры'], ['help', 'life-buoy', 'Поддержка']];
@@ -262,7 +263,6 @@ function Clips({ on }) {
         <div class=${cx('clip-v', !k.short && 'wide')}>
           ${i === act && on && !old ? html`<iframe class="clip-yt" src=${`https://www.youtube.com/embed/${k.yt}?autoplay=1&playsinline=1&rel=0&enablejsapi=1&controls=0&origin=${encodeURIComponent(location.origin)}`} sandbox=${YT_SANDBOX} allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" title=${k.text || 'Видео'}></iframe>` : html`<img class="clip-poster" src=${`https://i.ytimg.com/vi/${k.yt}/hqdefault.jpg`} alt="" loading="lazy" referrerpolicy="no-referrer" />`}
           <div class="clip-touch" onClick=${() => (old ? window.open(ytLink(k), '_blank', 'noopener') : i === act && setPaused(!paused))}></div>
-          ${i === act && (paused || old) && html`<span class="clip-pause"><${Icon} n="play" s=${44} /></span>`}
           <div class="clip-info"><button class="clip-au" onClick=${e => { e.stopPropagation(); showChannel(k.chat, k.username); }}><${Avatar} src=${k.avatar} name=${k.title} color=${k.color} s=${34} /><b>${k.title}</b><small>канал · ${fmtShort(k.ts)}</small></button>${k.text && html`<p>${k.text}</p>`}</div>
         </div>
         <div class="clip-act">
@@ -272,8 +272,7 @@ function Clips({ on }) {
         </div></article>`;
       const u = who(k.by); return html`<article class="clip" key=${k.id}>
       <div class="clip-v" onClick=${() => i === act && setPaused(!paused)}>
-        <video src=${Math.abs(i - act) <= 1 ? k.url : undefined} loop playsinline disableRemotePlayback preload=${i === act ? 'auto' : 'metadata'}></video>
-        ${i === act && paused && html`<span class="clip-pause"><${Icon} n="play" s=${44} /></span>`}
+        <${Vid} src=${Math.abs(i - act) <= 1 ? k.url : undefined} loop playsinline disableRemotePlayback preload=${i === act ? 'auto' : 'metadata'} />
         <div class="clip-info"><button class="clip-au" onClick=${e => { e.stopPropagation(); import('./panels.js').then(P => P.showProfile(k.by)); }}><${Avatar} u=${u} src=${u.avatar} name=${userName(u)} color=${u.color} s=${34} /><b>${userName(u)}</b><small>${fmtShort(k.ts)}</small></button>${k.text && html`<p>${k.text}</p>`}</div>
       </div>
       <div class="clip-act">

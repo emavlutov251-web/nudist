@@ -83,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 34;      // 3.4: без сжатия в оболочке — у всех пропали ромбики вместо букв
+    private static final int APP_VERSION = 35;      // 3.5: проверка скачанного интерфейса — ромбики больше не вернутся
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -200,6 +200,9 @@ public class MainActivity extends Activity {
                         if (rel == null || rel.contains("..") || rel.startsWith("/")) continue;
                         byte[] body = fetchBytes(server + "/" + rel);
                         if (body == null) { deleteTree(tmp); prefs.edit().putString("webSkip", build).apply(); return; }      // недокачали — попробуем завтра
+                        if (!looksLikeText(rel, body)) {      // приехало сжатое или битое: такую версию не берём вовсе
+                            deleteTree(tmp); prefs.edit().putString("webSkip", build).apply(); return;
+                        }
                         File f = new File(tmp, rel);
                         File parent = f.getParentFile();
                         if (parent != null && !parent.isDirectory() && !parent.mkdirs()) { deleteTree(tmp); return; }
@@ -233,6 +236,55 @@ public class MainActivity extends Activity {
         return b == null ? null : new String(b, StandardCharsets.UTF_8);
     }
 
+    /**
+     * Ответ прокси/VPN может прийти сжатым, а заголовок Content-Encoding по дороге теряется (так бывает у мобильных
+     * операторов и в VPN). Тогда в кеш интерфейса попадают бинарные байты, и WebView показывает вместо страницы
+     * абракадабру из значков — ровно то, на что жаловались друзья. Поэтому распознаём сжатие по первым байтам
+     * и распаковываем сами, не надеясь на заголовок.
+     */
+    private static byte[] unpack(byte[] b) {
+        if (b == null || b.length < 2) return b;
+        try {
+            if ((b[0] & 0xFF) == 0x1F && (b[1] & 0xFF) == 0x8B) {          // gzip
+                java.util.zip.GZIPInputStream in = new java.util.zip.GZIPInputStream(new java.io.ByteArrayInputStream(b));
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(Math.max(1024, b.length * 4));
+                byte[] buf = new byte[16384]; int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                in.close();
+                return out.toByteArray();
+            }
+            if ((b[0] & 0xFF) == 0x78 && ((b[0] & 0xFF) * 256 + (b[1] & 0xFF)) % 31 == 0) return inflateZlib(b);   // zlib
+        } catch (Throwable e) { return b; }
+        return b;
+    }
+
+    private static byte[] inflateZlib(byte[] b) throws java.io.IOException, java.util.zip.DataFormatException {
+        java.util.zip.Inflater inf = new java.util.zip.Inflater(false);
+        inf.setInput(b, 0, b.length);
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(Math.max(1024, b.length * 4));
+        byte[] buf = new byte[16384]; int n;
+        while (!inf.finished()) { n = inf.inflate(buf); if (n == 0) { if (inf.needsInput() || inf.needsDictionary()) break; } else out.write(buf, 0, n); }
+        inf.end();
+        return out.toByteArray();
+    }
+
+    /** Интерфейс — это текст. Если из сети пришли двоичные данные (сжатие, ошибка прокси), такую копию брать нельзя. */
+    private static boolean looksLikeText(String rel, byte[] b) {
+        if (b == null || b.length == 0) return false;
+        if (rel.endsWith(".woff2") || rel.endsWith(".png") || rel.endsWith(".jpg") || rel.endsWith(".jpeg")
+                || rel.endsWith(".webp") || rel.endsWith(".gif") || rel.endsWith(".ico") || rel.endsWith(".avif")) return true;
+        if ((b[0] & 0xFF) == 0x1F && b.length > 1 && (b[1] & 0xFF) == 0x8B) return false;      // нераспакованный gzip
+        // Честная проверка: текст интерфейса — всегда корректный UTF-8. Бинарный файл, показанный как текст,
+        // почти никогда не проходит эту проверку, а русские буквы проходят всегда.
+        try {
+            java.nio.charset.CharsetDecoder dec = java.nio.charset.StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
+            dec.decode(java.nio.ByteBuffer.wrap(b));
+            return true;
+        } catch (Throwable e) { return false; }
+    }
+
     /** GET без кеша. Приложение и так качает только интерфейс и только раз в сутки. */
     private static byte[] fetchBytes(String url) {
         java.net.HttpURLConnection c = null;
@@ -247,7 +299,7 @@ public class MainActivity extends Activity {
                 java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(Math.max(1024, c.getContentLength()));
                 byte[] buf = new byte[16384]; int n;
                 while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-                return out.toByteArray();
+                return unpack(out.toByteArray());
             } finally { try { in.close(); } catch (Throwable ignored) { } }
         } catch (Throwable e) {
             return null;
@@ -660,7 +712,23 @@ public class MainActivity extends Activity {
         try {
             overlayFiles = new java.util.HashSet<String>();
             File ov = overlayDirNoList();
-            if (ov != null) for (String n : ov.list()) overlayFiles.add(n);
+            if (ov != null) {
+                // Проверяем главную страницу скачанной версии. Если она пришла сжатой или битой (так бывало при VPN
+                // и у мобильных операторов), показывать её нельзя: человек видел вместо приложения экран с ромбиками.
+                // Тогда стираем скачанную версию целиком — приложение вернётся к встроенной и завтра скачает заново.
+                byte[] idx = null;
+                File f = new File(ov, "index.html");
+                if (f.isFile()) { try { idx = readFile(f); } catch (Throwable e) { idx = null; } }
+                if (idx == null || !looksLikeText("index.html", idx)) {
+                    deleteTree(ov);
+                    prefs.edit().remove("web").remove("webSkip").apply();
+                    assetCache.clear();
+                    overlayFiles = new java.util.HashSet<String>();
+                    embeddedReady = true;
+                    return;
+                }
+                for (String n : ov.list()) overlayFiles.add(n);
+            }
         } catch (Throwable e) { overlayFiles = new java.util.HashSet<String>(); }
         embeddedReady = true;
     }
@@ -729,6 +797,9 @@ public class MainActivity extends Activity {
         File ov = overlayDirNoList();
         if (ov != null && overlayFiles != null && overlayFiles.contains(rel)) {
             try { body = readFile(new File(ov, rel)); } catch (Throwable e) { body = null; }
+            // Файл мог испортиться ещё до этой сборки (сжатие, потерянный VPN-прокси заголовок). Тогда молча
+            // показываем встроенную копию: лучше старая страница, чем экран с ромбиками.
+            if (body != null && !looksLikeText(rel, body)) body = null;
         }
         if (body == null) body = assetFile(rel);
         if (body == null) return null;                       // нет в APK — пусть решает сервер (новые файлы, картинки, страницы)

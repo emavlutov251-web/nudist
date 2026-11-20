@@ -8,6 +8,42 @@ export function useMediaUrl(media) {
   useEffect(() => { let live = true; if (media && media.ek) mediaUrl(media).then(x => live && setU(x)).catch(() => live && setU(null)); else setU(media ? media.url : null); return () => { live = false; }; }, [media && media.url]);
   return u;
 }
+// ───── видео без «серой плашки»
+// WebView (и часть браузеров) до первого кадра рисует у <video> свою серую заставку с чёрным треугольником.
+// При включённом VPN видео грузится медленно — и человек подолгу видит именно этот серый экран.
+// Поэтому кадр берём сами: как только видео загрузилось, вырезаем первый кадр в картинку и запоминаем её.
+// Дальше видео открывается с обложкой на тёмном фоне — серой заставки не видно никогда.
+const POSTERS = new Map(), POSTER_TRY = new Map();
+export function videoPoster(url) {
+  if (!url) return null;
+  if (POSTERS.has(url)) return POSTERS.get(url) || null;
+  if (POSTER_TRY.has(url)) return null;
+  POSTER_TRY.set(url, 1);
+  const tmp = document.createElement('video');
+  tmp.muted = true; tmp.playsInline = true; tmp.preload = 'auto';
+  const done = v => { try { tmp.removeAttribute('src'); tmp.load(); } catch (e) { /* уже нет */ } POSTERS.set(url, v || ''); POSTER_TRY.delete(url); bump(); };
+  const timer = setTimeout(() => done(''), 15000);
+  tmp.onloadeddata = () => {
+    const w = Math.min(720, tmp.videoWidth || 480), h = Math.round(w * (tmp.videoHeight || 854) / (tmp.videoWidth || 480));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    try { c.getContext('2d').drawImage(tmp, 0, 0, w, h); clearTimeout(timer); done(c.toDataURL('image/jpeg', .7)); } catch (e) { clearTimeout(timer); done(''); }
+  };
+  tmp.onerror = () => { clearTimeout(timer); done(''); };
+  try { tmp.src = url; tmp.load(); } catch (e) { clearTimeout(timer); done(''); }
+  return null;
+}
+// Сам плеер: пока кадра нет — своя тёмная заставка вместо серой плашки движка.
+export function Vid({ src, poster, className, ...rest }) {
+  const [ready, setR] = useState(false), [, tick] = useState(0);
+  useEffect(() => { setR(false); if (src && !POSTERS.has(src)) { const t = setInterval(() => { if (POSTERS.has(src)) { clearInterval(t); tick(x => x + 1); } }, 400); return () => clearInterval(t); } }, [src]);
+  const p = poster || videoPoster(src);
+  return html`<div class=${cx('vstage', className)}>
+    <video src=${src} poster=${p || undefined} playsInline
+      onLoadedData=${() => setR(true)} onPlaying=${() => setR(true)} onTimeUpdate=${() => { if (!ready) setR(true); }} ...${rest}></video>
+    ${!p && !ready && html`<i class="vstage-wait" aria-hidden="true"></i>`}
+  </div>`;
+}
+
 const fit = (w, h, max = 420, maxH = 420) => { if (!w || !h) return { width: 280, height: 200 }; const k = Math.min(max / w, maxH / h, 1); return { width: Math.max(120, Math.round(w * k)), height: Math.max(80, Math.round(h * k)) }; };
 
 export function Photo({ m, list }) {
@@ -22,7 +58,7 @@ export function saveGif(media) { import('./lib.js').then(L => { const l = S.sett
 export function VideoMsg({ m }) {
   const u = useMediaUrl(m.media), d = fit(m.media.w || 16, m.media.h || 9, 420, 360), [open, setOpen] = useState(!m.media.spoiler);
   return html`<div class=${cx('ph vid', !open && 'covered')} style=${`width:${d.width}px;aspect-ratio:${d.width}/${d.height}`}>
-    ${u && html`<video src=${u} controls=${open} preload=${(S.settings.autoDl || {}).video !== false ? 'metadata' : 'none'} playsinline></video>`}
+    ${u && html`<${Vid} src=${u} controls=${open} preload=${(S.settings.autoDl || {}).video !== false ? 'metadata' : 'none'} />`}
     ${!open && html`<div class="leafcover" onClick=${() => setOpen(true)}><span>🍃</span><b>Снять листок</b></div>`}
     ${m.media.dur ? html`<i class="tag-gif">${fmtDur(m.media.dur)}</i>` : ''}</div>`;
 }
@@ -138,7 +174,7 @@ export function MediaViewer() {
       <button class="ib" onClick=${async () => { const x = await mediaUrl(m.media); const a = document.createElement('a'); a.href = m.media.ek ? x : m.media.url + '?n=' + encodeURIComponent(m.media.name || 'media'); a.download = m.media.name || 'media'; a.click(); }} title="Сохранить"><${Icon} n="download" /></button>
       <button class="ib" onClick=${close} title="Закрыть (Esc)"><${Icon} n="x" /></button></header>
     <div class="vw-stage" onWheel=${wheel} onMouseDown=${down} onMouseMove=${move} onMouseUp=${up} onDblClick=${() => setZ(s => (s.k > 1 ? { k: 1, x: 0, y: 0 } : { k: 2.5, x: 0, y: 0 }))} onClick=${e => e.target === e.currentTarget && close()}>
-      ${!u ? html`<${Spinner} />` : m.type === 'video' ? html`<video src=${u} controls autoplay playsinline></video>` : m.type === 'doc' ? html`<iframe title=${m.media.name} src=${u} sandbox=""></iframe>` : html`<img src=${u} alt="" draggable="false" style=${`transform:translate(${z.x}px,${z.y}px) scale(${z.k});cursor:${z.k > 1 ? 'grab' : 'zoom-in'}`} />`}
+      ${!u ? html`<${Spinner} />` : m.type === 'video' ? html`<${Vid} src=${u} controls autoplay playsinline />` : m.type === 'doc' ? html`<iframe title=${m.media.name} src=${u} sandbox=""></iframe>` : html`<img src=${u} alt="" draggable="false" style=${`transform:translate(${z.x}px,${z.y}px) scale(${z.k});cursor:${z.k > 1 ? 'grab' : 'zoom-in'}`} />`}
     </div>
     ${v.i > 0 && html`<button class="vw-nav l" onClick=${() => go(-1)} aria-label="Назад"><${Icon} n="chevron-left" s=${30} /></button>`}${v.i < v.items.length - 1 && html`<button class="vw-nav r" onClick=${() => go(1)} aria-label="Вперёд"><${Icon} n="chevron-right" s=${30} /></button>`}
     ${m.text && m.type !== 'doc' && html`<footer>${m.text}</footer>`}</div>`;
