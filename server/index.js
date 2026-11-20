@@ -171,10 +171,19 @@ function buildSw() {
   // Отпечаток встроенного интерфейса — тот же, что считает приложение (SHA-256 по index.html, 12 символов).
   // По нему приложение понимает, совпадает ли его копия с сервером, и решает, обновлять ли интерфейс.
   // В тестах BUILD_SALT позволяет «выложить новую версию», не меняя файлов — учитываем его и здесь.
+  // Отпечаток для сборки приложения (его же сравнивает APK) — только по index.html.
   let v; try { const ih = crypto.createHash('sha256').update(fs.readFileSync(path.join(PUBLIC, 'index.html'))); if (process.env.BUILD_SALT) ih.update(process.env.BUILD_SALT); v = swVer = ih.digest('hex').slice(0, 12); } catch (e) { v = swVer = hash.digest('hex').slice(0, 12); }
+  // А версия кеша оболочки — по ВСЕМ файлам интерфейса. Иначе правки в сценариях и стилях не доходили до тех,
+  // у кого приложение уже установлено: кеш считал себя свежим, потому что index.html не менялся, и старые файлы
+  // оставались на устройстве. AПК-отпечаток выше при этом не трогаем: он по-прежнему про index.html.
+  // Хеш считается один раз, а живёт сервер долго — значит отпечаток должен обновляться сам,
+  // иначе после правки файла кеш на устройствах останется прежним до перезапуска сервера.
+  let cacheV = '';
+  try { let newest = 0; const walk2 = d => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk2(f); else { const st = fs.statSync(f); if (st.mtimeMs > newest) newest = st.mtimeMs; if (st.size) {} } } }; walk2(PUBLIC); cacheV = crypto.createHash('sha1').update(hash.digest('hex') + ':' + Math.round(newest)).digest('hex').slice(0, 12); }
+  catch (e) { cacheV = hash.digest('hex').slice(0, 12); }
   if (process.env.NO_SW) return `self.addEventListener('install',function(){self.skipWaiting()});self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}).then(function(){return self.registration.unregister()}))});`;
-  return `// Нудист: кеш оболочки, версия ${v}
-var V='nudist-${v}',FILES=${JSON.stringify(files)},SET={};FILES.forEach(function(f){SET[f]=1});
+  return `// Нудист: кеш оболочки, версия ${cacheV}
+var V='nudist-${cacheV}',FILES=${JSON.stringify(files)},SET={};FILES.forEach(function(f){SET[f]=1});
 self.addEventListener('install',function(e){e.waitUntil(caches.open(V).then(function(c){return Promise.all(FILES.map(function(f){return fetch(f,{cache:'no-cache',credentials:'same-origin'}).then(function(r){if(!r.ok)throw new Error(f+' '+r.status);return c.put(f,r)})}))}))});
 self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k.indexOf('nudist-')===0&&k!==V}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});
 self.addEventListener('message',function(e){if(e.data==='skip')self.skipWaiting()});
@@ -186,8 +195,11 @@ self.addEventListener('notificationclick',function(e){e.notification.close();var
 e.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(function(cs){for(var i=0;i<cs.length;i++){if('focus' in cs[i])return cs[i].focus()}return self.clients.openWindow(u)}))});
 `;
 }
+let swAt = 0;
 function serveSw(req, res) {
-  if (!swBody) swBody = buildSw();
+  // Отдаём свежую версию списка файлов: если в public что-то поменялось, браузер должен это заметить сразу.
+  const now2 = Date.now();
+  if (!swBody || now2 - swAt > 5000) { swBody = buildSw(); swAt = now2; }
   res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache, max-age=0', 'service-worker-allowed': '/', 'x-content-type-options': 'nosniff' }); res.end(swBody);
 }
 // ───── загрузки
@@ -354,7 +366,9 @@ function onConnect(ws, tok, sess, u, ip) {
     if (isBinary) return G.audio(c, data); // звук звонка, идущий через сервер
     let q; try { q = JSON.parse(data.toString()); } catch (e) { return; }
     if (!q || typeof q.m !== 'string') return;
-    if (++c.n > 80) return c.raw(JSON.stringify({ id: q.id, e: 'Слишком много запросов. Помедленнее, мы записываем.' }));
+    // У стола и в комнате рейва своя частота (в server/cards.js и server/rave.js): партия — это десятки быстрых
+    // «положить карту / обновить состояние», и общий счётчик на соединение честную игру рвал. Всё остальное — как раньше.
+    if (!/^(cards|rave)\./.test(q.m) && ++c.n > 80) return c.raw(JSON.stringify({ id: q.id, e: 'Слишком много запросов. Помедленнее, мы записываем.' }));
     const h = R.H[q.m]; C.metrics.rpc++; minuteCount++;
     if (!h) return c.raw(JSON.stringify({ id: q.id, e: 'Неизвестный метод ' + q.m }));
     if (!db.users[c.uid] || db.users[c.uid].deleted) return;
