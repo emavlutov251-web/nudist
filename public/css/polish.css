@@ -55,3 +55,13 @@ body { overscroll-behavior-x: none; }
 /* Приложение для Android: нижнюю панель рисует сама оболочка, веб-копию не показываем */
 html.native-nav .nav { display: none !important; }
 html.native-nav .side { padding-bottom: 0 !important; }
+
+/* ── Приложение для Android: низ экрана занят нативной панелью (её рисует оболочка).
+   Высоту сообщает js/appnative.js в --nav-h. Все плавающие слои заканчиваются выше неё. */
+html.native-nav { --nav-h: 56px; }
+html.native-nav .overlay { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)); }
+html.native-nav .toasts { bottom: calc(var(--nav-h) + 12px); }
+html.native-nav .hintbar { top: calc(10px + env(safe-area-inset-top, 0px)); }
+html.native-nav .upd-bar { bottom: calc(var(--nav-h) + 12px); }
+html.native-nav .menu-bg { bottom: var(--nav-h); }
+html.native-nav .story-ed, html.native-nav .viewer { padding-bottom: var(--nav-h); }

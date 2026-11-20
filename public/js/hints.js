@@ -38,9 +38,12 @@ function dismissActive() {
   setTimeout(() => root.remove(), 240);
 }
 // Подсказка может не поместиться (открыто видео/история/«Прикрыться» или показана другая) — тогда откладываем, не теряем.
+// Пока открыто окно (настройки, магазин, профиль), меню или звонок — подсказка подождёт:
+// иначе она ложится поверх окна и закрывает кнопки, как было с «Включите push-уведомления».
+const busy = () => !!(S.modals && S.modals.length) || !!(S.menu) || !!(S.dock && S.dock.open);
 function canShow(id, { gap = 20e3, per = 2, force = false } = {}) {
   if (seen(id)) return false;
-  if (active || S.viewer || S.storyView || S.ui.boss) return false;
+  if (active || S.viewer || S.storyView || S.ui.boss || busy()) return false;
   if (!force && perLoad >= per) return false;
   if (Date.now() - lastShown < gap) return false;
   return true;
@@ -79,7 +82,7 @@ function remindNotif() {
   if (!native && perm === 'unsupported') return;
   if (!native && perm === 'denied') return hint('notif-denied', 'Уведомления заблокированы браузером. Чтобы не пропускать сообщения: значок слева от адресной строки → разрешить.', { icon: '🔕', delay: 13000 });
   const fire = () => {
-    if (active || S.viewer || S.storyView || S.ui.boss || perLoad >= 2) { setTimeout(fire, 8000); return; }   // не влезаем на полпути — доскажем позже в этом же заходе
+    if (active || S.viewer || S.storyView || S.ui.boss || busy() || perLoad >= 2) { setTimeout(fire, 8000); return; }   // не влезаем на полпути — доскажем позже в этом же заходе
     const now = Date.now(); if (now - lastShown < 20e3) { setTimeout(fire, 5000); return; }
     local.set('hint.notif', n + 1); perLoad++; lastShown = now;
     styleOnce();

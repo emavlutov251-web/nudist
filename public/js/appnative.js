@@ -14,15 +14,27 @@ import { openChat, closeChat } from './store.js';
 const app = () => (typeof window !== 'undefined' && window.NudistApp) || null;
 export const nativeNav = () => { const a = app(); try { return !!(a && typeof a.nav === 'function'); } catch (e) { return false; } };
 
+// Окна, которые считаются своим разделом: магазин и настройки. Остальные окна (профиль человека,
+// выбор чата и т. п.) раздел не переключают — иначе панель подсвечивала не то.
+const SHOP_MODAL = m => {
+  const n = (m && m.c && (m.c.name || '')) || '';
+  return /Shop/.test(n);
+};
+const SETTINGS_MODAL = m => {
+  const n = (m && m.c && (m.c.name || '')) || '';
+  return /Settings/.test(n);
+};
+
 /** Текущий раздел для панели: chats | feed | hub | shop | profile */
 function section() {
   if (!S.me) return 'auth';
   const u = S.ui;
-  if (S.modals.length && S.tab === 'shop') return 'shop';
+  if (u.boss) return 'chats';
   if (u.hub === 'feed') return 'feed';
   if (u.hub) return 'hub';
-  if (S.modals.length) return 'modal';
-  if (u.chat && !u.list) return 'chat';
+  if (S.modals.some(SETTINGS_MODAL)) return 'profile';
+  if (S.modals.some(SHOP_MODAL)) return 'shop';
+  if (u.chat && !u.list) return 'chat';      // в чате панель не подсвечивает разделы, но остаётся на месте
   return 'chats';
 }
 

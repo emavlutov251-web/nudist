@@ -74,7 +74,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 19;      // 1.9: нижняя панель нарисована в самом приложении (требование RuStore) приложение само переезжает на новый адрес сервера (старый, nudist.onrender.com, отключён)
+    private static final int APP_VERSION = 20;      // 2.0: нижняя панель нарисована в самом приложении (требование RuStore) приложение само переезжает на новый адрес сервера (старый, nudist.onrender.com, отключён)
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -792,7 +792,9 @@ public class MainActivity extends Activity {
         box.setGravity(Gravity.CENTER_VERTICAL);
         box.setPadding(dp(26), dp(30), dp(26), dp(30));
         scroll.addView(box, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(scroll, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        plp.bottomMargin = (navBar != null && navBar.getVisibility() == View.VISIBLE) ? NAV_H : 0;
+        root.addView(scroll, plp);
         panel = scroll;
         return box;
     }
@@ -804,6 +806,7 @@ public class MainActivity extends Activity {
     // высота учитывает вырез экрана и полосу жестов.
 
     private static final String[] NAV_KEYS = { "chats", "feed", "hub", "shop", "profile" };
+    private final int NAV_H = dpConst(56);      // высота панели; системная полоса жестов идёт ниже, окно не полноэкранное
     private static final int NAV_OFF = 0xFF8CA79A, NAV_ON = 0xFF2BB36A;
     private LinearLayout navBar;
     private final View[] navItems = new View[5];
@@ -871,23 +874,14 @@ public class MainActivity extends Activity {
             navUnread[i] = badge;
             navBar.addView(item);
         }
-        int sh = dp(56) + safeBottom();
+        int sh = NAV_H;
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, sh, Gravity.BOTTOM);
         root.addView(navBar, lp);
     }
 
-    /** Высота зоны жестов внизу экрана (панель должна закончиться выше неё). */
-    private int safeBottom() {
-        if (Build.VERSION.SDK_INT < 28) return 0;
-        try {
-            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
-            if (Build.VERSION.SDK_INT >= 30) {
-                android.view.WindowInsets ins = getWindow().getDecorView().getRootWindowInsets();
-                if (ins != null) return ins.getInsets(android.view.WindowInsets.Type.systemBars()).bottom;
-            }
-            int id = getResources().getIdentifier("navigation_bar_height", "dimen", "android");
-            return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
-        } catch (Throwable e) { return 0; }
+    /** Плотность экрана для констант, которые нужны до создания View. */
+    private static int dpConst(int v) {
+        return (int) (v * android.content.res.Resources.getSystem().getDisplayMetrics().density);
     }
 
     /** Панель показывается, когда человек вошёл в аккаунт. */
@@ -898,9 +892,9 @@ public class MainActivity extends Activity {
                 if (navBar == null) return;
                 if (on == (navBar.getVisibility() == View.VISIBLE)) return;
                 navBar.setVisibility(on ? View.VISIBLE : View.GONE);
-                int h = navBar.getHeight();
-                int bottom = on ? (h > 0 ? h : dp(56) + safeBottom()) : 0;
-                web.setPadding(web.getPaddingLeft(), web.getPaddingTop(), web.getPaddingRight(), bottom);
+                int bottom = on ? NAV_H : 0;
+                FrameLayout.LayoutParams wl = (FrameLayout.LayoutParams) web.getLayoutParams();
+                if (wl.bottomMargin != bottom) { wl.bottomMargin = bottom; web.setLayoutParams(wl); }
                 if (panel != null) {
                     FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) panel.getLayoutParams();
                     lp.bottomMargin = bottom;
@@ -919,7 +913,7 @@ public class MainActivity extends Activity {
                     JSONObject o = new JSONObject(json);
                     boolean authed = o.optBoolean("authed", false);
                     setNavVisible(authed);
-                    if (!authed) return;
+                    if (!authed) { setNavSection(""); return; }
                     setNavSection(o.optString("section", ""));
                     int n = o.optInt("unread", 0);
                     showBadge(0, n);

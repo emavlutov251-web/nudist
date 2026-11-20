@@ -224,10 +224,13 @@ function Welcome() {
     <div class="row"><button class="btn ghost" onClick=${() => { const c = Object.values(S.chats).find(x => x.type === 'saved'); c ? openChat(c.id) : openUser(S.me.id); }}><${Icon} n="bookmark" s=${16} /> Избранное</button><button class="btn ghost" onClick=${() => { S.ui.boss = true; bump(); }}><${Icon} n="table" s=${16} /> Прикрыться</button></div></div>`;
 }
 function Toasts() { return html`<div class="toasts" aria-live="polite">${S.toasts.map(t => html`<div key=${t.id} class=${cx('toast', t.kind)}>${t.text}</div>`)}</div>${S.ui.update && !S.modals.length && html`<div class="upd-bar" role="status"><span>Вышла новая версия «Нудиста»</span><button class="btn sm" onClick=${S.ui.update}>Обновить</button></div>`}`; }
+// В приложении для Android низ экрана занят нативной панелью разделов (её рисует оболочка).
+// Меню, окна и подсказки должны заканчиваться выше неё, иначе кнопки уезжают под панель.
+export const navH = () => (window.NudistApp && window.NudistApp.nav ? Number(document.documentElement.style.getPropertyValue('--nav-h')) || 56 : 0);
 function Menu() {
   const m = S.menu, ref = useRef(); const [sub, setSub] = useState(null);
   useEffect(() => { setSub(null); }, [m]);
-  useEffect(() => { const el = ref.current; if (!el || !m) return; const r = el.getBoundingClientRect(); let x = m.right ? m.x - r.width : m.x, y = m.y; if (x + r.width > innerWidth - 8) x = innerWidth - r.width - 8; if (y + r.height > innerHeight - 8) y = Math.max(8, innerHeight - r.height - 8); el.style.left = Math.max(8, x) + 'px'; el.style.top = y + 'px'; el.style.visibility = 'visible'; });
+  useEffect(() => { const el = ref.current; if (!el || !m) return; const r = el.getBoundingClientRect(); let x = m.right ? m.x - r.width : m.x, y = m.y; const bottom = innerHeight - navH(); if (x + r.width > innerWidth - 8) x = innerWidth - r.width - 8; if (y + r.height > bottom - 8) y = Math.max(8, bottom - r.height - 8); el.style.left = Math.max(8, x) + 'px'; el.style.top = y + 'px'; el.style.visibility = 'visible'; });
   if (!m) return null;
   const items = sub || m.items;
   return html`<div class="menu-bg" onMouseDown=${closeMenu} onContextMenu=${e => { e.preventDefault(); closeMenu(); }}>
