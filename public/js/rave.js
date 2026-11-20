@@ -1,6 +1,7 @@
 // Рейв — комната, где вместе смотрят клипы и слушают музыку. Хозяин переключает — у остальных лента идёт следом.
 // Сами видео и музыка идут с обычных адресов, поэтому плеер здесь самый обычный: сервер хранит только «что и с какой секунды».
 import { html, useState, useEffect, useRef, S, bump, rpc, on, toast, Icon, Avatar, cx, userName, Spinner, Empty, addUsers } from './lib.js';
+import { Vid } from './media.js';
 
 export const RV = { cur: null, list: [], ev: null, voice: false, link: null };      // voice — включён общий голосовой канал
 // Одна и та же комната — это и чат (для голосового канала), и место просмотра.
@@ -87,7 +88,7 @@ function RavePlayer({ room }) {
   if (now && now.kind === 'link') {
     const L = RV.link || {};
     if (!L.url) return html`<div class="rv-empty"><${Spinner} /></div>`;
-    if (L.kind === 'file') return html`<div class="rv-stage"><video ref=${vid} src=${L.url} playsinline preload="metadata" controls=${host} onClick=${e => { if (!host) { const v = e.currentTarget; if (v.paused) { v.currentTime = now.at + (now.paused ? 0 : (Date.now() - now.ts) / 1000); v.play().catch(() => {}); } } }}></video>
+    if (L.kind === 'file') return html`<div class="rv-stage"><${Vid} src=${L.url} preload="metadata" controls=${host} onClick=${e => { if (!host) { const w = e.target.closest ? e.target.closest('.vstage') : null; const v = w ? w.querySelector('video') : e.target; if (v && v.paused) { v.currentTime = now.at + (now.paused ? 0 : (Date.now() - now.ts) / 1000); v.play().catch(() => {}); } } }} />
       <span class="rv-src">${L.title}</span></div>`;
     if (L.kind === 'embed') return html`<div class="rv-stage rv-embed"><iframe key=${L.url} src=${L.url} sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-popups" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" title=${L.title}></iframe>
       ${L.warn === 'yt' && html`<p class="hint">YouTube в России без VPN не грузится. Если вместо видео пусто — включите VPN или откройте оригинал кнопкой ниже.</p>`}
@@ -101,7 +102,7 @@ function RavePlayer({ room }) {
   if (cur && cur.clip) {
     const c = cur.clip;
     return html`<div class="rv-stage">
-      <video ref=${vid} src=${c.url} playsinline preload="metadata" onClick=${e => { if (!host) { if (e.currentTarget.paused) { e.currentTarget.currentTime = now.at; e.currentTarget.play().catch(() => {}); } } }}></video>
+      <${Vid} src=${c.url} preload="metadata" onClick=${e => { if (!host) { const v = e.target.closest('.vstage') ? e.target.closest('.vstage').querySelector('video') : e.target; if (v && v.paused) { v.currentTime = now.at; v.play().catch(() => {}); } } }} />
       ${host && html`<div class="rv-ctl">
         <button title="Пауза" onClick=${() => rpc('rave.pause', { id: room.id, paused: !now.paused, at: (vid.current || {}).currentTime || 0 }).catch(e => toast(e.message, 'err'))}>${now.paused ? html`<${Icon} n="play" s=${20} />` : html`<${Icon} n="pause" s=${20} />`}</button>
         <input type="range" min="0" max=${Math.max(1, c.dur || 100)} step="0.5" value=${now.paused ? now.at : (vid.current ? vid.current.currentTime : now.at)} onChange=${e => { const at = Number(e.target.value); if (vid.current) vid.current.currentTime = at; rpc('rave.play', { id: room.id, kind: 'clip', item: c.id, at }).catch(() => {}); }} />
