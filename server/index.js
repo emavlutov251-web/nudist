@@ -301,7 +301,8 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
     if (p === '/api/yookassa/hook' && req.method === 'POST') { try { A.limit('ykh:' + ipOf(req), 600, 60e3); await Pay.hook(await readJson(req)); } catch (e) { console.warn('[pay] уведомление:', e.message); return json(res, 500, { error: 'retry' }); } return json(res, 200, { ok: true }); }      // уведомления ЮKassa об оплате
-    if (p === '/api/tg/hook' && req.method === 'POST') { let code = 200; try { A.limit('tgh:' + ipOf(req), 1200, 60e3); code = Tg.hook(req.headers['x-telegram-bot-api-secret-token'], await readJson(req)); } catch (e) { console.warn('[tg] сообщение боту:', e.message); } return json(res, code, { ok: code === 200 }); }      // сообщения боту от Telegram: вход через Telegram
+    if (p === '/api/tg/health' && req.method === 'GET') return json(res, 200, { ok: true });      // жив ли сайт: телефон проверяет этим адресом обновления и повторной отправкой
+  if (p === '/api/tg/hook' && req.method === 'POST') { let code = 200; try { A.limit('tgh:' + ipOf(req), 1200, 60e3); code = Tg.hook(req.headers['x-telegram-bot-api-secret-token'], await readJson(req)); } catch (e) { console.warn('[tg] сообщение боту:', e.message); } return json(res, code, { ok: code === 200 }); }      // сообщения боту от Telegram: вход через Telegram
     if (p === '/api/ask/info' && req.method === 'GET') return json(res, 200, Ask.info(url.searchParams.get('u'), ipOf(req)));
     if (p === '/api/ask' && req.method === 'POST') return json(res, 200, Ask.send(await readJson(req), ipOf(req)));
     if (p === '/api/ask/mine' && req.method === 'POST') return json(res, 200, Ask.asked((await readJson(req)).items, ipOf(req)));

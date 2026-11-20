@@ -156,6 +156,12 @@ function Flags({ role }) {
     <section class="apanel"><h3>Объявление всем</h3><p class="hint">Придёт каждому в личку от бота @nudist. Единственный вид «рекламы» в сервисе — пользуйтесь совестливо.</p>
       <textarea rows="5" maxlength="2000" placeholder="Завтра с 3:00 до 3:05 технические работы: меняем песок." value=${text} onInput=${e => setText(e.target.value)} disabled=${!can}></textarea>
       <button class="btn" disabled=${!can || !text.trim()} onClick=${async () => { if (!confirm('Разослать объявление всем пользователям?')) return; const r = await run(() => rpc('admin.broadcast', { text })); if (r) { toast('Отправлено: ' + r.n); setText(''); } }}><${Icon} n="megaphone" s=${16} /> Разослать</button>
+      <div class="news-push">
+        <h3 class="mt">Обновление в Telegram</h3>
+        <p class="hint">Соберёте новую версию — нажмите: бот напишет в Telegram всем, кто его запускал, и в ленту телефонов придёт карточка обновления. Текст и новинки — из apk.json. В сутки не больше двух таких сообщений, ночью (23:00–9:00 по Москве) молчим, дальше отправится с первой кнопкой.</p>
+        <button class="btn" disabled=${!can} onClick=${async () => { if (!confirm('Разослать обновление в Telegram и в ленту?')) return; const r = await run(() => rpc('admin.news', {})); if (r) { const tg = r.tg || {}; toast(tg.ok ? `Telegram: ${tg.sent} из ${tg.total}${tg.skipped ? ' (' + tg.skipped + ')' : ''} · лента: ${r.feed}` : 'Не ушло: ' + (tg.error || 'неизвестно')); } }}><${Icon} n="send" s=${16} /> Разослать обновление</button>
+        ${can && html`<button class="btn ghost" onClick=${async () => { if (!confirm('Напомнить про привязку Telegram всем, кто его уже привязал?')) return; const r = await run(() => rpc('admin.news', { wall: 'i', force: 'i' })); if (r) { const tg = r.tg || {}; toast(tg.ok ? `Просьба ушла: ${tg.sent}` : 'Не ушло: ' + (tg.error || 'неизвестно')); } }}>Напомнить про Telegram</button>`}
+      </div>
       <h3 class="mt">Премиум и листики</h3><p class="hint">Бейджи выдаются в карточке пользователя (раздел «Пользователи»). Листики и подписку выдаёт только владелец сервиса: у остальной администрации этих кнопок нет, и сервер такой запрос не примет.</p></section></div>`;
 }
 

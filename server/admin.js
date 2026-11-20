@@ -11,6 +11,7 @@ const { db, save, now, id, token, fail, need, str, int, today } = C;
 const H = R.H;
 
 const RANK = { viewer: 1, moderator: 2, admin: 3, superadmin: 4 };
+const ONE = v => v === 'i' || v === true || Number(v) === 1;
 const rank = u => RANK[(u || {}).admin] || 0;
 function guard(c, min) { const u = db.users[c.uid]; need(rank(u) >= RANK[min], 'Недостаточно прав администратора (нужна роль ' + min + ')'); return u; }
 // Старшинство в администрации: решение старшего (бан, мут, бейдж, галочка, выключатель) младший отменить не может.
@@ -227,6 +228,14 @@ H['admin.broadcast'] = (c, p) => {
   const sysBot = db.users[db.meta.sys]; let n = 0;
   for (const u of Object.values(db.users)) if (!u.bot && !u.deleted) { C.postMessage(C.openDm(sysBot.id, u.id), sysBot.id, { text: '📣 ' + text }, { quiet: true }); n++; }
   log(c, 'broadcast', text.slice(0, 80)); return { n };
+};
+// «Пуш обновления»: одной кнопкой — в Telegram привязавшим и в ленту телефонов. Отдельно от «Объявления всем»:
+// это служебное сообщение про сборку, его повторять безопасно, а текст и список новинок берутся из apk.json.
+H['admin.news'] = async (c, p) => {
+  guard(c, 'admin');
+  const out = await require('./push').newsPush({ by: R.uname(db.users[c.uid]), force: ONE(p.force), wall: ONE(p.wall) });
+  log(c, 'news', `${out.apk.name}: tg ${out.tg && out.tg.sent}/${out.tg && out.tg.total}, лента ${out.feed}`);
+  return out;
 };
 H['admin.apikeys'] = (c, p) => {
   guard(c, 'superadmin'); db.meta.apiKeys = db.meta.apiKeys || [];

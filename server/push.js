@@ -90,6 +90,16 @@ H['app.hello'] = (c, p) => {
   if (u.appVer !== v) { u.appVer = v; save(); }
   return { apk: apkInfo() };
 };
+// Разослать «вышло обновление» по всем каналам: Telegram от привязанного бота + запись в ленту телефона (как у updateItem).
+// Зовётся админом из «Настройки → Админка → Объявления» (admin.news) и полностью из тестов — httptest-зеркало TG_API.
+async function newsPush(extra) {
+  const apk = apkInfo(), Tg = require('./tg'), out = { apk: { code: apk.code, name: apk.name }, tg: null, feed: 0 };
+  try { out.tg = await Tg.newsAnnounce(apk, extra || {}); } catch (e) { out.tg = { ok: false, sent: 0, error: e.message }; }
+  const item = { id: nextId(), title: 'Вышло обновление «Нудиста» ' + apk.name, body: (apk.news[0] ? apk.news[0] + '. ' : '') + 'Нажмите, чтобы скачать: ' + siteLink('/start').replace(/^https?:\/\//, ''), tag: 'update', click: 'update', url: siteLink('/start'), ts: now() };
+  for (const [uid, f] of feeds) { const u = db.users[uid]; if (!u || u.deleted || u.bot || (u.appVer && u.appVer >= apk.code)) continue; f.q.unshift(item); for (const w of f.waiters) w.done([item]); f.at = now(); out.feed++; u.updTold = { c: apk.code, at: now() }; }
+  save();
+  return out;
+}
 function updateItem(u) {      // напоминание об обновлении для ленты телефона или null
   const apk = apkInfo(); if (!apk.code || !u.appVer || u.appVer >= apk.code) return null;
   const t = u.updTold; if (t && t.c === apk.code && now() - t.at < UPD_EVERY) return null;
@@ -187,4 +197,4 @@ H['push.test'] = async (c, p) => { const u = db.users[c.uid];
 
 // Стереть из очереди уведомлений всё, что относится к чату (переписку удалили без следа)
 function forget(uids, tag) { for (const u of uids) { const f = feeds.get(u); if (f && f.q) f.q = f.q.filter(x => x.tag !== tag); } }
-module.exports = { forget, notify, poll, encrypt, vapid, keys, apkInfo };
+module.exports = { forget, notify, poll, encrypt, vapid, keys, apkInfo, newsPush };

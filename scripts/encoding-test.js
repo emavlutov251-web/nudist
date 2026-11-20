@@ -100,6 +100,19 @@ const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРО�
     ck('встроенный плеер подравнивается раз в секунду', /ytSync/.test(ravjs) && /setInterval\(ytSync, 1000\)/.test(ravjs), '');
     ck('у хозяина есть пульт для Ютуба', /rv-ytwrap/.test(ravjs), '');
     ck('CSP разрешает скрипт API Ютуба, но не встроенные', /script-src 'self' https:\/\/www\.youtube\.com/.test(fs.readFileSync(path.join(__dirname, '..', 'server', 'index.js'), 'utf8')), '');
+    // ── Telegram: обновление уходит в бота, просьба привязать — мягкая
+    const tgj = fs.readFileSync(path.join(__dirname, '..', 'server', 'tg.js'), 'utf8');
+    const setj = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'settings.js'), 'utf8');
+    const hintj = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'hints.js'), 'utf8');
+    const pushj = fs.readFileSync(path.join(__dirname, '..', 'server', 'push.js'), 'utf8');
+    const adminj = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'admin.js'), 'utf8');
+    ck('рассылка обновления в Telegram есть и только при TG_NEWS=on', /newsAnnounce/.test(tgj) && /TG_NEWS !== 'on'/.test(tgj), '');
+    ck('рассылка не дублирует: раз в день человеку и не больше двух в сутки', /tgNewsSent/.test(tgj) && /day\.n >= 2/.test(tgj), '');
+    ck('ночью рассылка ждёт утра, а не будит', /ночная тишина/.test(tgj) && /tgNewsDue/.test(tgj), '');
+    ck('лента телефона тоже получает карточку обновления', /newsPush/.test(pushj) && /click: 'update'/.test(pushj), '');
+    ck('в админке есть кнопка «Разослать обновление»', /admin\.news/.test(adminj) && /Разослать обновление/.test(adminj), '');
+    ck('просьба привязать Telegram: полоска с отложить-на-3-дня', /TgStrip/.test(setj) && /tg\.nag/.test(setj), '');
+    ck('просьба доходит и подсказкой с кнопкой «Привязать»', /tgWallHint/.test(hintj) && /Привязать/.test(hintj), '');
     if (process.env.VERBOSE) console.log('');
     console.log(`${total - bad}/${total} ✓`);
     if (bad) process.exitCode = 1;

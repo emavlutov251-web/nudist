@@ -5,7 +5,7 @@ import { CreateChat, ContactsModal, showProfile, StatusDlg, BotsCatalog, StarsMo
 import { CreateServer, Discover, openServerSettings, ChannelDlg, EventsModal, InviteModal, RoleMsgDlg } from './guildui.js';
 import { RTC, joinVoice, leaveVoice, toggleMute, toggleDeaf } from './rtc.js';
 import { StoryEditor, AudioBar } from './media.js';
-import { openSettings, PassStrip } from './settings.js';
+import { openSettings, PassStrip, TgStrip } from './settings.js';
 import { openHub, openApps, openSupport } from './hub.js';
 import { Streak, openInvite, openAsk, openPush, installApp, isStandalone, StartCards, PushStrip } from './growth.js';
 import { Nm } from './lib.js';
@@ -218,6 +218,7 @@ function HomeSidebar() {
     ${q.trim() ? html`<div class="side-b"><${SearchView} q=${q.trim()} /></div>` : focus && (S.settings.searchHistory || []).length ? html`<div class="side-b"><h4 class="sh">Недавние запросы <a onClick=${() => setSetting({ searchHistory: [] })}>очистить</a></h4>${S.settings.searchHistory.map(h => html`<button class="hist-i" onMouseDown=${e => { e.preventDefault(); setQ(h); }}><${Icon} n="history" s=${16} />${h}</button>`)}</div>` : html`
       ${!S.ui.archive && html`<${StoriesRow} />`}
       ${!S.ui.archive && html`<${PassStrip} />`}
+      ${!S.ui.archive && html`<${TgStrip} />`}
       ${!S.ui.archive && html`<${LobbyStrip} />`}
       ${!S.ui.archive && html`<${NearStrip} />`}
       ${!S.ui.archive && html`<${MoodAsk} />`}

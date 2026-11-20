@@ -302,6 +302,11 @@ div.val-card { cursor: default; } .val-card.on { border-color: var(--ink); box-s
 .app-tile.ev .app-ic { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--accent); }
 .push-strip { display: flex; align-items: center; gap: 10px; margin: 6px 8px 4px; padding: 9px 8px 9px 12px; border-radius: 14px; background: color-mix(in srgb, var(--warn) 14%, var(--card)); border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line)); cursor: pointer; }
 .push-strip span { flex: 1; min-width: 0; display: flex; flex-direction: column; } .push-strip b { font-size: .92em; } .push-strip small { color: var(--ink2); font-size: .78em; line-height: 1.3; }
+/* Просьба привязать Telegram — мягкая, того же вида, что и «Задайте пароль»; крестик откладывает на три дня */
+.tg-strip { background: color-mix(in srgb, var(--accent) 10%, var(--card)); border-color: color-mix(in srgb, var(--accent) 26%, var(--line)); }
+.tg-strip > svg { color: var(--accent); }
+.news-push { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.news-push h3 { width: 100%; margin: 0; } .news-push p { width: 100%; }
 
 /* ── истории в профиле и архив ───────────── */
 .pf-stories small{display:block;font:600 .72em var(--font);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin:2px 0 6px}

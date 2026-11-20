@@ -112,6 +112,21 @@ function remindNotif() {
   setTimeout(fire, 9000);
 }
 
+// ─── Просьба привязать Telegram ───
+// Мягко, но неотступно: полоска над чатами и первая подсказка. Крестик откладывает на три дня, привязка убирает навсегда.
+// Ничего не блокируем: человек всегда может закрыть и пользоваться дальше — иначе это уже не просьба.
+const NAG_MS = 3 * 864e5;
+export const tgNagDue = () => !!(S.me && !S.me.tg && S.tgBot && Date.now() - (local.get('tg.nag', 0) || 0) > NAG_MS);
+export const tgSnooze = () => local.set('tg.nag', Date.now());
+export function tgWallHint() {
+  if (!tgNagDue()) return false;
+  const bucket = Math.floor(Date.now() / NAG_MS);
+  return hint('tg-wall-' + bucket, 'Привяжите Telegram к аккаунту: это ваш ключ на случай, если забудете пароль или смените телефон. Вход — в один тап, пароль не нужен.', {
+    icon: '✈️', action: 'Привязать', onAction: () => import('./settings.js').then(m => m.openTgLink()).catch(() => {}),
+    delay: 17000, per: 3, gap: 0,      // сперва здороваемся и напоминаем про уведомления, просьба — следующей
+  });
+}
+
 // ─── Заход в приложение ───
 export function appEntryHints() {
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -119,6 +134,7 @@ export function appEntryHints() {
   if (!coarse && window.NudistApp) return remindNotif();
   if (S.ui && (S.ui.hub === 'feed' || S.ui.feed === 'video')) return remindNotif();
   hint('welcome-1', coarse ? 'Внизу — «Чаты», «Лента», «Хаб» и «Магазин». Поиск по всем чатам — значок сверху.' : 'Ctrl+K — поиск · Ctrl+, — настройки · двойной щелчок по сообщению — быстрый ответ · Esc — закрыть панель.', { icon: '👋', delay: 2500, per: 2, gap: 0 });
+  tgWallHint();      // сперва про Telegram: без него человек рискует потерять аккаунт
   remindNotif();
 }
 // ─── Открытие чего-либо ───

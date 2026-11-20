@@ -87,6 +87,7 @@ function Account() {
 // Полоска над списком чатов для аккаунта без пароля. Вход по номеру отключён, так что без пароля человек останется без аккаунта,
 // как только выйдет или сменит телефон. Не окно и не блокировка: одна строка, её можно скрыть на неделю.
 // Привязать Telegram к аккаунту: открыть бота, нажать Start — и вернуться. Окно само заметит, что бот вас узнал.
+export const openTgLink = () => openModal(TgLinkDlg);
 function TgLinkDlg({ id }) {
   const [st, setSt] = useState(null), [err, setErr] = useState('');
   useEffect(() => { let on = true, t = 0; rpc('me.tg.start', {}).then(r => { if (!on) return; setSt(r); const poll = async () => { try { const p = await rpc('me.tg.poll', { code: r.code }); if (!on) return; if (p.ok) { toast('Telegram привязан: теперь можно входить через него'); closeModal(id); return; } t = setTimeout(poll, 2000); } catch (e) { if (on) setErr(e.message); } }; t = setTimeout(poll, 2000); }, e => on && setErr(e.message)); return () => { on = false; clearTimeout(t); }; }, []);
@@ -95,6 +96,15 @@ function TgLinkDlg({ id }) {
       <ol class="tg-steps"><li>Откройте бота и нажмите <b>Start</b> («Запустить»).</li><li>Вернитесь сюда — окно закроется само.</li></ol>
       <a class="btn big wide tg-btn" href=${st.url} target="_blank" rel="noopener"><${Icon} n="send" s=${18} /> Открыть Telegram</a>
       <p class="hint">Мы сохраним только номер вашего аккаунта в Telegram и @username — чтобы узнавать вас при входе. Сообщения и контакты Telegram нам недоступны.</p>`}<//>`;
+}
+// Полоска-просьба привязать Telegram. Крестик откладывает на три дня, привязка убирает её навсегда —
+// это видно из S.me.tg, никаких отдельных отметок на сервере не нужно.
+export function TgStrip() {
+  const me = S.me; if (!me || me.tg || !S.tgBot || Date.now() - (local.get('tg.nag', 0) || 0) < 3 * 864e5) return null;
+  return html`<div class="push-strip tg-strip" role="button" tabIndex="0" onClick=${() => openTgLink()} onKeyDown=${e => (e.key === 'Enter' || e.key === ' ') && openTgLink()}>
+    <${Icon} n="send" s=${20} /><span><b>Привяжите Telegram</b><small>${me.hasPassword ? 'Это ключ на случай, если забудете пароль или смените телефон. Вход в один тап.' : 'Пока не задан пароль, Telegram — единственный способ войти с другого устройства.'}</small></span>
+    <button class="ib sm" title="Отложить на 3 дня" aria-label="Отложить на 3 дня" onClick=${k => { k.stopPropagation(); local.set('tg.nag', Date.now()); bump(); }}><${Icon} n="x" s=${15} /></button>
+  </div>`;
 }
 export function PassStrip() {
   const me = S.me; if (!me || me.hasPassword || me.tg || Date.now() - (local.get('pass.strip') || 0) < 7 * 864e5) return null;      /* привязан Telegram — войти можно и без пароля */

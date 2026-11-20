@@ -115,7 +115,7 @@ H['me.tg.poll'] = (c, p) => {
   const u = db.users[c.uid], q = pend.get(str(p.code, 40)); need(q && q.exp > now() && q.uid === c.uid, 'Время вышло. Начните привязку заново.');
   if (!q.tg) return { wait: true };
   const other = byTg(q.tg.id); need(!other || other.id === u.id, 'Этот Telegram уже привязан к другому аккаунту');
-  u.tg = { id: q.tg.id, username: q.tg.username, at: now() }; index = null; pend.delete(p.code); save(); R.selfUpdate(u);
+  u.tg = { id: q.tg.id, username: q.tg.username, at: now() }; index = null; delete u.nag; pend.delete(p.code); save(); R.selfUpdate(u);
   return { ok: true, tg: u.tg.username || true };
 };
 H['me.tg.bridge'] = c => {
@@ -175,6 +175,67 @@ C.hooks.afterPost.push((chat, m) => {
   } catch (e) { console.warn('[tg] мост:', e.message); }
 });
 
+// ───── рассылка «вышло обновление» в Telegram: человеку, который привязал Telegram, бот пишет первым
+// (в Telegram нельзя написать незнакомцу, поэтому получатели — только те, кто сам нажал Start).
+// Правило тишины: в сутки не больше двух рассылок, одному человеку — не чаще раза в день, ночью (23:00–9:00 по Москве) не будим.
+// Настоящий api.telegram.org по умолчанию не трогаем: только при TG_NEWS=on или другом адресе TG_API (зеркало в тестах).
+const TG_API_REAL = /^https:\/\/api\.telegram\.org/i;
+const ONE = v => v === 'i' || v === true || Number(v) === 1;
+const dayMsk = t => new Date((t || now()) + 3 * 3600e3).toISOString().slice(0, 10);
+// Утренняя доставка: ночью нажали «Разослать» — в 9:05 по Москве бот сам доделает то, что просили, и больше не повторит.
+setInterval(() => {
+  const due = db.meta.tgNewsDue; if (!due || isNight()) return;
+  delete db.meta.tgNewsDue;
+  newsAnnounce(require('./push').apkInfo(), { force: true, wall: due.wall, by: due.by })
+    .then(r => console.log('[tg] утренняя доставка обновления:', r.sent, 'из', r.total || 0))
+    .catch(e => console.warn('[tg] утренняя доставка:', e.message));
+}, 60e3).unref();
+const isNight = () => { const h = new Date(now() + 3 * 3600e3).getUTCHours(); return h >= 23 || h < 9; };
+const appUrl = () => SITE + '/start';
+function newsText(it, apk) {
+  const head = '🍃 Вышло обновление «Нудиста» ' + apk.name + '!';
+  const list = (apk.news || []).filter(Boolean).slice(0, 5).map(x => '· ' + String(x).slice(0, 300)).join('\n');
+  const tail = it.wall ? 'Привяжите Telegram к аккаунту — «Нудист» → Настройки → Аккаунт → Telegram. Входить в аккаунт станет можно без пароля, а сообщения из «Нудиста» будут приходить сюда же.'
+    : 'Скачать и поставить поверх старой версии: данные и вход сохранятся.';
+  return [head, list, tail, appUrl()].filter(Boolean).join('\n\n');
+}
+async function newsSend(uid, text) {
+  const u = db.users[uid];
+  if (!u || u.deleted || u.bot || !u.tg || !u.tg.id) return 'нет telegram';
+  try { await call('sendMessage', { chat_id: u.tg.id, text, link_preview_options: { is_disabled: true } }); return 'ok'; }
+  catch (e) {
+    const m = String((e && e.message) || '');
+    if (/blocked|chat not found|deactivated|kicked/i.test(m)) { u.tg.bad = now(); save(); return 'заблокировал'; }
+    return 'ошибка: ' + m.slice(0, 80);
+  }
+}
+// Пуш нового обновления: сперва в Telegram (если есть ключ бота), дальше лента телефона и браузерные пуши — это делает push.js.
+// it.force — прислать сейчас, не спрашивая про ночь; it.wall — это не обновление, а просьба привязать Telegram.
+async function newsAnnounce(apk, it) {
+  it = it || {};
+  const t = token();
+  if (!ON || !t) return { ok: false, sent: 0, error: 'не настроен бот: нет ключа' };
+  const mirror = !TG_API_REAL.test(TG);
+  if (!mirror && process.env.TG_NEWS !== 'on') return { ok: false, sent: 0, error: 'выключено: на сервере не задано TG_NEWS=on' };
+  if (!it.force && isNight()) { if (it) db.meta.tgNewsDue = { wall: !!it.wall, by: it.by || '', at: now() }; save(); return { ok: true, sent: 0, skipped: 'ночная тишина 23:00–9:00 — отправится утром само' }; }
+  let day = db.meta.tgNewsDay; if (!day || day.d !== dayMsk()) day = db.meta.tgNewsDay = { d: dayMsk(), n: 0 };
+  // «Напомнить про Telegram» — не новость про сборку: у неё своя карта отметок и свой дневной лимит на человека.
+  // Так напоминание не «съедает» слот обновления и наоборот: оба сообщения ограничены — одно в день на каждую тему.
+  if (!it.wall && day.n >= 2 && !it.force) return { ok: false, sent: 0, error: 'сегодня уже было две рассылки' };
+  const text = newsText(it, apk), sentMap = (it.wall ? (db.meta.tgWallSent = db.meta.tgWallSent || {}) : (db.meta.tgNewsSent = db.meta.tgNewsSent || {})), today = dayMsk();
+  const targets = Object.values(db.users).filter(u => !u.deleted && !u.bot && u.tg && u.tg.id && !(sentMap[u.id] && dayMsk(sentMap[u.id].at) === today)).map(u => u.id);
+  const out = { ok: true, sent: 0, failed: 0, total: targets.length, errors: [] };
+  for (const id of targets) {
+    const r = await newsSend(id, text);
+    if (r === 'ok') { out.sent++; sentMap[id] = { at: now(), c: apk.code }; }
+    else if (r !== 'нет telegram') { out.failed++; if (out.errors.length < 5) out.errors.push(id + ': ' + r); }
+  }
+  for (const k of Object.keys(sentMap)) if (now() - (sentMap[k].at || 0) > 40 * 86400e3) delete sentMap[k];      // файл не растёт
+  if (out.sent) { if (!it.wall) day.n++; db.meta.tgNews = { at: now(), by: it.by || '', code: apk.code, name: apk.name, sent: out.sent, wall: !!it.wall }; }
+  save();
+  return out;
+}
+
 // ───── сообщения боту (вебхук Telegram)
 const say = (chat, text, extra) => call('sendMessage', { chat_id: chat, text, ...extra }).catch(e => console.warn('[tg] ответ не ушёл:', e.message));
 function hook(secret, upd) {
@@ -190,6 +251,7 @@ function hook(secret, upd) {
   if (replyTo && text.trim()) { tgDeliver(m.chat.id, who, replyTo, text.trim()); return 200; }
   if (arg.startsWith('login_')) {
     const p = pend.get(arg.slice(6));
+    if (p && p.exp >= now()) console.log('[tg] бот узнал человека:', who.id, '@' + (who.username || '—'), p.uid ? '(привязка к аккаунту)' : '(вход)');
     if (!p || p.exp < now()) say(m.chat.id, 'Эта ссылка для входа уже устарела. Вернитесь на сайт и нажмите «Войти через Telegram» ещё раз.');
     else { p.tg = who; say(m.chat.id, p.uid ? '✅ Готово: Telegram привязан. Вернитесь в «Нудист».' : '✅ Готово! Вернитесь на сайт — вход выполнится сам.'); }
     return 200;
@@ -202,4 +264,4 @@ function hook(secret, upd) {
   return 200;
 }
 
-module.exports = { hook, botName, ready, setup, checkInitData };
+module.exports = { hook, botName, ready, setup, checkInitData, newsAnnounce, newsText, dayMsk };
