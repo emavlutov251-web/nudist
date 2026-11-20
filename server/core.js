@@ -102,13 +102,15 @@ function touchDau(uid) { const d = day(), k = today(); if (dauKey !== k) { dauKe
 const byName = new Map(); // username(lower) -> userId
 for (const u of Object.values(db.users)) if (u.username) byName.set(u.username.toLowerCase(), u.id);
 const DEFAULT_PRIVACY = { phone: 'none', lastSeen: 'all', avatar: 'all', bio: 'all', calls: 'all', msgs: 'all', invites: 'all', stories: 'all' };
-// Подписка: тарифы plus < pro < max. Старый «Премиум» без тарифа считается тарифом plus. Пробный период (trialUntil) даёт pro поверх того, что есть.
+// Подписка: тарифы plus < pro < max. Старый «Премиум» без тарифа считается тарифом Plus.
+// Пробный период — только Plus; старые записи без trialTier тоже трактуем как Plus.
 const TIERS = { plus: 1, pro: 2, max: 3 };
 const isPremium = u => !!u && ((u.premiumUntil || 0) > now() || (u.trialUntil || 0) > now());
 function tierOf(u) {
   if (!u) return null;
   let t = (u.premiumUntil || 0) > now() ? (TIERS[u.premiumTier] ? u.premiumTier : 'plus') : null;
-  if ((u.trialUntil || 0) > now() && (!t || TIERS[t] < TIERS.pro)) t = 'pro';
+  const trial = (u.trialUntil || 0) > now() ? (TIERS[u.trialTier] ? u.trialTier : 'plus') : null;
+  if (trial && (!t || TIERS[t] < TIERS[trial])) t = trial;
   return t;
 }
 let cosHook = null, selfHook = null; const setCosHook = f => { cosHook = f; }, setSelfHook = f => { selfHook = f; };      // украшения из магазина (server/shop.js)

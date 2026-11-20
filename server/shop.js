@@ -1,5 +1,5 @@
 'use strict';
-// Магазин: украшения за листики, тарифы подписки Plus / Pro / Max, наборы, пробный период, сезон с заданиями, кэшбэк за друзей.
+// Магазин: украшения за листики, тарифы подписки Plus / Pro / Max, наборы, пробный Plus, сезон с заданиями, кэшбэк за друзей.
 // За рубли продаются только тарифы и наборы листиков — этим занимается server/pay.js, сюда он приходит за составом и выдачей.
 // Здесь нет ничего, чего сервер не умеет на самом деле: каждая строка в perks тарифа проверяется кодом ниже или в rpc.js.
 const C = require('./core');
@@ -97,7 +97,7 @@ const PLANS = {
   max: { id: 'max', name: 'Max', emoji: '👑', rub: 599, stars: 10000, days: 30, tap: 100, daily: 50, season: 2, boosts: 5,
     perks: ['Всё из Pro', 'Золотой значок Max', 'Все украшения и все наборы стикеров — бесплатно', '+100 % листиков в «Листопаде»', '+50 🍃 к ежедневному бонусу', 'Награды сезона вдвое больше', '5 бустов группы в подарок при каждой оплате'] },
 };
-const TRIAL_DAYS = 3;
+const TRIAL_DAYS = 3, TRIAL_TIER = 'plus';
 // ───── наборы украшений со скидкой
 const BUNDLES = {
   starter: { name: 'Стартовый', emoji: '🎁', stars: 990, items: ['frame_leaf', 'grad_ocean', 'theme_forest', 'stickers_space'] },
@@ -160,9 +160,18 @@ function grantPlan(u, tier, days, opt) {
   const cur = (u.premiumUntil || 0) > now() ? (PLANS[u.premiumTier] ? u.premiumTier : 'plus') : null, left = cur ? u.premiumUntil - now() : 0, ms = days * 864e5;
   if (!cur || cur === tier) { u.premiumUntil = now() + left + ms; u.premiumTier = tier; }
   else if (rank(tier) > rank(cur)) { u.premiumUntil = now() + ms + Math.floor(left * PLANS[cur].rub / p.rub); u.premiumTier = tier; }
-  else u.premiumUntil = now() + left + Math.floor(ms * p.rub / PLANS[cur].rub);
+  else u.premiumUntil = now() + left + Math.floor(ms * PLANS[tier].rub / PLANS[cur].rub);
   if (p.boosts && !(opt && opt.noBoosts)) u.freeBoosts = Math.min(50, (u.freeBoosts || 0) + p.boosts);
   return { tier: u.premiumTier, until: u.premiumUntil };
+}
+// Награда события/пропуска не продлевает Pro или Max бесплатно: владельцы более высокого тарифа получают стоимость в листиках.
+function grantRewardPlan(u, tier, days, opt) {
+  if (rank(tierOf(u)) > rank(tier)) {
+    const stars = Math.floor(PLANS[tier].stars * days / PLANS[tier].days);
+    u.stars = (u.stars || 0) + stars;
+    return { stars, converted: true };
+  }
+  return grantPlan(u, tier, days, opt);
 }
 // Автопродления нет, поэтому за три дня до конца срока напоминаем и даём скидку на продление того же тарифа за листики.
 const paidTier = u => ((u.premiumUntil || 0) > now() ? (PLANS[u.premiumTier] ? u.premiumTier : 'plus') : null);
@@ -204,7 +213,7 @@ const SEASON_ITEMS = { 10: 'frame_wave', 20: 'grad_coral', 30: 'fx_bubbles', 50:
 function reward(lvl, prem) {
   if (!prem) return { stars: lvl % 10 === 0 ? 50 : lvl % 5 === 0 ? 25 : 10 };
   if (SEASON_ITEMS[lvl]) return { item: SEASON_ITEMS[lvl] };
-  if (lvl === 40) return { plan: 'pro', days: 3 };
+  if (lvl === 40) return { plan: 'plus', days: 3 };
   return { stars: lvl % 5 === 0 ? 150 : 40 };
 }
 const levelOf = s => Math.min(PASS.levels, Math.floor((s.xp || 0) / PASS.per));
@@ -247,7 +256,7 @@ function give(u, s, lvl, prem) {
   const r = reward(lvl, prem), out = { lvl, prem };
   if (r.stars) { u.stars = (u.stars || 0) + r.stars; out.stars = r.stars; }
   if (r.item) { if (owns(u, r.item)) { u.stars = (u.stars || 0) + DUPE; out.stars = DUPE; } else { own(u, r.item); equipIfEmpty(u, r.item); out.item = r.item; out.name = CATALOG[r.item].name; } }
-  if (r.plan) { grantPlan(u, r.plan, r.days, { noBoosts: true }); out.plan = r.plan; out.days = r.days; }
+  if (r.plan) { const g = grantRewardPlan(u, r.plan, r.days, { noBoosts: true }); if (g.stars) out.stars = g.stars; else { out.plan = r.plan; out.days = r.days; } }
   s.lv.push((prem ? 'p' : 'f') + lvl); return out;
 }
 H['season.pass.claim'] = (c, p) => {
@@ -288,7 +297,7 @@ C.setCosHook(u => {
 // Значок из магазина рядом с именем и «коллекция» в профиле: что человек купил или получил (тариф тут не считается — только своё).
 C.setShopHooks({ badge: u => { const b = u.cos && u.cos.badge; return b && CATALOG[b] && CATALOG[b].kind === 'badge' && owns(u, b) ? b.slice(6) : null; },
   col: u => (u.owned || []).filter(i => CATALOG[i]).map(i => ({ id: i, kind: CATALOG[i].kind, name: CATALOG[i].name, emoji: CATALOG[i].emoji, tier: CATALOG[i].tier, colors: CATALOG[i].colors })) });
-C.setSelfHook(u => ({ owned: u.owned || [], worn: u.cos || {}, freeBoosts: u.freeBoosts || 0, trialUsed: !!u.trialUsed || undefined, paidTier: (u.premiumUntil || 0) > now() ? (PLANS[u.premiumTier] ? u.premiumTier : 'plus') : undefined, paidUntil: (u.premiumUntil || 0) > now() ? u.premiumUntil : undefined, trialUntil: (u.trialUntil || 0) > now() ? u.trialUntil : undefined }));
+C.setSelfHook(u => ({ owned: u.owned || [], worn: u.cos || {}, freeBoosts: u.freeBoosts || 0, trialUsed: !!u.trialUsed || undefined, trialTier: (u.trialUntil || 0) > now() ? (u.trialTier || 'plus') : undefined, paidTier: (u.premiumUntil || 0) > now() ? (PLANS[u.premiumTier] ? u.premiumTier : 'plus') : undefined, paidUntil: (u.premiumUntil || 0) > now() ? u.premiumUntil : undefined, trialUntil: (u.trialUntil || 0) > now() ? u.trialUntil : undefined }));
 
 // ───── RPC
 H['shop.catalog'] = c => {
@@ -298,7 +307,7 @@ H['shop.catalog'] = c => {
     secret: { open: vip(u), from: SECRET_FROM },
     items: Object.entries(CATALOG).filter(([id, it]) => (!it.ev || ev.on(it.ev) || owns(u, id)) && (it.tier !== 'secret' || vip(u) || owns(u, id))).map(([id, it]) => ({ id, ...it, base: it.price, ...priceFor(u, id), owned: owns(u, id), included: included(u, id), fresh: !!it.since && now() - Date.parse(it.since) < 21 * 864e5 || undefined /* «новинка» — три недели с даты появления */, till: it.ev && ev.on(it.ev) ? ev.till(it.ev) : undefined })),
     plans: Object.values(PLANS).map(p => ({ id: p.id, name: p.name, emoji: p.emoji, stars: planPrice(u, p.id), full: p.stars, off: renewOff(u, p.id), rub: rub('plan_' + p.id), days: p.days, perks: p.perks })),
-    trial: { days: TRIAL_DAYS, used: !!u.trialUsed, until: (u.trialUntil || 0) > now() ? u.trialUntil : 0, can: !u.trialUsed && rank(tierOf(u)) < rank('pro') },
+    trial: { tier: TRIAL_TIER, days: TRIAL_DAYS, used: !!u.trialUsed, until: (u.trialUntil || 0) > now() ? u.trialUntil : 0, can: !u.trialUsed && rank(tierOf(u)) < rank(TRIAL_TIER) },
     bundles: Object.entries(BUNDLES).map(([id, b]) => { const f = bundleFor(u, b); return { id, name: b.name, emoji: b.emoji, items: b.items, price: f.price, full: f.full, fresh: f.fresh.length }; }),
     packs: Object.entries(PACKS).map(([id, s]) => ({ id: 'leaves_' + id, name: s.name, stars: s.stars, rub: rub('leaves_' + id), bonus: Math.round((s.stars / s.rub) / (PACKS.s.stars / PACKS.s.rub) * 100 - 100) })),
   };
@@ -349,11 +358,11 @@ H['shop.giftPlan'] = (c, p) => {
   try { require('./push').notify(o.id, { title: R.uname(u), body: `Дарит вам подписку «Нудист ${pl.name}» на ${pl.days} дней`, tag: ch.id, url: '/' }, C.isOnline(o.id)); } catch (e) { console.error('[push]', e.message); }
   return { ok: true, stars: u.stars, chat: ch.id, until: r.until };
 };
-// Пробный Pro на три дня, один раз на аккаунт. Оплаченный срок при этом не трогается.
+// Пробный Plus на три дня, один раз на аккаунт. Pro и Max доступны только по покупке или подарку.
 H['shop.trial'] = c => {
-  const u = db.users[c.uid]; need(!u.trialUsed, 'Пробный период уже использован'); need(rank(tierOf(u)) < rank('pro'), 'У вас уже тариф Pro или выше');
-  u.trialUsed = now(); u.trialUntil = now() + TRIAL_DAYS * 864e5; save(); touch(u);
-  return { ok: true, days: TRIAL_DAYS, until: u.trialUntil };
+  const u = db.users[c.uid]; need(!u.trialUsed, 'Пробный период уже использован'); need(rank(tierOf(u)) < rank(TRIAL_TIER), 'Пробный Plus доступен только без действующей подписки');
+  u.trialUsed = now(); u.trialTier = TRIAL_TIER; u.trialUntil = now() + TRIAL_DAYS * 864e5; save(); touch(u);
+  return { ok: true, tier: TRIAL_TIER, days: TRIAL_DAYS, until: u.trialUntil };
 };
 // Надеть или снять: { id } — надеть вещь, { kind } без id — снять
 H['shop.equip'] = (c, p) => {
@@ -364,4 +373,4 @@ H['shop.equip'] = (c, p) => {
   return { ok: true, worn: u.cos };
 };
 
-module.exports = { ev, own, touch, vip, SECRET_FROM, CATALOG, PLANS, BUNDLES, PACKS, TASKS, TRIAL_DAYS, dailyDeals, grantPlan, cashback, has, owns, included, bump, seasonView };
+module.exports = { ev, own, touch, vip, SECRET_FROM, CATALOG, PLANS, BUNDLES, PACKS, TASKS, TRIAL_DAYS, dailyDeals, grantPlan, grantRewardPlan, cashback, has, owns, included, bump, seasonView };

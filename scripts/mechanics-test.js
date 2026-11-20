@@ -37,6 +37,9 @@ const ck = (name, ok, extra) => { total++; if (!ok) { bad++; console.log('  ✗ 
     const b1 = await a.rpc('shop.buy', { id: 'frame_leaf' }).then(r => r, e => ({ err: e.message })); ck('украшение покупается, листики списываются', !b1.err && (await a.rpc('stars.info')).stars < 5000, b1);
     ck('второй раз то же украшение не продаётся', !!(await a.fail('shop.buy', { id: 'frame_leaf' })));
     ck('на несуществующий товар — отказ', !!(await a.fail('shop.buy', { id: 'net_takogo' })));
+    ck('бесплатная проба — только Plus, без Pro/Max', cat.trial.tier === 'plus' && cat.trial.days === 3 && cat.trial.can);
+    const trial = await a.rpc('shop.trial'), afterTrial = await a.rpc('shop.catalog');
+    ck('пробная подписка выдаёт Plus и доступна один раз', trial.tier === 'plus' && trial.days === 3 && afterTrial.tier === 'plus' && !afterTrial.trial.can && !!(await a.fail('shop.trial')));
     // ── энергия
     const e0 = await b.rpc('energy.get'); ck('энергия: запас из настроек', e0.max === 3 && e0.n === 3, e0);
     for (let i = 0; i < 3; i++) await b.rpc('energy.use', { app: 'beer' });
