@@ -910,6 +910,9 @@ public class MainActivity extends Activity {
                 + "}catch(e){return \"ok\"}})()", new android.webkit.ValueCallback<String>() {
             @Override public void onReceiveValue(String v) {
                 if (v == null || !v.contains("text")) return;
+                // Сначала выбрасываем кеш движка: разметка пришла файлом именно из него (VPN, прокси, сбой загрузки).
+                // Иначе при следующем запуске WebView достанет ту же испорченную копию, и всё повторится.
+                try { web.clearCache(true); } catch (Throwable e) { /* не страшно */ }
                 if (mainChecks >= 2) { showBuiltinPage(false); return; }      // два раза не вышло — показываем свою страницу
                 mainChecks++;
                 String server = prefs.getString("server", null);
