@@ -4,18 +4,12 @@ name: Проверка и выкладка
 on:
   push:
     branches: [main]
-    paths:
-      - 'server/**'
-      - 'public/**'
-      - 'scripts/**'
-      - 'ENV.md'
-      - 'README.md'
-      - 'deploy/**'
-      - 'package.json'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - '.github/workflows/deploy.yml'
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  # Пути не ограничиваем: сборка Android и проверка кода связаны (apk.json сверяется с MainActivity.java),
+  # и раньше правка android/** не доводила release — сервер не получал новый код.
+  # Лишние прогоны дешевле, чем «выложили, а на сервере старое».
+  # (фильтр путей убран)
 
 concurrency:
   group: deploy
@@ -58,7 +52,7 @@ jobs:
   release:
     name: Выпуск на свой сервер
     needs: test
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
