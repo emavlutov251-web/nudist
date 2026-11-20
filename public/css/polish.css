@@ -51,3 +51,7 @@ input, textarea, select { max-width: 100%; }
 .msg-act { max-width: calc(100vw - 28px); overflow: hidden; }
 .toasts { max-width: calc(100vw - 20px); }
 body { overscroll-behavior-x: none; }
+
+/* Приложение для Android: нижнюю панель рисует сама оболочка, веб-копию не показываем */
+html.native-nav .nav { display: none !important; }
+html.native-nav .side { padding-bottom: 0 !important; }

@@ -40,6 +40,9 @@ function accMenu(e) {
   ], { head: html`<div class="menu-head"><${Avatar} u=${me} src=${me.avatar} name=${userName(me)} color=${me.color} s=${40} /><div><b>${userName(me)}</b><small>${me.username ? '@' + me.username : me.phone}</small></div></div>` });
 }
 export function NavBar() {
+  // В приложении для Android такую же панель рисует сама оболочка (js/appnative.js):
+  // веб-копию не показываем, иначе их будет две.
+  if (window.NudistApp && window.NudistApp.nav) return null;
   const me = S.me, tab = S.ui.hub === 'feed' ? 'feed' : S.ui.hub ? 'hub' : 'chats';
   let n = totalUnread(); for (const c of Object.values(S.chats)) if (c.server && !isMuted(c)) n += c.unread || 0;
   const due = !!(S.flags || {}).stars && me.lastDaily !== new Date().toISOString().slice(0, 10);      // сегодняшний бонус ещё не собран

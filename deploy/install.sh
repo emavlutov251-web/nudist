@@ -117,15 +117,22 @@ F=/run/nudist-watchdog.fail
 if curl -fsS --max-time 10 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then rm -f "$F"; exit 0; fi
 if [ -f "$F" ]; then rm -f "$F"; logger -t nudist-watchdog "нет ответа два раза подряд, перезапускаю"; systemctl restart nudist; else : > "$F"; fi
 W
-# Копии: база и загруженные файлы, раз в сутки, хранится 14 штук.
+# Копии базы, раз в сутки, хранится 14 штук.
+# Загруженные файлы в копию не входят: они и так лежат в хранилище (S3, Cloud.ru), а на сервере — только кеш.
+# tar возвращает 1, если файл изменился во время чтения (а база сохраняется каждую секунду) — это не ошибка,
+# поэтому скрипт считает успехом коды 0 и 1; готовый файл переименовывается из .part только целиком.
 cat > /usr/local/bin/nudist-backup <<B
 #!/bin/sh
-set -e
+set -eu
 D=$BACKUPS
 mkdir -p "\$D"
-tar -C $DATA -czf "\$D/nudist-\$(date +%F-%H%M).tar.gz.part" --exclude='*.tmp' .
-for f in "\$D"/*.part; do mv "\$f" "\${f%.part}"; done
+rm -f "\$D"/*.part                      # недоделанные копии прошлых запусков
+F="\$D/nudist-\$(date +%F-%H%M).tar.gz"
+nice -n 19 ionice -c 3 tar -C $DATA --warning=no-file-changed --ignore-failed-read -czf "\$F.part" --exclude='uploads' --exclude='*.tmp' . || [ \$? -le 1 ]
+[ -s "\$F.part" ] || { echo "копия не создана"; rm -f "\$F.part"; exit 1; }
+mv "\$F.part" "\$F"
 ls -1t "\$D"/nudist-*.tar.gz | tail -n +15 | xargs -r rm -f
+while [ "\$(du -sk "\$D" | cut -f1)" -gt 2097152 ]; do ls -1t "\$D"/nudist-*.tar.gz | tail -1 | xargs -r rm -f; done      # не больше 2 ГБ на копии
 B
 chmod 755 /usr/local/bin/nudist-watchdog /usr/local/bin/nudist-backup
 cat > /etc/systemd/system/nudist-watchdog.service <<'U'

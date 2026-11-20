@@ -11,6 +11,10 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.net.http.SslError;
@@ -45,6 +49,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -69,7 +74,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 18;      // 1.8: приложение само переезжает на новый адрес сервера (старый, nudist.onrender.com, отключён)
+    private static final int APP_VERSION = 19;      // 1.9: нижняя панель нарисована в самом приложении (требование RuStore) приложение само переезжает на новый адрес сервера (старый, nudist.onrender.com, отключён)
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -256,6 +261,13 @@ public class MainActivity extends Activity {
          * приложение само читает его из главной страницы (см. syncSession). Так посторонняя вставка
          * (мини-приложение, карта) не может подсунуть чужой ключ.
          */
+        /** Что происходит в мессенджере: {section, unread, authed}. Приложение показывает нижнюю панель и значок непрочитанного. */
+        @JavascriptInterface
+        public void nav(final String json) {
+            if (json == null || json.length() > 500) return;
+            navState(json);
+        }
+
         @JavascriptInterface
         public void sync() {
             runOnUiThread(new Runnable() {
@@ -595,6 +607,7 @@ public class MainActivity extends Activity {
         });
 
         root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        buildNavBar();      // панель поверх страницы: она остаётся на месте, даже когда сервер недоступен
     }
 
     private static boolean sameOrigin(Uri a, Uri b) {
@@ -782,6 +795,254 @@ public class MainActivity extends Activity {
         root.addView(scroll, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         panel = scroll;
         return box;
+    }
+
+    // ───── Нижняя панель приложения (родная часть Android-сборки, не копия сайта)
+    // Пять разделов: Чаты · Лента · Хаб · Магазин · Профиль. Значок непрочитанного обновляет страница
+    // (window.NudistApp.nav), нажатие уходит в неё же (window.nudistNavTap) — разделы открываются как обычно.
+    // Панель живёт в приложении: видна поверх ошибок и заставки, не пропадает без интернета,
+    // высота учитывает вырез экрана и полосу жестов.
+
+    private static final String[] NAV_KEYS = { "chats", "feed", "hub", "shop", "profile" };
+    private static final int NAV_OFF = 0xFF8CA79A, NAV_ON = 0xFF2BB36A;
+    private LinearLayout navBar;
+    private final View[] navItems = new View[5];
+    private final View[] navIcons = new View[5];
+    private final TextView[] navUnread = new TextView[5];
+    private String navSection = "";
+
+    private void buildNavBar() {
+        navBar = new LinearLayout(this);
+        navBar.setOrientation(LinearLayout.HORIZONTAL);
+        navBar.setGravity(Gravity.CENTER_VERTICAL);
+        navBar.setBackgroundColor(C_BG);
+        navBar.setVisibility(View.GONE);
+        navBar.setElevation(dp(8));
+        int pad = dp(4);
+        navBar.setPadding(0, pad, 0, pad);
+        String[] names = { "Чаты", "Лента", "Хаб", "Магазин", "Профиль" };
+        for (int i = 0; i < 5; i++) {
+            final String key = NAV_KEYS[i];
+            LinearLayout item = new LinearLayout(this);
+            item.setOrientation(LinearLayout.VERTICAL);
+            item.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.CENTER_VERTICAL);
+            item.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+
+            FrameLayout box = new FrameLayout(this);
+            LinearLayout.LayoutParams boxLp = new LinearLayout.LayoutParams(dp(26), dp(26));
+            boxLp.gravity = Gravity.CENTER_HORIZONTAL;
+            box.setLayoutParams(boxLp);
+            ImageView icon = new ImageView(this);
+            icon.setImageDrawable(new NavIcon(getApplicationContext(), key, false));
+            box.addView(icon, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
+            TextView badge = new TextView(this);
+            badge.setTextColor(Color.WHITE);
+            badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f);
+            badge.setTypeface(Typeface.DEFAULT_BOLD);
+            badge.setGravity(Gravity.CENTER);
+            badge.setVisibility(View.GONE);
+            FrameLayout.LayoutParams bLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(16));
+            bLp.gravity = Gravity.TOP | Gravity.END;
+            bLp.rightMargin = dp(-4);
+            bLp.topMargin = dp(-2);
+            box.addView(badge, bLp);
+            item.addView(box);
+
+            TextView label = new TextView(this);
+            label.setText(names[i]);
+            label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
+            label.setGravity(Gravity.CENTER);
+            label.setTextColor(NAV_OFF);
+            LinearLayout.LayoutParams lLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lLp.topMargin = dp(1);
+            item.addView(label, lLp);
+
+            final TextView text = label;
+            item.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    navTap(key);
+                    setNavSection(key);
+                }
+            });
+            item.setContentDescription(names[i]);
+            navItems[i] = item;
+            navIcons[i] = icon;
+            navUnread[i] = badge;
+            navBar.addView(item);
+        }
+        int sh = dp(56) + safeBottom();
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, sh, Gravity.BOTTOM);
+        root.addView(navBar, lp);
+    }
+
+    /** Высота зоны жестов внизу экрана (панель должна закончиться выше неё). */
+    private int safeBottom() {
+        if (Build.VERSION.SDK_INT < 28) return 0;
+        try {
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.view.WindowInsets ins = getWindow().getDecorView().getRootWindowInsets();
+                if (ins != null) return ins.getInsets(android.view.WindowInsets.Type.systemBars()).bottom;
+            }
+            int id = getResources().getIdentifier("navigation_bar_height", "dimen", "android");
+            return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
+        } catch (Throwable e) { return 0; }
+    }
+
+    /** Панель показывается, когда человек вошёл в аккаунт. */
+    private void setNavVisible(final boolean on) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (navBar == null) return;
+                if (on == (navBar.getVisibility() == View.VISIBLE)) return;
+                navBar.setVisibility(on ? View.VISIBLE : View.GONE);
+                int h = navBar.getHeight();
+                int bottom = on ? (h > 0 ? h : dp(56) + safeBottom()) : 0;
+                web.setPadding(web.getPaddingLeft(), web.getPaddingTop(), web.getPaddingRight(), bottom);
+                if (panel != null) {
+                    FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) panel.getLayoutParams();
+                    lp.bottomMargin = bottom;
+                    panel.setLayoutParams(lp);
+                }
+            }
+        });
+    }
+
+    /** Раздел и число непрочитанных — присылает страница (см. public/js/appnative.js). */
+    private void navState(final String json) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    JSONObject o = new JSONObject(json);
+                    boolean authed = o.optBoolean("authed", false);
+                    setNavVisible(authed);
+                    if (!authed) return;
+                    setNavSection(o.optString("section", ""));
+                    int n = o.optInt("unread", 0);
+                    showBadge(0, n);
+                } catch (Throwable e) { /* мусор от страницы не должен ломать приложение */ }
+            }
+        });
+    }
+
+    private void showBadge(int i, int n) {
+        TextView b = navUnread[i];
+        if (b == null) return;
+        if (n <= 0) { b.setVisibility(View.GONE); return; }
+        b.setBackground(new NavBadge(getApplicationContext(), n >= 10 ? dp(16) : dp(8)));
+        b.setText(n >= 10 ? (n > 99 ? "99+" : String.valueOf(n)) : "");
+        b.setPadding(n >= 10 ? dp(3) : 0, 0, n >= 10 ? dp(3) : 0, 0);
+        b.setVisibility(View.VISIBLE);
+    }
+
+    private void setNavSection(String key) {
+        if (key == null || key.equals(navSection)) return;
+        navSection = key;
+        String active = "auth".equals(key) ? "" : key;
+        for (int i = 0; i < 5; i++) {
+            boolean on = NAV_KEYS[i].equals(active);
+            ((ImageView) navIcons[i]).setImageDrawable(new NavIcon(getApplicationContext(), NAV_KEYS[i], on));
+            LinearLayout item = (LinearLayout) navItems[i];
+            ((TextView) item.getChildAt(1)).setTextColor(on ? NAV_ON : NAV_OFF);
+        }
+    }
+
+    /** Нажатие на кнопку панели: просим страницу открыть раздел. */
+    private void navTap(String key) {
+        try { web.evaluateJavascript("(function(){try{return window.nudistNavTap?window.nudistNavTap(" + JSONObject.quote(key) + "):false}catch(e){return false}})()", null); } catch (Throwable e) { /* страница ещё грузится */ }
+    }
+
+    /** Значок раздела: рисуется кодом, без картинок и сторонних библиотек. */
+    private static final class NavIcon extends android.graphics.drawable.Drawable {
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final String kind;
+        private final int color;
+
+        NavIcon(Context c, String kind, boolean active) {
+            this.kind = kind;
+            this.color = active ? NAV_ON : NAV_OFF;
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeCap(Paint.Cap.ROUND);
+            p.setStrokeJoin(Paint.Join.ROUND);
+            p.setColor(color);
+        }
+
+        @Override public void setAlpha(int a) { p.setAlpha(a); }
+        @Override public void setColorFilter(android.graphics.ColorFilter f) { p.setColorFilter(f); }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+
+        @Override public void draw(Canvas cv) {
+            float w = getBounds().width(), h = getBounds().height(), s = Math.min(w, h);
+            cv.save();
+            cv.translate(getBounds().left, getBounds().top);
+            float k = s / 24f;                      // сетка 24×24, как у обычных иконок
+            p.setStrokeWidth(2f * k);
+            if ("chats".equals(kind)) {
+                Path path = new Path();
+                path.addRoundRect(new RectF(3.5f * k, 4.5f * k, 20.5f * k, 17f * k), 4.5f * k, 4.5f * k, Path.Direction.CW);
+                cv.drawPath(path, p);
+                Path tail = new Path();
+                tail.moveTo(8f * k, 17f * k); tail.lineTo(7f * k, 20.5f * k); tail.lineTo(11.5f * k, 17f * k);
+                cv.drawPath(tail, p);
+            } else if ("feed".equals(kind)) {
+                for (int i = 0; i < 3; i++) {
+                    float y = (6.5f + i * 5.5f) * k;
+                    cv.drawLine(9f * k, y, 20f * k, y, p);
+                    cv.drawCircle(5.5f * k, y, 1.15f * k, p);
+                }
+            } else if ("hub".equals(kind)) {
+                float r = 3.1f * k, o = 5.4f * k, m = 12f * k;
+                cv.drawRoundRect(new RectF(m - o - r, m - o - r, m - o + r, m - o + r), r * .8f, r * .8f, p);
+                cv.drawRoundRect(new RectF(m + o - r, m - o - r, m + o + r, m - o + r), r * .8f, r * .8f, p);
+                cv.drawRoundRect(new RectF(m - o - r, m + o - r, m - o + r, m + o + r), r * .8f, r * .8f, p);
+                cv.drawRoundRect(new RectF(m + o - r, m + o - r, m + o + r, m + o + r), r * .8f, r * .8f, p);
+            } else if ("shop".equals(kind)) {
+                Path bag = new Path();
+                bag.addRoundRect(new RectF(4f * k, 7.5f * k, 20f * k, 20.5f * k), 3f * k, 3f * k, Path.Direction.CW);
+                cv.drawPath(bag, p);
+                Path handle = new Path();
+                handle.moveTo(8.5f * k, 7.5f * k);
+                handle.lineTo(8.5f * k, 6f * k);
+                handle.lineTo(15.5f * k, 6f * k);
+                handle.lineTo(15.5f * k, 7.5f * k);
+                cv.drawPath(handle, p);
+            } else {                                 // profile
+                cv.drawCircle(12f * k, 8.3f * k, 3.6f * k, p);
+                Path body = new Path();
+                body.moveTo(5f * k, 20.2f * k);
+                body.cubicTo(5.6f * k, 15.6f * k, 18.4f * k, 15.6f * k, 19f * k, 20.2f * k);
+                cv.drawPath(body, p);
+            }
+            cv.restore();
+        }
+    }
+
+    /** Красная точка или кружок с числом для значка непрочитанного. */
+    private static final class NavBadge extends android.graphics.drawable.Drawable {
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final int radius;
+        private final int ring;
+
+        NavBadge(Context c, int radius) {
+            this.radius = radius;
+            ring = (int) Math.round(1.5 * c.getResources().getDisplayMetrics().density);
+            p.setColor(0xFFE2552D);
+        }
+
+        @Override public void setAlpha(int a) { p.setAlpha(a); }
+        @Override public void setColorFilter(android.graphics.ColorFilter f) { p.setColorFilter(f); }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+
+        @Override public void draw(Canvas cv) {
+            RectF r = new RectF(getBounds());
+            p.setColor(C_BG);
+            cv.drawRoundRect(new RectF(r.left - ring, r.top - ring, r.right + ring, r.bottom + ring), r.height() / 2 + ring, r.height() / 2 + ring, p);
+            p.setColor(0xFFE2552D);
+            cv.drawRoundRect(r, r.height() / 2, r.height() / 2, p);
+        }
     }
 
     private void hidePanel() {

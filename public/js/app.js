@@ -15,6 +15,7 @@ import { Hub, openHub, openApps } from './hub.js';
 import { Dock, foldDock } from './dock.js';
 import { takeRef, pendingRef, clearRef, pendingUtm, clearUtm, offerSiteUpdate, StartCards } from './growth.js';
 import './i18n.js';
+import './appnative.js';
 import { appEntryHints } from './hints.js';
 takeRef();
 // Офлайн-кеш оболочки: со второго захода приложение открывается с диска. Вышла новая версия — докачается в фоне и предложит обновиться.

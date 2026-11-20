@@ -363,6 +363,12 @@ function Data() {
       <button class="li" disabled=${!!busy} onClick=${restore}><${Icon} n="upload" /><span><b>Восстановить из копии</b><small>На новом устройстве или после переустановки браузера</small></span></button>
       <button class="li" disabled=${!!busy} onClick=${imp}><${Icon} n="import" /><span><b>Импорт из Telegram или WhatsApp</b><small>result.json или .txt-экспорт чата → в «Избранное»</small></span>${busy === 'imp' && html`<${Spinner} />`}</button>
       <button class="li" onClick=${clear}><${Icon} n="eraser" /><span><b>Очистить локальный кэш</b><small>История поиска, недавние эмодзи, мелочи интерфейса</small></span></button></div>
+    <h5>Документы и правила</h5>
+    <div class="list">
+      <button class="li" onClick=${() => window.open('/privacy', '_blank', 'noopener')}><${Icon} n="lock" /><span><b>Политика конфиденциальности</b><small>Какие данные храним, где и как их удалить</small></span></button>
+      <button class="li" onClick=${() => window.open('/offer', '_blank', 'noopener')}><${Icon} n="scroll-text" /><span><b>Пользовательское соглашение и оферта</b><small>Правила сервиса, платные услуги, возврат</small></span></button>
+      <button class="li" onClick=${() => window.open('/pay', '_blank', 'noopener')}><${Icon} n="store" /><span><b>Цены и оплата</b><small>Что продаётся, сколько стоит и как вернуть деньги</small></span></button>
+      <button class="li" onClick=${() => window.open('/contacts', '_blank', 'noopener')}><${Icon} n="mail" /><span><b>Поддержка и реквизиты</b><small>Написать нам, пожаловаться на контент</small></span></button></div>
     <p class="hint">Экспорт отдельного чата в JSON или HTML — в меню чата → «Экспорт истории». Удаление аккаунта — в разделе «Аккаунт».</p></div>`;
 }
 

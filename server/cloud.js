@@ -73,6 +73,7 @@ async function ensureBucket() {
 // Зачем: бесплатный проект Supabase могут приостановить или удалить. Тогда сервер при запуске поднимется из копии в S3
 // и продолжит работать на ней, а не остановится навсегда. На своём сервере без Supabase это просто резервная копия вне диска.
 const MIRROR = S3.enabled && process.env.DB_MIRROR !== 'off';
+const SUPABASE_USE = enabled && process.env.DB_MIRROR_PRIMARY !== 'off';      // off — Supabase не трогаем вовсе (данные только в России)
 const MKEY = 'db/' + ROW;
 const mirror = { lastOk: 0, lastError: '', at: 0, day: '', busy: false, primary: false, pending: null, timer: null, pushes: 0, localId: '', remoteId: undefined };      // remoteId: номер базы, чья копия лежит в S3 (undefined — ещё не смотрели, '' — копии нет)
 const idOf = data => (data && data.meta && data.meta.dbId) || '';
@@ -129,7 +130,9 @@ function mirrorArm() { if (!mirror.timer && !mirror.busy) { mirror.timer = setTi
 function mirrorQueue(text) { if (!MIRROR || !ready) return; mirror.pending = text; mirrorArm(); }
 const mirrorStatus = () => (MIRROR ? { ok: !mirror.lastError, savedAgo: mirror.lastOk ? Math.round((Date.now() - mirror.lastOk) / 1000) : null, primary: mirror.primary || undefined } : undefined);
 
-// Перед стартом: скачать снимок базы на локальный диск. Источников два: Supabase (основной) и копия в S3.
+// Перед стартом: скачать снимок базы на локальный диск. Источников два: S3 (основной, Россия) и запасной Supabase.
+// DB_MIRROR_PRIMARY=off — Supabase не используется вовсе: ни чтения, ни записи. Так настроен боевой сервер:
+// все данные пользователей хранятся только в России (152-ФЗ), копия — в бакете Cloud.ru.
 // Берётся более свежий (метка meta.savedAt). Если Supabase недоступен, а копия есть — поднимаемся из копии.
 // Ошибка бросается, только когда базу взять совсем неоткуда: запускаться с пустой и затереть ею настоящую нельзя.
 const stamp = data => (data && data.meta && Number(data.meta.savedAt)) || 0;
@@ -157,6 +160,13 @@ async function restore() {
   if (!enabled) {                          // свой сервер с диском: копия из S3 нужна, только если диск пуст (новая машина)
     if (MIRROR && !fs.existsSync(DB_FILE) && !fs.existsSync(DB_FILE + '.bak')) { const m = await readMirror(); if (m) adopt(m, 'из копии в S3: на диске базы нет'); }
     ready = true; return 'off';
+  }
+  if (!SUPABASE_USE && MIRROR) {           // Supabase выключен: снимок берём из S3 (Россия), запасной источник — файл на диске
+    if (fs.existsSync(DB_FILE) || fs.existsSync(DB_FILE + '.bak')) { ready = true; console.log('[cloud] база на диске, Supabase отключён (DB_MIRROR_PRIMARY=off)'); return 'off'; }
+    const m = await readMirror();
+    if (!m) { console.log('[cloud] копии в S3 ещё нет — чистый старт'); ready = true; return 'empty'; }
+    adopt(m, 'из копии в S3 (Россия)');
+    return 'mirror';
   }
   let sup, err;
   for (let i = 0; i < 6; i++) {
@@ -191,7 +201,7 @@ async function restore() {
 }
 // Раз в шесть часов: свежая копия дня в Supabase. Заодно это обращение к проекту, чтобы его не сочли заброшенным.
 let lastBody = null;
-if (enabled) setInterval(() => {
+if (SUPABASE_USE) setInterval(() => {
   if (!ready) return;
   (lastBody ? writeRow(dayRow(), lastBody) : readRow(ROW + '-ping')).catch(e => console.error('[cloud] копия дня не записана:', e.message));
 }, 6 * 36e5).unref();
@@ -215,7 +225,7 @@ async function drain() {
 }
 function queue(text) {
   mirrorQueue(text);
-  if (!enabled || !ready) return;
+  if (!enabled || !SUPABASE_USE || !ready) return;
   pending = text;
   if (!timer && !pushing) timer = setTimeout(drain, Math.max(0, pushGap() - (Date.now() - lastPush)));
 }
@@ -223,7 +233,7 @@ function queue(text) {
 async function final(text, maxMs = 20000) {
   if (!ready) return;
   const side = MIRROR ? (async () => { const until = Date.now() + 9000; while (mirror.busy && Date.now() < until) await sleep(100); mirror.pending = text; mirror.at = 0; await Promise.race([mirrorDrain(), sleep(9000)]); })().catch(() => {}) : null;
-  if (!enabled) { await side; return; }
+  if (!enabled || !SUPABASE_USE) { await side; return; }
   if (timer) { clearTimeout(timer); timer = null; }
   const until = Date.now() + maxMs;
   while (pushing && Date.now() < until) await sleep(100);
