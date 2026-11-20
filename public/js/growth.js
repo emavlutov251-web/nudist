@@ -330,9 +330,14 @@ const appVer = () => { try { return window.NudistApp && window.NudistApp.version
 const inCall = async () => { try { return !!(await import('./rtc.js')).RTC.chat; } catch (e) { return false; } };      // во время звонка окнами не мешаем
 function UpdateDlg({ id, info }) {
   const [step, setStep] = useState(0);
+  // Сборки до 1.9 подписывались одноразовым ключом (так было в автосборке), а 1.9 подписана постоянным —
+  // иначе RuStore не примет обновления. Из-за смены подписи файл не встанет поверх старой версии:
+  // об этом честно предупреждаем и даём порядок действий, чтобы человек не остался у разбитого корыта.
+  const oldSign = inApp() && appVer() > 0 && appVer() < 19 && Number(info.code) >= 19;
   return html`<${Modal} id=${id} title="Вышло обновление" icon="download">
     <div class="ask">
       <p><b>«Нудист» ${info.name} для Android.</b> У вас стоит старая версия. Обновление ставится поверх: вход и переписка сохранятся.</p>
+      ${oldSign && html`<div class="note warn"><b>Важно: подпись приложения сменилась</b> (этого требует RuStore, иначе обновления не принимаются).<ol class="steps"><li>Вспомните пароль — он понадобится для входа: переписка и аккаунт на сервере, их удаление приложения не затрагивает.</li><li>Скачайте и откройте <b>nudist.apk</b>. Если телефон скажет «Приложение не установлено» — это ожидаемо.</li><li>Тогда удалите «Нудист» и установите скачанный файл заново. Войдите: имя и пароль, всё на месте.</li></ol><p class="hint">Забыли пароль? Напишите в поддержку из приложения до удаления или на navlutove05@gmail.com — поможем.</p></div>`}
       ${(info.news || []).length > 0 && html`<ul class="upd-news">${info.news.map(n => html`<li>${n}</li>`)}</ul>`}
       ${step === 1 && html`<ol class="steps"><li>Дождитесь загрузки файла nudist.apk (${info.size || 'он маленький'}).</li><li>Откройте его из шторки или из папки «Загрузки».</li><li>Нажмите «Обновить». Если телефон спросит про установку из этого источника — разрешите.</li></ol><p class="hint">Не скачивается? Откройте в браузере телефона адрес ${location.host}/start и скачайте оттуда.</p>`}
       <div class="ask-btns"><a class="btn" href="/nudist.apk" download="nudist.apk" onClick=${() => setStep(1)}><${Icon} n="download" s=${16} /> ${step ? 'Скачать ещё раз' : 'Скачать и установить'}</a><button class="btn ghost" onClick=${() => closeModal(id)}>Позже</button></div>
