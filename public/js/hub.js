@@ -468,6 +468,7 @@ function AppFrame({ id, app, chat, duel }) {
     const onMsg = async e => {
       if (!fr.current || e.source !== fr.current.contentWindow || e.origin !== location.origin || !e.data) return;
       const d = e.data, reply = x => fr.current && fr.current.contentWindow.postMessage(x, location.origin), cid = chat || S.ui.chat, c = S.chats[cid];
+      MINI.frame = fr.current;
       if (d.nudist === 'ready') {
         const th = document.documentElement.dataset.theme;
         reply({ nudist: 'init', name: userName(S.me), theme: th === 'dark' || (th !== 'light' && th !== 'tan' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light', canSend: !!c });
@@ -486,6 +487,13 @@ function AppFrame({ id, app, chat, duel }) {
       if (d.nudist === 'cards') {
         try { const r = await rpc('cards.' + String(d.m).replace(/^cards\./, ''), { ...(d.p || {}), id: (d.p && d.p.id) || null }); reply({ nudist: 'cards.reply', id: d.id, r }); }
         catch (x) { reply({ nudist: 'cards.reply', id: d.id, e: x.message }); }
+      }
+      // Онлайн-игры (например, «Нудищево РП») спрашивают сервер сами — через тот же мост.
+      // Разрешены только их собственные методы: из фрейма нельзя дёргать чужие.
+      if (d.nudist === 'rpc') {
+        const m = String(d.m || ''), ok = /^rp\./.test(m) || (app.rpc && m.startsWith(app.rpc + '.'));
+        if (!ok) return reply({ nudist: 'rpc.reply', id: d.id, e: 'Нельзя' });
+        try { reply({ nudist: 'rpc.reply', id: d.id, r: await rpc(m, d.p || {}) }); } catch (x) { reply({ nudist: 'rpc.reply', id: d.id, e: x.message }); }
       }
       if (d.nudist === 'cards.invite') {
         try { const { pickUsers } = await import('./panels.js'); const ids = await pickUsers({ title: 'Кого позвать за стол?', noBots: true, exclude: [S.me.id] }); if (ids && ids[0]) await rpc('cards.invite', { id: app.cardsId, to: ids[0] }); }
@@ -520,6 +528,7 @@ function AppFrame({ id, app, chat, duel }) {
 // ───── карточный стол «Нудист в купальнике»
 // Игра живёт в отдельном приложении, а правила — на сервере. Здесь только открываем стол и пересылаем ему состояние.
 const CARDS = { frame: null, last: {} };
+const MINI = { frame: null };      // iframe открытой мини-игры: в него уходят события онлайна
 export async function openCards(opts) {
   const p = opts || {};
   let g;
@@ -530,6 +539,8 @@ export async function openCards(opts) {
 }
 const cardsToFrame = (f, d) => { if (!d) return; CARDS.last[d.id] = d; if (f && f.contentWindow) { try { f.contentWindow.postMessage({ nudist: 'cards.state', v: d, me: (S.me || {}).id }, location.origin); } catch (e) { /* игра закрыта */ } } };
 on('cards', d => cardsToFrame(CARDS.frame, d));
+// Онлайн-играм — их события: кто где стоит, что сказал, кто вышел.
+for (const ev of ['rp.pos', 'rp.gone', 'rp.say']) on(ev, d => { const fr = MINI.frame; if (fr && fr.contentWindow) fr.contentWindow.postMessage({ nudist: 'ev', ev, d }, location.origin); });
 on('cards.invite', async d => {
   if (!(await confirmDlg({ title: 'Играем в карты?', text: `${userName(S.users[d.from] || { name: d.fromName })} зовёт за стол «Нудист в купальнике». Мест: ${d.n} из ${d.seats}.`, ok: 'Сесть за стол' }))) return;
   rpc('cards.join', { id: d.id }).then(() => openModal(AppFrame, { app: { id: 'cards', title: 'Нудист в купальнике', url: '/miniapps/cards.html?g=' + d.id, cat: 'games', cardsId: d.id }, chat: null })).catch(e => toast(e.message, 'err'));

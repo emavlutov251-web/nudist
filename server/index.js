@@ -7,7 +7,9 @@ const Cloud = require('./cloud');
 const A = require('./auth');
 const Hub = require('./hub');
 const Rave = require('./rave');
+require('./rp');
 const Cards = require('./cards');
+const Rp = require('./rp');
 require('./feed');
 const Push = require('./push');
 const Ask = require('./ask');
@@ -289,7 +291,25 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/ask/mine' && req.method === 'POST') return json(res, 200, Ask.asked((await readJson(req)).items, ipOf(req)));
     if (p.startsWith('/api/admin/')) { const r = Adm.httpApi(p, req.headers.authorization); return json(res, r.code, r.body); }
     if (p.startsWith('/api/')) {
-      const fn = A.api[p.slice(5)]; if (!fn || req.method !== 'POST') return json(res, 404, { error: 'not found' });
+      const fn = A.api[p.slice(5)];
+      if (!fn && req.method === 'POST') {
+        // Запасной путь для онлайн-игр, открытых прямо в браузере (без мессенджера вокруг):
+        // те же методы, что и по WebSocket, но по обычному запросу — с тем же входом по токену.
+        const m = p.slice(5);
+        if (/^rp\./.test(m) && R.H[m]) {
+          const body = await readJson(req);
+          const ses = sessionOf(req);
+          if (!ses || !ses.u) return json(res, 401, { error: 'Нужна авторизация' });
+          try {
+            const r = await R.H[m]({ uid: ses.u.id, id: 'http:' + ses.u.id + ':' + Date.now(), send: () => {}, raw: () => {} }, body || {});
+            return json(res, 200, r || {});
+          } catch (e) {
+            if (e instanceof C.PubError) return json(res, 400, { error: e.message });
+            console.error('[http rpc]', m, e); return json(res, 500, { error: 'Внутренняя ошибка' });
+          }
+        }
+      }
+      if (!fn || req.method !== 'POST') return json(res, 404, { error: 'not found' });
       const body = await readJson(req);
       return json(res, 200, await fn(body, { ip: ipOf(req), ua: req.headers['user-agent'] || '' }));
     }
@@ -362,7 +382,10 @@ function onConnect(ws, tok, sess, u, ip) {
   if (first) presence(u, true);
   save();
   ws.on('pong', () => { c.alive = true; });
-  ws.on('message', async (data, isBinary) => {
+  // Всё, что приходит от клиента, разбираем внутри try: одна кривая посылка или ошибка в навыке не должна
+  // ронять сервер целиком (а раньше падала именно так — и у всех пропадала связь).
+  ws.on('message', data => onMessage(c, data).catch(e => { C.metrics.errors++; console.error('[msg]', e && e.message); }));
+  async function onMessage(c, data, isBinary) {
     if (isBinary) return G.audio(c, data); // звук звонка, идущий через сервер
     let q; try { q = JSON.parse(data.toString()); } catch (e) { return; }
     if (!q || typeof q.m !== 'string') return;
@@ -378,9 +401,9 @@ function onConnect(ws, tok, sess, u, ip) {
       if (e instanceof C.PubError) c.raw(JSON.stringify({ id: q.id, e: e.message }));
       else { console.error('[rpc]', q.m, e); c.raw(JSON.stringify({ id: q.id, e: 'Внутренняя ошибка сервера. Мы уже краснеем.' })); }
     }
-  });
+  }
   ws.on('close', () => {
-    G.dropConn(c); Hub.dropConn(c); Rave.dropConn(c); Cards.resetRate(u.id); C.connById.delete(c.id);
+    G.dropConn(c); Hub.dropConn(c); Rave.dropConn(c); Rp.dropConn(c); Cards.resetRate(u.id); C.connById.delete(c.id);
     const set = C.conns.get(u.id); if (set) { set.delete(c); if (!set.size) { C.conns.delete(u.id); const cur = db.users[u.id]; if (cur && !cur.deleted) { cur.seen = now(); presence(cur, false); save(); } } }
   });
   ws.on('error', () => {});

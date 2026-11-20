@@ -1,1 +1,8 @@
 #quest { font-size: 13px; min-height: 18px; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .bar .row button { padding: 11px 12px; } #act { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Чат города: лента реплик и поле «сказать». Не закрывает игру — появляется поверх нижней панели. */
+.rp-talk { position: absolute; left: 8px; right: 8px; bottom: 62px; background: rgba(22,34,26,.94); border: 1px solid rgba(255,255,255,.14); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 6; }
+.rp-talk[hidden] { display: none; }
+.rp-says { max-height: 30vh; overflow: auto; display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: #f2f6f2; }
+.rp-says b { color: #8FE08A; font-weight: 600; margin-right: 4px; }
+.rp-talk .row { display: flex; gap: 6px; } .rp-talk input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.08); color: #fff; font-size: 14px; }

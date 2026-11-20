@@ -28,6 +28,25 @@ addEventListener('message', e => {
   if (d.nudist === 'earned') { const n_ = Math.abs(d.n || 0) % 100, k_ = n_ % 10, word_ = n_ > 10 && n_ < 20 ? 'листиков' : k_ === 1 ? 'листик' : k_ >= 2 && k_ <= 4 ? 'листика' : 'листиков'; if (d.n) toast(`+${d.n} ${word_}` + (d.left ? '' : ' · на сегодня это всё')); else if (!earn.told) { earn.told = true; toast('Листики за эту игру на сегодня собраны. Завтра вырастут новые.'); } }
 });
 export function ready(fn) { if (fn) subs.push(fn); say({ nudist: 'ready' }); }
+// ───── запросы к серверу из игры: онлайн-играм нужно спрашивать и рассказывать.
+// Если игра открыта вне «Нудиста» (прямо в браузере), работать не будет — это нормально, вернём отказ.
+let rid = 0; const rq = new Map();
+addEventListener('message', e => { if (e.source !== parent || !e.data || e.data.nudist !== 'rpc.reply') return; const p = rq.get(e.data.id); if (!p) return; rq.delete(e.data.id); e.data.e !== undefined ? p.no(new Error(e.data.e)) : p.ok(e.data.r); });
+// Внутри «Нудиста» спрашиваем через мессенджер (там уже открыт канал), а если игра открыта прямо
+// в браузере — тем же входом по обычному запросу. Так онлайн работает и так, и так.
+function httpRpc(m, p) {
+  let tok = null; try { tok = JSON.parse(localStorage.getItem('nudist.token')); } catch (e) { /* нет входа */ }
+  return fetch('/api/' + m, { method: 'POST', headers: { 'content-type': 'application/json', ...(tok ? { authorization: 'Bearer ' + tok } : {}) }, body: JSON.stringify(p || {}) })
+    .then(r => r.json().then(j => { if (!r.ok || j.error) throw new Error(j.error || 'Ошибка ' + r.status); return j; }));
+}
+export function rpc(m, p) {
+  if (parent === window) return httpRpc(m, p);
+  return new Promise((ok, no) => { const i = ++rid; rq.set(i, { ok, no }); say({ nudist: 'rpc', id: i, m, p: p || {} }); setTimeout(() => { if (rq.has(i)) { rq.delete(i); no(new Error('Сервер не ответил')); } }, 8000); });
+}
+/** События из игры: другие игроки, сообщения города. */
+const evSubs = [];
+addEventListener('message', e => { if (e.source !== parent || !e.data || e.data.nudist !== 'ev') return; evSubs.forEach(f => f(e.data.ev, e.data.d)); });
+export function onEvent(fn) { evSubs.push(fn); }
 export function share(text) { if (parent === window) return toast('Откройте приложение внутри «Нудиста»'); say({ nudist: 'send', text: String(text).slice(0, 2000) }); }
 // Попросить у «Нудиста» листики за игровое достижение (что и сколько стоит — решает сервер, у каждой игры потолок на день).
 export function earn(what) { if (parent !== window) say({ nudist: 'earn', what: String(what) }); }

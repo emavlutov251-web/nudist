@@ -1,6 +1,6 @@
 // «Нудищево РП»: маленькая жизнь в провинциальном городе. Работа, еда, сон, транспорт, а на юге — пляж: шезлонги, ракушки, волейбол и дежурство спасателя.
 // Одиночная игра, прогресс хранится на устройстве.
-import { ready, share, $, store, earn, toast } from '/miniapps/kit.js';
+import { ready, share, $, store, earn, toast, rpc, onEvent } from '/miniapps/kit.js';
 import { MI } from '/miniapps/mini-icons.js';
 import { stage, loop, text, rnd, pick, clamp, dist, sticks, drawStick, axis, keys } from '/miniapps/game.js';
 import { item } from '/miniapps/art.js';
@@ -148,6 +148,25 @@ const lvl = () => 1 + Math.floor(S.xp / 100), pay = n => Math.round(n * (1 + (lv
 const tell = (t, s = 2.4) => { G.msg = t; G.msgT = s; };
 function hud() { $('#money').textContent = S.money; $('#food').textContent = Math.round(S.food); $('#en').textContent = Math.round(S.en); $('#lvl').textContent = lvl(); }
 function save() { store.set('rp.save', S); }
+// ───── Онлайн. Другие жители ходят по тому же городу: сервер знает, кто где, и присылает, что говорят вокруг.
+// Если игра открыта вне «Нудиста» или связи нет — город просто без соседей, игра не ломается.
+const ON = { people: new Map(), says: [], at: 0, ok: false, lastSend: 0, said: 0 };
+function online() {
+  rpc('rp.pos', { x: S.x, y: S.y, hat: S.hat, ride: S.ride, beach: onBeach() }).catch(() => { ON.ok = false; });
+}
+onEvent((ev, d) => {
+  if (ev === 'rp.pos' && d && d.p) { ON.people.set(d.p.id, d.p); ON.ok = true; }
+  else if (ev === 'rp.gone' && d) ON.people.delete(d.id);
+  else if (ev === 'rp.say' && d) {
+    ON.says.push(d.m); if (ON.says.length > 30) ON.says.shift();
+    const p = ON.people.get(d.m.by);
+    if (p) { p.say = d.m.text; p.sayT = 4; }      // у говорящего над головой всплывает реплика, как у местных
+  }
+});
+// Раз в полтора-два шага сообщаем, где мы: чаще незачем, канал общий.
+const netTick = dt => { ON.at += dt; if (ON.at < 1.6) return; ON.at = 0; online(); for (const p of ON.people.values()) { if (p.sayT > 0) p.sayT -= 1.6; if (performance.now() / 1000 - 0 > 0 && Math.abs(p.x - S.x) > 1100) ON.people.delete(p.id); } };
+// Свои средства передвижения и шапку пусть видят и другие.
+function sayCity(text) { rpc('rp.say', { text }).then(() => { ON.said = performance.now() / 1000; }).catch(() => tell('Город не слышит: игра открыта без «Нудиста»')); }
 const near = () => { let b = null, bd = 46; for (const p of PLACES) { const d = dist(S, p); if (d < bd) { bd = d; b = p; } } return b; };
 // Что предлагает кнопка действия рядом со зданием: [надпись, что сделать]
 function action() {
@@ -191,6 +210,7 @@ function step(dt) {
       if (G.safe <= 0 && Math.hypot(cx - S.x, cy - S.y) < 19) { const fee = Math.min(S.money, 300), h = PLACES.find(p => p.id === 'hosp'); S.money -= fee; S.x = h.x + 30; S.y = h.y + 34; S.en = Math.max(20, S.en - 20); G.safe = 3; G.work = 0; tell(`Вас сбила маршрутка. Больница: −${fee} ₽.`, 3.5); save(); } }
     for (const f of G.folk) { f.t -= dt; if (f.t <= 0) { f.t = rnd(2, 5); const a = rnd(0, 6.28); f.tx = Math.cos(a) * 22; f.ty = Math.sin(a) * 22; if (Math.random() < .3) f.tx = f.ty = 0; } f.x = clamp(f.x + f.tx * dt, 20, WORLD - 20); f.y = f.beach ? clamp(f.y + f.ty * dt, BY + 14, SY - 10) : clamp(f.y + f.ty * dt, 20, WORLD - 20); }
     saveT += dt; if (saveT > 5) { saveT = 0; save(); }
+    netTick(dt);
     const a = action(), b = $('#act'); actFn = a ? a[1] : null; b.disabled = !a; const label = a ? a[0] : 'Подойдите к зданию'; if (b.dataset.l !== label) { b.dataset.l = label; b.innerHTML = label; }
     const q = G.rescue ? `${MI.sos} Тонущий в ${Math.round(Math.hypot(G.rescue.x - S.x, G.rescue.y - S.y) / 10)} м · осталось ${Math.ceil(G.rescue.t)} с` : G.vol > 0 ? `${MI.ball} Идёт партия: не уходите с площадки` : G.quest ? `${MI.parcel} Посылка → ${G.quest.to.n} · ${Math.round(dist(S, G.quest.to) / 10)} м · ${pay(G.quest.pay)} ₽` : G.work > 0 ? `${MI.factory} Идёт смена: не отходите от станка` : S.jobs ? `Работ сделано: ${S.jobs}. ${RIDES[S.ride + 1] ? 'До «' + RIDES[S.ride + 1].n.replace(/[«»]/g, '') + '»: ' + Math.max(0, RIDES[S.ride + 1].cost - S.money) + ' ₽' : 'Вы король района.'}` : `Найдите работу: почта или завод. Пляж — на юге`; if ($('#quest').dataset.l !== q) { $('#quest').dataset.l = q; $('#quest').innerHTML = q; }
   }
@@ -213,6 +233,17 @@ function draw() {
   if (G.rescue) { lifeRing(ctx, G.rescue.x, G.rescue.y + Math.sin(now * 5) * 3, 11, now); person(ctx, 'wave', G.rescue.x, G.rescue.y + 16 + Math.sin(now * 5) * 3, 8, now); }
   for (const p of PLACES) { if (p.x < cx - 40 || p.x > cx + W + 40 || p.y < cy - 40 || p.y > cy + H + 40) continue; building(ctx, p.art, p.x, p.y - 4, 15); const mine = G.quest && G.quest.to.id === p.id; if (!p.addr || mine) { ctx.font = '600 10px sans-serif'; const w = ctx.measureText(p.n).width + 8; ctx.fillStyle = mine ? '#d6402f' : 'rgba(0,0,0,.62)'; ctx.fillRect(p.x - w / 2, p.y + 14, w, 14); text(ctx, p.n, p.x, p.y + 21, 10); } }
   for (const f of G.folk) { person(ctx, f.kind, f.x, f.y, 10.5, now + f.x); if (dist(f, S) < 62) { ctx.font = '600 10px sans-serif'; const w = ctx.measureText(f.say).width + 10; ctx.fillStyle = '#fff'; ctx.fillRect(f.x - w / 2, f.y - 32, w, 16); text(ctx, f.say, f.x, f.y - 24, 10, '#111'); } }
+  // Другие игроки: тот же человек, только с ником над головой. Их видно, только когда они рядом.
+  for (const p of ON.people.values()) {
+    if (p.x < cx - 40 || p.x > cx + W + 40 || p.y < cy - 40 || p.y > cy + H + 40) continue;
+    const ride = p.ride > 0 && !p.beach ? (RIDES[p.ride] || {}).art : '';
+    if (ride) car(ctx, ride, p.x, p.y + 6, 12.5, false);
+    if (p.beach) person(ctx, 'me', p.x, p.y, 10.5, now + p.x); else person(ctx, 'me', p.x, p.y - (ride ? 8 : 0), 10.5, now + p.x);
+    if (HATS[p.hat] && !p.beach) hatDraw(ctx, HATS[p.hat], p.x, p.y - (ride ? 24 : 16), 6.5);
+    ctx.font = '600 10px sans-serif'; const nm = p.name.length > 16 ? p.name.slice(0, 15) + '…' : p.name;
+    const w = ctx.measureText(nm).width + 10; ctx.fillStyle = 'rgba(20,60,38,.82)'; ctx.fillRect(p.x - w / 2, p.y - 40, w, 14); text(ctx, nm, p.x, p.y - 33, 10);
+    if (p.say && p.sayT > 0) { const sw = Math.min(140, ctx.measureText(p.say).width + 12); ctx.fillStyle = '#fff'; ctx.fillRect(p.x - sw / 2, p.y - 58, sw, 15); text(ctx, p.say.length > 24 ? p.say.slice(0, 23) + '…' : p.say, p.x, p.y - 50, 10, '#111'); }
+  }
   for (const c of G.cars) car(ctx, c.kind, c.h ? c.p : c.line, c.h ? c.line : c.p, 12.5, c.h ? c.sp < 0 : c.sp > 0);
   const ride = RIDES[S.ride]; if (!(G.safe > 0 && Math.floor(G.safe * 10) % 2)) { const bare = onBeach(), re = bare ? '' : ride.art; if (re) car(ctx, re, S.x, S.y + 6, 12.5, false); if (swim() && !bare) swimPose(ctx, S.x, S.y - (re ? 8 : 0), 10.5, now); else person(ctx, 'me', S.x, S.y - (re ? 8 : 0), 10.5, now); if (HATS[S.hat] && !bare) hatDraw(ctx, HATS[S.hat], S.x, S.y - (re ? 24 : 16), 6.5); }
   ctx.restore();
@@ -229,4 +260,25 @@ $('#go').onclick = () => { if (!G) reset(false); $('#ov').hidden = true; }; $('#
 $('#share').onclick = () => share(`🏘️ Нудищево РП: ${lvl()}-й уровень, ${S.money} ₽, транспорт: ${RIDES[S.ride].n.toLowerCase()}. Работ сделано: ${S.jobs}.` + (S.saved ? ` На пляже спасено: ${S.saved}.` : ''));
 if (store.get('rp.save', null)) $('#wipe').hidden = false;
 { const hud = document.querySelectorAll('.hud-ic'); if (hud[0]) hud[0].insertAdjacentHTML('afterbegin', MI.cash); if (hud[1]) hud[1].insertAdjacentHTML('afterbegin', MI.drumstick); if (hud[2]) hud[2].insertAdjacentHTML('afterbegin', MI.bolt); const ov = $('#ovE'); if (ov && !ov.innerHTML) ov.innerHTML = MI.village; }
-reset(false); ready(); loop(step);
+reset(false);
+// Прогресс живёт в аккаунте: на другом устройстве жизнь продолжится с того же места, а не с нуля.
+rpc('rp.state').then(r => {
+  if (r && r.save && typeof r.save === 'object' && !store.get('rp.save', null)) { S = { ...S, ...r.save }; if (!Array.isArray(S.hats)) S.hats = [0]; hud(); save(); tell('Прогресс загружен с аккаунта'); }
+  if (r && r.at) ON.at = 0;
+  if (r && r.people) for (const p of r.people) ON.people.set(p.id, p);
+  if (r && r.says) ON.says = r.says;
+  ON.ok = true;
+}).catch(() => { ON.ok = false; });
+setInterval(() => { rpc('rp.save', { save: { money: S.money, xp: S.xp, ride: S.ride, hat: S.hat, hats: S.hats, jobs: S.jobs, saved: S.saved, tan: S.tan, en: Math.round(S.en), food: Math.round(S.food) } }).catch(() => {}); }, 60000);
+ready(); loop(step);
+// ───── чат города: кнопка 💬, лента реплик, ввод
+{
+  const box = $('#talkBox'), inp = $('#talkIn'), onto = $('#says');
+  const paint = () => { onto.innerHTML = ON.says.slice(-20).map(m => `<div><b>${m.name || (ON.people.get(m.by) || {}).name || 'Житель'}</b>${String(m.text).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</div>`).join('') || '<div style="opacity:.6">Пока тихо. Скажите что-нибудь — услышат те, кто рядом.</div>'; onto.scrollTop = onto.scrollHeight; };
+  const openBox = on => { box.hidden = !on; if (on) { paint(); inp.focus(); } };
+  $('#talk').onclick = () => openBox(box.hidden);
+  const send = () => { const t = inp.value.trim(); if (!t) return; inp.value = ''; sayCity(t); const mine = { id: 'me' + Date.now(), by: 'me', name: 'Вы', text: t }; ON.says.push(mine); paint(); };
+  $('#talkSend').onclick = send;
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+  setInterval(() => { if (!box.hidden) paint(); }, 1500);
+}

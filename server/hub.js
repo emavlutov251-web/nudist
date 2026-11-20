@@ -234,7 +234,7 @@ const APPS = [
   { id: 'run', title: 'Пляжная пробежка', about: 'Бег с двойным прыжком: перепрыгивайте крабов, собирайте листики', cat: 'games', emoji: '🏃', art: 'run', url: '/miniapps/run.html' },
   { id: 'pairs', title: 'Пляжные пары', about: 'Найдите все пары рисованных карточек за меньшее число ходов', cat: 'games', emoji: '🃏', art: 'pairs', url: '/miniapps/pairs.html' },
   { id: 'cards', title: 'Нудист в купальнике', about: 'Карточный стол на 2–4 человек: сбрасываем карты по цвету и числу, кто первым останется без карт — победил', cat: 'games', emoji: '🃏', url: '/miniapps/cards.html' },
-  { id: 'rp', title: 'Нудищево РП', about: 'Жизнь в провинции: почта, завод, шаурма, пляж со спасателями и мечта о «бэхе»', cat: 'games', emoji: '🏘️', url: '/miniapps/rp.html' },
+  { id: 'rp', title: 'Нудищево РП', about: 'Онлайн-город: по улицам ходят другие игроки, работа, шаурма, пляж со спасателями и мечта о «бэхе». Прогресс — в аккаунте', cat: 'games', emoji: '🏘️', url: '/miniapps/rp.html' },
   { id: 'lot', title: 'Жребий', about: 'Монетка, кубик и «кто идёт за пиццей»', cat: 'tools', emoji: '🎲', url: '/miniapps/lot.html' },
   { id: 'breath', title: 'Подышать', about: 'Минута спокойного дыхания: «квадрат», 4-7-8 и долгий выдох. Помогает, когда тревожно', cat: 'tools', emoji: '🌬️', url: '/miniapps/breath.html' },
   { id: 'split', title: 'Скинемся', about: 'Делит счёт на компанию с чаевыми', cat: 'tools', emoji: '🧾', url: '/miniapps/split.html' },
