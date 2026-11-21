@@ -7,7 +7,7 @@ const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
 const PORT = 3910 + Math.floor(Math.random() * 60), BASE = 'http://127.0.0.1:' + PORT;
 const DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'nudist-store-'));
-const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: DIR, KEEP_AWAKE: 'off' }, stdio: 'ignore' });
+const srv = spawn(process.execPath, [path.join(__dirname, '..', 'server', 'index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: DIR, KEEP_AWAKE: 'off', SITE_URL: 'http://127.0.0.1:' + PORT, YOOKASSA_SHOP_ID: 'test', YOOKASSA_SECRET: 'test' }, stdio: 'ignore' });
 process.on('exit', () => { try { srv.kill(); } catch (e) {} });
 const UA_STORE = 'Mozilla/5.0 (Linux; Android 14) NudistAndroid/47 store/rustore';
 const UA_SITE  = 'Mozilla/5.0 (Linux; Android 14) NudistAndroid/47 store/site';
@@ -40,10 +40,13 @@ const ok = (c, m) => { if (c) { pass++; console.log('  ✓', m); } else { fail++
   const st = await conn(UA_STORE);
   const i3 = await st.call('pay.info');
   ok(R(i3).storeBuild === true, 'магазин: storeBuild=true');
-  ok(R(i3).enabled === false, 'магазин: оплата выключена (enabled=false)');
+  ok(R(i3).enabled === false, 'магазин: карта внутри приложения не предлагается (enabled=false)');
+  // Карту внутри приложения не проводим: pay.create из магазина запрещён,
+  // вместо него приложение берёт одноразовую ссылку на оплату в браузере.
   const i4 = await st.call('pay.create', { item: 'plan_plus' });
-  const msg = JSON.stringify(i4);
-  ok(/RuStore/.test(msg), 'магазин: pay.create отклонён с понятным текстом');
+  ok(/\bRuStore\b|магазин/i.test(JSON.stringify(i4)), 'магазин: оплата картой внутри приложения запрещена');
+  const i5 = await st.call('pay.link', { item: 'plan_plus' });
+  ok(i5.r && /\/buy#k=[a-f0-9]{20,64}$/.test(i5.r.url || ''), 'магазин: выдаётся ссылка на оплату в браузере');
   st.ws.close();
   // /rules
   const r = await fetch(BASE + '/rules', { redirect: 'manual' });

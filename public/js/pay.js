@@ -2,6 +2,13 @@
 import { html, useState, useEffect, S, rpc, toast, Icon, cx, openModal, closeModal, Modal, on, local, Spinner } from './lib.js';
 import { sfx, confetti } from './fun.js';
 
+// Открыть ссылку в браузере телефона: из приложения — через мост (там уже есть такое действие),
+// в обычном браузере — обычным переходом.
+const openBrowser = url => {
+  try { const a = window.NudistApp; if (a && typeof a.openBrowser === 'function') { a.openBrowser(url); return; } } catch (e) { /* старые сборки */ }
+  location.assign(url);
+};
+
 const rub = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₽';
 let cache = null;
 export const payInfo = async () => (cache = await rpc('pay.info'));
@@ -10,7 +17,15 @@ export const payInfo = async () => (cache = await rpc('pay.info'));
 function BuyDlg({ id, item, info }) {
   const [email, setEmail] = useState(info.email || local.get('pay.email') || ''), [busy, setBusy] = useState(false);
   const go = async () => {
-    if (info.storeBuild) return toast('В приложении из RuStore покупки за рубли не проводятся. Оформите подписку на сайте — там доступна оплата картой.');
+    if (info.storeBuild) {
+      // Из магазинной сборки: одноразовая ссылка на оплату в браузере (правило RuStore 9.1).
+      setBusy(true);
+      try {
+        const r = await rpc('pay.link', { item: item.id });
+        if (r && r.url) { openBrowser(r.url); closeModal(id); return; }
+      } catch (e) { toast(e.message, 'err'); }
+      setBusy(false); return;
+    }
     if (!info.enabled) return toast('Оплата картой подключается: магазин проходит проверку в ЮKassa. Загляните чуть позже.');
     setBusy(true);
     try { if (email) local.set('pay.email', email.trim()); const r = await rpc('pay.create', { item: item.id, email: email.trim(), origin: location.origin }); local.set('pay.order', r.order); location.assign(r.url); }
@@ -32,13 +47,25 @@ export async function buyItem(itemId) {
 
 // Блок «Купить за рубли» в окне «Листики и Премиум».
 export function PayBlock() {
-  const [d, setD] = useState(cache);
+  const [d, setD] = useState(cache), [busy, setBusy] = useState('');
   useEffect(() => { let live = true; payInfo().then(r => live && setD(r)).catch(() => {}); return () => { live = false; }; }, []);
   if (!d) return html`<div class="payb"><${Spinner} /></div>`;
-  // Приложение из RuStore: покупки за рубли — через магазин. Блок ЮKassa не показываем (правило 9.1),
-  // премиум и листики там выдаются за активности и за просмотр рекламы.
-  if (d.storeBuild) return html`<div class="payb"><h3><${Icon} n="credit-card" s=${17} /> Подписка и листики</h3>
-    <p class="hint">В приложении из RuStore покупки за рубли не проводятся — так требуют правила магазина. Премиум и листики выдаются за активности, конкурсы и приглашённых друзей. Оформить подписку можно <a href="https://95-174-95-148.sslip.io" target="_blank" rel="noopener">на сайте «Нудиста»</a>.</p></div>`;
+  // Приложение из RuStore: цифровые покупки идут через сайт, но не картой внутри приложения.
+  // Нажатие открывает браузер телефона с одноразовой ссылкой — платить там удобно и безопасно.
+  if (d.storeBuild) {
+    const buyInBrowser = it => {
+      setBusy(it.id);
+      rpc('pay.link', { item: it.id })
+        .then(r => { if (r && r.url) { openBrowser(r.url); } else toast('Не удалось открыть оплату', 'err'); })
+        .catch(e => toast(e.message, 'err'))
+        .then(() => setBusy(''));
+    };
+    return html`<div class="payb"><h3><${Icon} n="credit-card" s=${17} /> Подписка и листики</h3>
+      <p class="hint">Оплата откроется в браузере на защищённой странице — это одна кнопка, входить заново не нужно. Так требуют правила RuStore для приложений из магазина.</p>
+      <h5>Подписка на 30 дней</h5><div class="payb-g">${prem.map(i => html`<button class="payb-i" disabled=${busy === i.id} onClick=${() => buyInBrowser(i)}><b>${i.short}</b><span>${busy === i.id ? '…' : rub(i.rub)}</span></button>`)}</div>
+      <h5>Листики</h5><div class="payb-g">${leaves.map(i => html`<button class="payb-i" disabled=${busy === i.id} onClick=${() => buyInBrowser(i)}><b>${i.short}</b><span>${busy === i.id ? '…' : rub(i.rub)}</span></button>`)}</div>
+      <p class="hint">Купить можно только в приложении из магазина — в том числе из RuStore. <a href="/pay" target="_blank" rel="noopener">Цены и условия</a> · <a href="/offer" target="_blank" rel="noopener">Оферта</a></p></div>`;
+  }
   const prem = d.items.filter(i => i.kind === 'plan'), leaves = d.items.filter(i => i.kind === 'leaves');
   const Row = ({ list }) => html`<div class="payb-g">${list.map(i => html`<button class="payb-i" onClick=${() => openModal(BuyDlg, { item: i, info: d })}><b>${i.short}</b><span>${rub(i.rub)}</span></button>`)}</div>`;
   return html`<div class="payb"><h3><${Icon} n="credit-card" s=${17} /> Купить за рубли</h3>

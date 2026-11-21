@@ -306,6 +306,19 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/ask/info' && req.method === 'GET') return json(res, 200, Ask.info(url.searchParams.get('u'), ipOf(req)));
     if (p === '/api/ask' && req.method === 'POST') return json(res, 200, Ask.send(await readJson(req), ipOf(req)));
     if (p === '/api/ask/mine' && req.method === 'POST') return json(res, 200, Ask.asked((await readJson(req)).items, ipOf(req)));
+    // Оплата из магазинной сборки: страница /buy в браузере не имеет нашего соединения, поэтому два
+    // узких маршрута. Доступ даёт сама одноразовая ссылка (её ключ), а не сеанс. Лимиты — против перебора.
+    if ((p === '/api/pay/site' || p === '/api/pay/pay') && req.method === 'POST') {
+      const paying = p.endsWith('/pay');
+      try {
+        A.limit('buyl:' + ipOf(req), paying ? 8 : 30, 600e3);
+        const r = await R.H[paying ? 'pay.pay' : 'pay.site']({}, await readJson(req));
+        return json(res, 200, r || {});
+      } catch (e) {
+        if (e instanceof C.PubError) return json(res, 400, { error: e.message });
+        console.error('[buy]', e); return json(res, 500, { error: 'Внутренняя ошибка' });
+      }
+    }
     if (p.startsWith('/api/admin/')) { const r = await Adm.httpApi(p, req.headers.authorization, req.method, req.method === 'POST' ? await readJson(req) : null); return json(res, r.code, r.body); }
     if (p.startsWith('/api/')) {
       const fn = A.api[p.slice(5)];
@@ -346,6 +359,11 @@ const server = http.createServer(async (req, res) => {
     // /rules — правила сообщества. Отдельной страницы нет: правила живут в оферте, раздел 5А («Правила контента и возраст»).
     // Ссылку на /rules просит RuStore и её же дают в карточке приложения — ведём сразу на нужный раздел, а не в 404.
     if (/^\/(rules|pravila|community|guidelines)\/?$/.test(p)) { res.writeHead(302, { location: '/offer#content', 'cache-control': 'no-store' }); return res.end(); }
+    // Оплата из приложения в браузере: магазинная сборка присылает сюда одноразовую ссылку (правило 9.1).
+    if (/^\/buy\/?$/.test(p)) {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': CSP, 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff' });
+      return res.end(req.method === 'HEAD' ? undefined : Pay.buyPage());
+    }
     const shop = /^\/(pay|tariffs|prices)\/?$/.test(p) ? 'pay' : /^\/(offer|oferta|terms)\/?$/.test(p) ? 'offer' : /^\/(contacts|rekvizity|requisites)\/?$/.test(p) ? 'contacts' : '';      // цены, оферта, реквизиты — открытые страницы платных услуг
     if (shop) {
       const body = shop === 'pay' ? await Pay.payPage(url.searchParams.get('order')) : shop === 'offer' ? Pay.offerPage() : Pay.contactsPage();

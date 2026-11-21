@@ -10,7 +10,8 @@ const Shop = require('./shop');
 const { db, save, now, need, str, emit } = C;
 const H = R.H;
 
-db.orders = db.orders || {};      // заказы: id → { id, user, item, rub, status: pending | paid | canceled | refunded, ts, pid, paidAt }
+db.orders = db.orders || {};
+db.payLinks = db.payLinks || {};      // одноразовые ссылки «купить в браузере»: хеш ключа → { user, item, exp }      // заказы: id → { id, user, item, rub, status: pending | paid | canceled | refunded, ts, pid, paidAt }
 const API = (process.env.YOOKASSA_API || 'https://api.yookassa.ru/v3').replace(/\/+$/, '');
 const SHOP = process.env.YOOKASSA_SHOP_ID || '', SECRET = process.env.YOOKASSA_SECRET || '';
 const enabled = () => !!(SHOP && SECRET);
@@ -23,6 +24,11 @@ const SITE = (process.env.SITE_URL || process.env.RENDER_EXTERNAL_URL || '').rep
 // помечает себя в User-Agent («store/rustore»), и сервер такую оплату не предлагает и не проводит.
 // Сборка с сайта и браузер работают как раньше — там ЮKassa разрешена.
 const STORE_BUILD = /store\/rustore/i;
+// Одноразовые ссылки для покупки из магазинной сборки: приложение открывает сайт в браузере, а человек
+// не должен ничего вводить заново. Ключ живёт 15 минут и работает один раз. В базе хранится только хеш.
+const BUY_TTL = 15 * 60e3;
+const buyHash = k => crypto.createHash('sha256').update('buy:' + k).digest('hex');
+const buyLive = () => { const t = now(); for (const h in db.payLinks) if (db.payLinks[h].exp < t) delete db.payLinks[h]; };
 const isStoreBuild = ctx => !!(ctx && STORE_BUILD.test(String(ctx.ua || '')));
 const storeBlocked = () => 'Оплата картой недоступна в приложении из RuStore. Оформите подписку на сайте или в приложении с сайта — там доступны все способы оплаты.';
 
@@ -81,13 +87,13 @@ async function sync(o) {
 }
 
 H['pay.info'] = c => ({ enabled: enabled() && !isStoreBuild(c), storeBuild: isStoreBuild(c), receipt: RECEIPT, items: ITEMS.map(i => ({ id: i.id, kind: i.kind, title: i.title, short: i.short, rub: i.rub, days: i.days, n: i.n, tier: i.tier })), perks: PERKS, email: (db.users[c.uid] || {}).email || '' });
-H['pay.create'] = async (c, p) => {
-  need(!isStoreBuild(c), storeBlocked());      // из RuStore покупки идут через магазин, а не через ЮKassa
-  const u = db.users[c.uid], it = item(str(p.item, 32)); need(it, 'Такого товара нет');
+// Одна покупка: и из приложения, и с сайта. Отличаются только ограничения (магазинная сборка) и адрес возврата.
+async function startOrder(uid, itemId, emailIn, originIn) {
+  const u = db.users[uid], it = item(str(itemId, 32)); need(it, 'Такого товара нет');
   need(enabled(), 'Оплата картой подключается: магазин проходит проверку в ЮKassa. Загляните чуть позже.');
-  const email = str(p.email, 120).trim(); if (RECEIPT) need(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email), 'Укажите почту — на неё придёт чек');
+  const email = str(emailIn, 120).trim(); if (RECEIPT) need(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email), 'Укажите почту — на неё придёт чек');
   const fresh = Object.values(db.orders).filter(o => o.user === u.id && now() - o.ts < 3600e3).length; need(fresh < 20, 'Слишком много попыток оплаты за час. Передохните.');
-  const origin = SITE || (/^https:\/\/[\w.-]+(:\d+)?$/.test(String(p.origin || '')) ? p.origin : ''); need(origin, 'Не удалось определить адрес сайта для возврата после оплаты');
+  const origin = SITE || (/^https:\/\/[\w.-]+(:\d+)?$/.test(String(originIn || '')) ? originIn : ''); need(origin, 'Не удалось определить адрес сайта для возврата после оплаты');
   const o = { id: crypto.randomBytes(9).toString('base64url'), user: u.id, item: it.id, rub: it.rub, status: 'pending', ts: now() };
   const amount = { value: it.rub.toFixed(2), currency: 'RUB' };
   const body = { amount, capture: true, description: `${it.title}. Заказ ${o.id}`.slice(0, 128), confirmation: { type: 'redirect', return_url: origin + '/pay?order=' + o.id }, metadata: { order: o.id, user: u.id, item: it.id } };
@@ -98,6 +104,48 @@ H['pay.create'] = async (c, p) => {
   const all = Object.values(db.orders); if (all.length > 5000) for (const x of all.filter(x => x.status !== 'paid').sort((a, b) => a.ts - b.ts).slice(0, all.length - 5000)) delete db.orders[x.id];      // неоплаченное старьё не копим
   save();
   return { order: o.id, url };
+}
+
+// Покупка картой внутри приложения. В магазинной сборке её нет: RuStore разрешает продавать цифровое
+// через сайт, но не картой внутри приложения. Такая сборка берёт ссылку (pay.link) и платит в браузере.
+H['pay.create'] = (c, p) => {
+  need(!isStoreBuild(c), storeBlocked());
+  return startOrder(c.uid, p.item, p.email, p.origin);
+};
+
+// Покупка из магазинной сборки: RuStore разрешает продавать цифровое через свой сайт, но оплата
+// должна идти в браузере, а не картой внутри приложения. Здесь приложение заказывает одноразовую ссылку.
+H['pay.link'] = (c, p) => {
+  need(isStoreBuild(c), 'Эта ссылка только для приложения из магазина');
+  const it = item(str(p.item, 32)); need(it, 'Такого товара нет');
+  need(enabled(), 'Оплата картой подключается: загляните чуть позже.');
+  buyLive();
+  const u = db.users[c.uid], key = crypto.randomBytes(16).toString('hex');      // только [a-f0-9]: безопасен в адресе и не режется проверками строк
+  db.payLinks[buyHash(key)] = { user: u.id, item: it.id, exp: now() + BUY_TTL };
+  save();
+  const base = SITE || 'https://95-174-95-148.sslip.io';
+  return { url: `${base}/buy#k=${key}`, rub: it.rub, title: it.title, min: Math.round(BUY_TTL / 60e3) };
+};
+
+// Что покупаем по ссылке — без списаний и без гашения: страница показывает сумму до нажатия.
+H['pay.site'] = (c, p) => {
+  buyLive();
+  const rec = db.payLinks[buyHash(str(p.k, 64))];
+  need(rec && rec.exp > now(), 'Ссылка устарела. Вернитесь в приложение и нажмите «Купить» ещё раз.');
+  const u = db.users[rec.user]; need(u && !u.deleted, 'Аккаунт не найден');
+  const it = item(rec.item); need(it, 'Товар больше не продаётся');
+  return { item: it.id, title: it.title, rub: it.rub, days: it.days, n: it.n, kind: it.kind, receipt: RECEIPT, email: u.email || '', min: Math.max(1, Math.round((rec.exp - now()) / 60e3)) };
+};
+
+// Сама оплата с сайта: человека не заставляем входить заново — приложение уже вошло. Ссылка одноразовая.
+H['pay.pay'] = async (c, p) => {
+  buyLive();
+  const h = buyHash(str(p.k, 64)), rec = db.payLinks[h];
+  need(rec && rec.exp > now(), 'Ссылка устарела. Вернитесь в приложение и нажмите «Купить» ещё раз.');
+  const u = db.users[rec.user]; need(u && !u.deleted, 'Аккаунт не найден');
+  const r = await startOrder(u.id, rec.item, p.email, SITE);
+  delete db.payLinks[h]; save();      // ссылка сработала — второй раз по ней не заплатить
+  return { order: r.order, url: r.url };
 };
 H['pay.check'] = async (c, p) => { const o = db.orders[str(p.order, 32)]; need(o && o.user === c.uid, 'Заказ не найден'); await sync(o).catch(e => console.warn('[pay]', e.message)); return { status: o.status, item: o.item }; };
 H['pay.orders'] = c => ({ list: Object.values(db.orders).filter(o => o.user === c.uid && o.status !== 'pending').sort((a, b) => b.ts - a.ts).slice(0, 30).map(o => ({ id: o.id, item: o.item, title: (item(o.item) || {}).title, rub: o.rub, status: o.status, ts: o.paidAt || o.ts })) });
@@ -136,6 +184,57 @@ ${body}</main><footer><nav><a href="/">Открыть «Нудист»</a><a hre
 }
 const good = i => `<div class="good"><b>${esc(i.title)}</b><span class="price">${rubText(i.rub)}</span>${i.kind === 'plan' ? `<ul class="perks">${i.perks.map(t => `<li>${esc(t)}</li>`).join('')}</ul><small>Разовый платёж за ${i.days} дней. Автоматического продления и повторных списаний нет.</small>` : `<small>${String(i.n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} листиков зачисляются на счёт аккаунта и тратятся внутри «Нудиста».</small>`}<a class="btn" href="/#buy=${i.id}">Купить</a></div>`;
 const COSM = { frame: 'рамки для аватара', gradient: 'цветное имя', effect: 'эффекты сообщений', theme: 'темы оформления', stickers: 'наборы стикеров' };
+
+// ───── покупка из приложения в браузере: /buy#k=… (ключ кладём в якорь, чтобы он не попадал в журналы)
+// Магазинная сборка открывает эту страницу через браузер телефона. Человек платит картой или СБП на
+// защищённой странице ЮKassa; после оплаты возвращается сюда и видит результат. Входить заново не нужно:
+// ссылка сама знает, чей это аккаунт и что он покупает.
+function buyPage() {
+  return shell('Оплата в браузере', 'Оплата подписки и наборов листиков «Нудиста» в браузере телефона.', `
+<style>
+  #bw{max-width:520px;margin:0 auto}
+  .bw-i{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:14px 0;border-bottom:1px solid var(--line)}
+  .bw-i b{font-size:17px}
+  .bw-p{font-size:22px;font-weight:700;white-space:nowrap}
+  .fld{display:block;margin:16px 0}
+  .fld span{display:block;font-size:13px;color:var(--mut);margin-bottom:6px}
+  .fld input{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-size:16px}
+  .err{color:#ff8a8a;font-size:14px}
+  .ok{color:#7ee0a8;font-size:15px}
+</style>
+<div id="bw"><h1>Оплата в браузере</h1>
+<p class="lead">Вы в приложении из RuStore — покупки здесь проходят в браузере на сайте. Это последний шаг: дальше заплатите на защищённой странице ЮKassa, как обычно.</p>
+<section class="card" id="bwc"><p class="muted">Проверяем ссылку…</p></section>
+<div class="hint" style="margin-top:14px">Деньги списываются один раз, автоматического продления нет. Вернуться можно в приложение — покупка появится на аккаунте сама.</div>
+</div>
+<script>(function(){
+  var K = (function(){ var m = /(?:^|[#&])k=([a-f0-9]{20,64})/.exec(location.hash); return m ? m[1] : ''; })();
+  var C = document.getElementById('bwc');
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function rub(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' \u20BD'; }
+  function post(m, p){ return fetch('/api/' + m, {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(p || {})}).then(function(r){ return r.json(); }); }
+  function fail(t){ C.innerHTML = '<p class="err">' + esc(t) + '</p><a class="btn" href="/#buy">Открыть магазин в приложении</a>'; }
+  if (!K) return fail('Ссылка неполная. Вернитесь в приложение и нажмите «Купить» ещё раз.');
+  window.addEventListener('hashchange', function(){ if (K) history.replaceState(history.state, '', location.pathname + '#k=' + K); });
+  post('pay.site', { k: K }).then(function(r){
+    if (!r || !r.title) return fail((r && r.error) || 'Не получилось прочитать ссылку.');
+    history.replaceState(history.state, '', location.pathname + '#k=' + K);
+    C.innerHTML = '<div class="bw-i"><b>' + esc(r.title) + '</b><span class="bw-p">' + rub(r.rub) + '</span></div>' +
+      '<label class="fld"><span>Почта для чека' + (r.receipt ? '' : ' (необязательно)') + '</span><input id="bwe" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value="' + esc(r.email || '') + '"></label>' +
+      '<p class="hint">Оплата пройдёт на странице ЮKassa: карты «Мир», Visa и Mastercard российских банков, СБП. Данные карты мы не видим.</p>' +
+      '<button class="btn big" id="bwg" style="width:100%;margin-top:8px">Перейти к оплате ' + rub(r.rub) + '</button>' +
+      '<p class="hint">Нажимая кнопку, вы принимаете <a href="/offer" target="_blank" rel="noopener">оферту</a>. Вопросы и возврат — <a href="/contacts" target="_blank" rel="noopener">контакты</a>.</p>';
+    document.getElementById('bwg').onclick = function(){
+      var b = this; b.disabled = true; b.textContent = 'Открываем оплату…';
+      var e = (document.getElementById('bwe').value || '').trim();
+      post('pay.pay', { k: K, email: e }).then(function(x){
+        if (x && x.url) { location.assign(x.url); return; }
+        fail((x && x.error) || 'Платёжный сервис не ответил. Деньги не списаны.');
+      }).catch(function(){ fail('Сеть не ответила. Проверьте связь и попробуйте ещё раз.'); });
+    };
+  }).catch(function(){ fail('Сеть не ответила. Проверьте связь и попробуйте ещё раз.'); });
+})();</script>`);
+}
 
 async function payPage(orderId) {
   let status = '';
@@ -233,4 +332,4 @@ function contactsPage() {
 <section class="card"><h2>О сервисе</h2><p>«Нудист» — мессенджер: личные и групповые чаты, каналы, лента, истории, мини-игры. Регистрация и основные возможности бесплатны. Платные услуги — подписка «Нудист Премиум» (тарифы Plus, Pro, Max) и наборы листиков — описаны на странице <a href="/pay">«Цены и оплата»</a>, условия их оказания — в <a href="/offer">публичной оферте</a>.</p></section>`);
 }
 
-module.exports = { hook, payPage, offerPage, contactsPage, enabled, ITEMS, PERKS, fulfil, sync };
+module.exports = { hook, payPage, buyPage, offerPage, contactsPage, enabled, ITEMS, PERKS, fulfil, sync };

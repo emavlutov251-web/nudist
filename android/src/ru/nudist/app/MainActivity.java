@@ -83,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 47;      // 4.7: правила контента в оферте, 18+, магазинная сборка без оплаты картой
+    private static final int APP_VERSION = 48;      // 4.8: покупка из магазинной сборки — через браузер
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -418,6 +418,20 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public boolean fromStore() {
             return installedFromStore();
+        }
+
+        /**
+         * Открыть ссылку в браузере телефона. Нужно для оплаты из магазинной сборки: RuStore разрешает
+         * продавать цифровое через сайт, но карта должна вводиться в браузере, а не внутри приложения.
+         * Пускаем только https — чтобы этим нельзя было открыть что-то ещё.
+         */
+        @JavascriptInterface
+        public void openBrowser(final String url) {
+            try {
+                Uri u = Uri.parse(String.valueOf(url));
+                if (!"https".equals(u.getScheme())) return;
+                runOnUiThread(new Runnable() { @Override public void run() { openExternal(Uri.parse(url)); } });
+            } catch (Throwable e) { /* некорректная ссылка — молча */ }
         }
 
         /** Вид сборки: rustore (для магазина) или site. По нему интерфейс решает, показывать ли оплату картой. */
