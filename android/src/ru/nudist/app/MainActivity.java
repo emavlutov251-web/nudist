@@ -83,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 45;      // 4.5: бот присылает сборку файлом в Telegram
+    private static final int APP_VERSION = 46;      // 4.5: бот присылает сборку файлом в Telegram
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -406,6 +406,36 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void updateInBrowser() {
             runOnUiThread(new Runnable() { @Override public void run() { openSiteUpdate(); } });
+        }
+
+        // ───── RuStore: если сборка пришла из магазина, обновляемся только через магазин
+        /**
+         * Откуда приложение установлено. Правило RuStore: приложение, скачанное из магазина,
+         * обновляется через магазин, а не самообновлением APK. Поэтому окно обновления спрашивает
+         * у оболочки, «магазинная» ли это установка, и в этом случае ведёт в RuStore.
+         * Свои сборки с сайта (и старые установки) получают true→false и обновляются как раньше.
+         */
+        @JavascriptInterface
+        public boolean fromStore() {
+            return installedFromStore();
+        }
+
+        /** Название канала обновлений: store — ведём в RuStore, site — качаем APK, как раньше. */
+        @JavascriptInterface
+        public String updateChannel() {
+            return installedFromStore() ? "store" : "site";
+        }
+
+        /** Есть ли на телефоне RuStore: без него диплинк в магазин некуда открыть. */
+        @JavascriptInterface
+        public boolean storeInstalled() {
+            return isPackageInstalled(RUSTORE_PKG);
+        }
+
+        /** Открыть карточку «Нудиста» в RuStore. Если магазина нет — страница каталога в браузере. */
+        @JavascriptInterface
+        public void storeOpen() {
+            runOnUiThread(new Runnable() { @Override public void run() { openStoreCard(); } });
         }
 
         /** Страница собралась: заставка больше не нужна. Зовётся из интерфейса при каждом запуске. */
@@ -1042,10 +1072,47 @@ public class MainActivity extends Activity {
         } catch (Throwable e) { /* как есть */ }
     }
 
+    // ───── магазин: определение установщика
+    private static final String RUSTORE_PKG = "ru.vk.store";      // имя пакета приложения RuStore
+
+    /** Установлено ли приложение из RuStore. null (сайт, «Загрузки», adb) — считаем «не из магазина». */
+    private boolean installedFromStore() {
+        try {
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.content.pm.InstallSourceInfo i = getPackageManager().getInstallSourceInfo(getPackageName());
+                String p = i == null ? null : i.getInstallingPackageName();
+                return p != null && (RUSTORE_PKG.equals(p) || p.startsWith("ru.vk."));
+            }
+            String p = getPackageManager().getInstallerPackageName(getPackageName());
+            return p != null && (RUSTORE_PKG.equals(p) || p.startsWith("ru.vk."));
+        } catch (Throwable e) { return false; }
+    }
+
+    private boolean isPackageInstalled(String pkg) {
+        try { getPackageManager().getPackageInfo(pkg, 0); return true; } catch (Throwable e) { return false; }
+    }
+
+    /**
+     * Карточка приложения в RuStore. Сначала диплинк магазина (открывает сам RuStore на нужной странице),
+     * если не вышло — обычная ссылка на каталог в браузере. Так человек в любом случае попадает к обновлению.
+     */
+    private void openStoreCard() {
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse("rustore://apps.rustore.ru/app/" + getPackageName()));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+            return;
+        } catch (Throwable e) { /* магазина нет или диплинк не поддержан */ }
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.rustore.ru/catalog/app/" + getPackageName())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (Throwable e) { toast("Не получилось открыть RuStore"); }
+    }
+
     private volatile int latestCode;      // версия, которую предложил сервер
 
     /** Скачать новую сборку. Вызывается со страницы, когда она увидела, что вышла новая версия. */
     private void fetchUpdate() {
+        if (installedFromStore()) { updateState = "store"; openStoreCard(); return; }
         if ("downloading".equals(updateState)) return;
         String server = prefs.getString("server", null);
         if (server == null) return;
@@ -1098,6 +1165,7 @@ public class MainActivity extends Activity {
 
     /** Открыть установщик Android для скачанного файла. */
     private void installUpdate() {
+        if (installedFromStore()) { openStoreCard(); return; }
         File f = updateFile();
         if (!f.isFile()) { updateState = "idle"; return; }
         int fileCode = apkCodeOf(f);
@@ -1390,6 +1458,8 @@ public class MainActivity extends Activity {
      * скачать файл в браузере телефона, где нет ни нашего хранилища, ни старых файлов.
      */
     private void updateOrElse() {
+        // Установка из RuStore: APK в обход магазина не качаем — правило магазина и залог публикации.
+        if (installedFromStore()) { openStoreCard(); return; }
         try { fetchUpdate(); } catch (Throwable e) { openSiteUpdate(); }
     }
 

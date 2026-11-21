@@ -335,10 +335,15 @@ const inCall = async () => { try { return !!(await import('./rtc.js')).RTC.chat;
 // Состояние живёт в самом приложении (window.NudistApp.updateState), поэтому переживает закрытие окна.
 const updState = () => { try { return window.NudistApp && window.NudistApp.updateState ? String(window.NudistApp.updateState()) : ''; } catch (e) { return ''; } };
 const updPercent = () => { try { return Number(window.NudistApp.updateProgress ? window.NudistApp.updateProgress() : 0) || 0; } catch (e) { return 0; } };
+// Канал обновлений. Если приложение установлено из RuStore, правило магазина требует обновляться
+// через магазин, а не качать APK: тогда окно ведёт в карточку RuStore. Такие сборки ничего не качают
+// сами — самообновление APK для них выключено и в оболочке.
+const fromStore = () => { try { return !!(window.NudistApp && window.NudistApp.fromStore && window.NudistApp.fromStore()); } catch (e) { return false; } };
+const storeOpen = () => { try { if (window.NudistApp && window.NudistApp.storeOpen) { window.NudistApp.storeOpen(); return; } } catch (e) { /* старое приложение */ } location.href = 'https://www.rustore.ru/catalog/app/ru.nudist.app'; };
 function useAutoUpdate(on) {
   const [st, setSt] = useState(() => ({ state: updState(), percent: updPercent() }));
   useEffect(() => {
-    if (!on) return;
+    if (!on || fromStore()) return;
     try { window.NudistApp.updateFetch(); } catch (e) { /* старое приложение без автообновления */ }
     const t = setInterval(() => setSt({ state: updState(), percent: updPercent() }), 700);
     return () => clearInterval(t);
@@ -347,7 +352,24 @@ function useAutoUpdate(on) {
 }
 function UpdateDlg({ id, info }) {
   const [step, setStep] = useState(0);
-  const auto = useAutoUpdate(inApp() && !!(window.NudistApp && window.NudistApp.updateFetch));
+  const store = inApp() && fromStore();      // сборка из RuStore: обновление идёт через магазин
+  const auto = useAutoUpdate(!store && inApp() && !!(window.NudistApp && window.NudistApp.updateFetch));
+  if (store) {
+    // Правило RuStore: приложение, скачанное из магазина, обновляется через магазин.
+    // Никаких APK и «разрешите установку из неизвестных источников» — только карточка в RuStore.
+    return html`<${Modal} id=${id} title="Вышло обновление" icon="download">
+      <div class="ask">
+        <p><b>«Нудист» ${info.name} уже в RuStore.</b> Вы установили приложение из магазина, поэтому обновление придёт через него — так безопаснее и правильнее.</p>
+        ${(info.news || []).length > 0 && html`<ul class="upd-news">${info.news.map(n => html`<li>${n}</li>`)}</ul>`}
+        <p class="hint">Откройте карточку приложения в RuStore и нажмите «Обновить». Если RuStore предложит обновление сам — просто подтвердите. Вход и переписка сохранятся.</p>
+        <div class="ask-btns">
+          <button class="btn" onClick=${storeOpen}><${Icon} n="download" s=${16} /> Открыть в RuStore</button>
+          <button class="btn ghost" onClick=${() => { local.set('upd.later', String(Date.now())); closeModal(id); }}>Позже</button>
+        </div>
+        <p class="hint">Обновиться в обход магазина нельзя: у сборок из RuStore самообновление отключено намеренно, этого требует магазин.</p>
+      </div>
+    <//>`;
+  }
   // Сборки до 1.9 подписывались одноразовым ключом (так было в автосборке), а 1.9 подписана постоянным —
   // иначе RuStore не примет обновления. Из-за смены подписи файл не встанет поверх старой версии:
   // об этом честно предупреждаем и даём порядок действий, чтобы человек не остался у разбитого корыта.
@@ -391,6 +413,7 @@ function UpdateDlg({ id, info }) {
 async function downloadTap(e) {
   if (!inApp() || !window.NudistApp || !window.NudistApp.updateFetch) return;      // браузер — обычное скачивание
   e.preventDefault();
+  if (fromStore()) { storeOpen(); return; }                                        // магазинная сборка: только в RuStore
   // В приложении 4.4+ есть готовая связка «скачать и, если не выйдет, открыть браузер».
   try {
     if (window.NudistApp.updateOrBrowser) { window.NudistApp.updateOrBrowser(); return; }
@@ -443,6 +466,7 @@ async function ask(fresh) {
  */
 function prefetchApk(info) {
   try {
+    if (fromStore()) return;                 // сборка из RuStore: APK не качаем ни при каких условиях
     if (!window.NudistApp || !window.NudistApp.updateFetch) return;
     if (!info || Number(info.code) <= appVer()) return;
     if (String(window.NudistApp.updateState ? window.NudistApp.updateState() : '') === 'downloading') return;
