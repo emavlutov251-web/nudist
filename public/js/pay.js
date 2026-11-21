@@ -10,6 +10,7 @@ export const payInfo = async () => (cache = await rpc('pay.info'));
 function BuyDlg({ id, item, info }) {
   const [email, setEmail] = useState(info.email || local.get('pay.email') || ''), [busy, setBusy] = useState(false);
   const go = async () => {
+    if (info.storeBuild) return toast('В приложении из RuStore покупки за рубли не проводятся. Оформите подписку на сайте — там доступна оплата картой.');
     if (!info.enabled) return toast('Оплата картой подключается: магазин проходит проверку в ЮKassa. Загляните чуть позже.');
     setBusy(true);
     try { if (email) local.set('pay.email', email.trim()); const r = await rpc('pay.create', { item: item.id, email: email.trim(), origin: location.origin }); local.set('pay.order', r.order); location.assign(r.url); }
@@ -34,6 +35,10 @@ export function PayBlock() {
   const [d, setD] = useState(cache);
   useEffect(() => { let live = true; payInfo().then(r => live && setD(r)).catch(() => {}); return () => { live = false; }; }, []);
   if (!d) return html`<div class="payb"><${Spinner} /></div>`;
+  // Приложение из RuStore: покупки за рубли — через магазин. Блок ЮKassa не показываем (правило 9.1),
+  // премиум и листики там выдаются за активности и за просмотр рекламы.
+  if (d.storeBuild) return html`<div class="payb"><h3><${Icon} n="credit-card" s=${17} /> Подписка и листики</h3>
+    <p class="hint">В приложении из RuStore покупки за рубли не проводятся — так требуют правила магазина. Премиум и листики выдаются за активности, конкурсы и приглашённых друзей. Оформить подписку можно <a href="https://95-174-95-148.sslip.io" target="_blank" rel="noopener">на сайте «Нудиста»</a>.</p></div>`;
   const prem = d.items.filter(i => i.kind === 'plan'), leaves = d.items.filter(i => i.kind === 'leaves');
   const Row = ({ list }) => html`<div class="payb-g">${list.map(i => html`<button class="payb-i" onClick=${() => openModal(BuyDlg, { item: i, info: d })}><b>${i.short}</b><span>${rub(i.rub)}</span></button>`)}</div>`;
   return html`<div class="payb"><h3><${Icon} n="credit-card" s=${17} /> Купить за рубли</h3>

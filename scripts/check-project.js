@@ -20,7 +20,8 @@ const server = ls('server').filter(f => f.endsWith('.js')).map(f => rd('server/'
 const have = new Set([...server.matchAll(/^H\['([\w.]+)'\]/gm)].map(m => m[1]));
 const client = [...ls('public/js').filter(f => f.endsWith('.js') && f !== 'emoji-data.js' && f !== 'icons.js').map(f => rd('public/js/' + f)), ...ls('public/miniapps').filter(f => f.endsWith('.js')).map(f => rd('public/miniapps/' + f))].join('\n');
 const used = new Set([...client.matchAll(/\b(?:rpc|call|act)\(\s*'([a-z][\w.]*)'/g)].map(m => m[1]).filter(m => m.includes('.') || have.has(m)));
-const ghost = [...used].filter(m => !have.has(m));
+// имя, собранное из частей ('cards.' + d.m в мосту мини-приложений), проверять нечего — такие пропускаем
+const ghost = [...used].filter(m => !have.has(m) && !m.endsWith('.'));
 ghost.length ? fail('интерфейс вызывает методы, которых нет на сервере: ' + ghost.join(', ')) : ok(`все ${used.size} методов, которые вызывает интерфейс, есть на сервере`);
 // Методы без вызова из интерфейса — не ошибка, но список должен быть осознанным: это API для ботов, админки по HTTP и старых сборок.
 const QUIET = new Set(['msg.cb', 'bot.inline', 'bot.appdata', 'hook.new', 'hook.list', 'hook.del', 'push.test', 'me.export', 'app.hello', 'year.skip', 'santa.leave', 'season.claim', 'msg.click', 'msg.view', 'feed.viewers', 'clip.viewers', 'music.listeners', 'ask.unblockAll', 'admin.me', 'rtc.join', 'call.start', 'premium.buy']);      /* rtc.join и call.start зовутся через общую функцию звонка; premium.buy — старое имя покупки Plus для давних сборок */

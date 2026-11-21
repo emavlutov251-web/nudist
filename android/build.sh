@@ -16,6 +16,9 @@ VERSION_CODE="${VERSION_CODE:-$APPV}"; VERSION_NAME="${VERSION_NAME:-${APPV%?}.$
 if [ -f ../public/apk.json ]; then J="$(sed -n 's/.*"code": *\([0-9][0-9]*\).*/\1/p' ../public/apk.json | head -1)"; [ "$J" = "$APPV" ] || echo "ВНИМАНИЕ: в public/apk.json версия ${J:-?}, а собирается $APPV — поправьте apk.json, иначе окно обновления покажется не тем."; fi
 # SERVER_URL=https://… вшивает адрес сервера: приложение открывает его сразу, без экрана настройки.
 SERVER_URL="${SERVER_URL:-}"
+# STORE=rustore — сборка для магазина: меняет User-Agent (магазин/сайт). Нужна, чтобы приложение,
+# установленное из RuStore, не предлагало оплату картой в обход магазина (требование RuStore 9.1).
+STORE="${STORE:-}"
 # MIGRATE_FROM=https://старый-адрес[,ещё-один] — прежние адреса сервера: приложение, настроенное на них, само перейдёт на SERVER_URL и перенесёт вход.
 MIGRATE_FROM="${MIGRATE_FROM:-}"
 case "$MIGRATE_FROM" in *[\<\>\&\"\']*) echo "В MIGRATE_FROM недопустимые символы"; exit 1;; esac
@@ -24,7 +27,18 @@ cp -r res "$W/res"
 # Сборка с вшитым https-адресом не ходит по открытому http вообще; без вшитого адреса (свой сервер в домашней сети) http остаётся разрешён.
 cp AndroidManifest.xml "$W/AndroidManifest.xml"
 case "$SERVER_URL" in https://*) sed -i 's/android:usesCleartextTraffic="true"/android:usesCleartextTraffic="false"/' "$W/AndroidManifest.xml";; esac
-printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="default_server" translatable="false">%s</string>\n    <string name="migrate_from" translatable="false">%s</string>\n</resources>\n' "$SERVER_URL" "$MIGRATE_FROM" > "$W/res/values/server.xml"
+# Сборка для магазина обновляется через магазин и никогда не открывает установщик Android. Разрешение
+# REQUEST_INSTALL_PACKAGES ей не нужно, а в магазинах оно «ограниченное»: без объяснения проверку не пройти.
+case "$STORE" in
+  ""|0|site) ;;
+  *) awk '{
+       if ($0 ~ /REQUEST_INSTALL_PACKAGES/) { if (buf ~ /Автообновление/) buf = ""; next }   # разрешение и его пояснение
+       if (buf != "") print buf; buf = $0
+     } END { if (buf != "") print buf }' "$W/AndroidManifest.xml" > "$W/AndroidManifest.xml.store" && mv "$W/AndroidManifest.xml.store" "$W/AndroidManifest.xml"
+     if grep -q REQUEST_INSTALL_PACKAGES "$W/AndroidManifest.xml"; then echo "Не удалось убрать REQUEST_INSTALL_PACKAGES из магазинной сборки"; exit 1; fi
+     echo "Магазинная сборка ($STORE): установка APK из приложения выключена, разрешение убрано" ;;
+esac
+printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="default_server" translatable="false">%s</string>\n    <string name="migrate_from" translatable="false">%s</string>\n    <string name="build_store" translatable="false">%s</string>\n</resources>\n' "$SERVER_URL" "$MIGRATE_FROM" "$STORE" > "$W/res/values/server.xml"
 
 # ───── Интерфейс внутрь APK
 # Мессенджер целиком (код, стили, шрифты, значки) кладём в assets/public. Тогда WebView не тратит время и трафик

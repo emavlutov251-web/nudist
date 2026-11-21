@@ -23,7 +23,7 @@ const conn = (port, tok) => new Promise((res, rej) => {
   c.rpc = (m, p) => new Promise((ok, no) => { const i = ++n; w.set(i, { ok, no }); ws.send(JSON.stringify({ id: i, m, p: p || {} })); setTimeout(() => { if (w.has(i)) { w.delete(i); no(new Error('нет ответа на ' + m)); } }, 6000); });
   c.close = () => ws.close();
 });
-const reg = async (port, u) => { const r = await fetch(`http://127.0.0.1:${port}/api/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: u, password: 'Refresh-test-1', name: u, agree: true }) }).then(x => x.json()); await sleep(300); return conn(port, r.token); };
+const reg = async (port, u) => { const r = await fetch(`http://127.0.0.1:${port}/api/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: u, password: 'Refresh-test-1', name: u, agree: true, adult: true }) }).then(x => x.json()); await sleep(300); return conn(port, r.token); };
 const stop = async (p) => { p.kill('SIGTERM'); await Promise.race([new Promise(r => p.on('exit', r)), sleep(4000)]); if (p.exitCode === null) p.kill('SIGKILL'); await sleep(200); };
 
 (async () => {

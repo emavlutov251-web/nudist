@@ -46,7 +46,9 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="nudist.app" android:pathPrefix="/" />
+                <!-- Домен nudist.app не работает (DNS не отвечает), поэтому App Links — на боевой сервер:
+                 ссылки на него открываются в приложении. Когда домен появится, добавить сюда вторую строку. -->
+                <data android:scheme="https" android:host="95-174-95-148.sslip.io" android:pathPrefix="/" />
             </intent-filter>
             <!-- «Поделиться» аудио из любой программы: файл попадает в «Мою музыку» -->
             <intent-filter android:label="@string/share_music">

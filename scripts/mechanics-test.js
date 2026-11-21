@@ -22,7 +22,7 @@ const ck = (name, ok, extra) => { total++; if (!ok) { bad++; console.log('  ✗ 
       ws.on('message', d => { const q = JSON.parse(String(d)); if (q.ev === 'init') { c.me = q.d.me; return res(c); } if (q.ev) return c.evs.push(q); const x = w.get(q.id); if (x) { w.delete(q.id); q.e !== undefined ? x.no(new Error(q.e)) : x.ok(q.r); } });
       c.rpc = (m, p) => new Promise((ok, no) => { const i = ++n; w.set(i, { ok, no }); ws.send(JSON.stringify({ id: i, m, p: p || {} })); setTimeout(() => { if (w.has(i)) { w.delete(i); no(new Error('нет ответа на ' + m)); } }, 6000); });
       c.fail = (m, p) => c.rpc(m, p).then(() => null, e => e.message); c.close = () => ws.close(); });
-    const reg = async u => { const r = await post('/api/register', { username: u, password: 'Mech-test-' + u, name: u, agree: true }); await sleep(200); return conn(r.token); };
+    const reg = async u => { const r = await post('/api/register', { username: u, password: 'Mech-test-' + u, name: u, agree: true, adult: true }); await sleep(200); return conn(r.token); };
     const own = await reg('mech_owner'), a = await reg('mech_anna'), b = await reg('mech_boris');
     const give = (who, n) => own.rpc('admin.user.set', { id: who.me.id, stars: n });
     const dm = (await a.rpc('dm.open', { user: b.me.id })).chat.id;

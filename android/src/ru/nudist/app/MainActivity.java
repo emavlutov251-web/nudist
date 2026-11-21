@@ -83,7 +83,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String ACTION_CHANGE_SERVER = "ru.nudist.app.CHANGE_SERVER";
     private static final int REQ_FILE = 1, REQ_PERM = 2, REQ_NOTIFY = 3;
-    private static final int APP_VERSION = 46;      // 4.5: бот присылает сборку файлом в Telegram
+    private static final int APP_VERSION = 47;      // 4.7: правила контента в оферте, 18+, магазинная сборка без оплаты картой
     private static final long SHARE_MAX = 100L * 1024 * 1024;      // больше сервер всё равно не примет
     private static final int SHARE_FILES = 10;
     /** Приложение сейчас на экране: служба уведомлений в это время молчит. */
@@ -418,6 +418,12 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public boolean fromStore() {
             return installedFromStore();
+        }
+
+        /** Вид сборки: rustore (для магазина) или site. По нему интерфейс решает, показывать ли оплату картой. */
+        @JavascriptInterface
+        public String buildStore() {
+            return STORE_KIND();
         }
 
         /** Название канала обновлений: store — ведём в RuStore, site — качаем APK, как раньше. */
@@ -1073,10 +1079,22 @@ public class MainActivity extends Activity {
     }
 
     // ───── магазин: определение установщика
+    /** Вид сборки из ресурса (build_store): "rustore" у сборки для магазина, пусто у сборки с сайта. */
+    private String STORE_KIND() {
+        try {
+            int id = getResources().getIdentifier("build_store", "string", getPackageName());
+            String v = id == 0 ? "" : String.valueOf(getString(id));
+            return v == null || v.length() == 0 || "0".equals(v) ? "site" : v;
+        } catch (Throwable e) { return "site"; }
+    }
+
     private static final String RUSTORE_PKG = "ru.vk.store";      // имя пакета приложения RuStore
 
     /** Установлено ли приложение из RuStore. null (сайт, «Загрузки», adb) — считаем «не из магазина». */
     private boolean installedFromStore() {
+        // Сборка, собранная для магазина, всегда обновляется через магазин: даже если её поставили файлом
+        // с сайта, она не качает APK сама (иначе получается обход магазина — этого правила не пройти).
+        if (!"site".equals(STORE_KIND())) return true;
         try {
             if (Build.VERSION.SDK_INT >= 30) {
                 android.content.pm.InstallSourceInfo i = getPackageManager().getInstallSourceInfo(getPackageName());
@@ -1308,7 +1326,10 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setSupportMultipleWindows(false);
-        s.setUserAgentString(s.getUserAgentString() + " NudistAndroid/" + APP_VERSION);
+        s.setUserAgentString(s.getUserAgentString() + " NudistAndroid/" + APP_VERSION
+                // Магазинная сборка помечает себя в UA: сервер по этой метке не предлагает оплату картой
+                // в обход RuStore (требование магазина к цифровым товарам).
+                + (" store/" + STORE_KIND()));
         web.setFocusable(true);          // без этого страница не получает высоту окна и рисует окна до самого низа
 
         CookieManager.getInstance().setAcceptCookie(true);

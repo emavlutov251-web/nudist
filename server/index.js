@@ -343,6 +343,9 @@ const server = http.createServer(async (req, res) => {
     if (p === '/admin' || p === '/admin/') return serveStatic(req, res, 'admin.html');
     if (/^\/(start|download)\/?$/.test(p)) return serveStatic(req, res, 'start.html');
     if (/^\/(privacy|policy)\/?$/.test(p)) return serveStatic(req, res, 'privacy.html');      // политика конфиденциальности   // страница для новых людей: скачать APK
+    // /rules — правила сообщества. Отдельной страницы нет: правила живут в оферте, раздел 5А («Правила контента и возраст»).
+    // Ссылку на /rules просит RuStore и её же дают в карточке приложения — ведём сразу на нужный раздел, а не в 404.
+    if (/^\/(rules|pravila|community|guidelines)\/?$/.test(p)) { res.writeHead(302, { location: '/offer#content', 'cache-control': 'no-store' }); return res.end(); }
     const shop = /^\/(pay|tariffs|prices)\/?$/.test(p) ? 'pay' : /^\/(offer|oferta|terms)\/?$/.test(p) ? 'offer' : /^\/(contacts|rekvizity|requisites)\/?$/.test(p) ? 'contacts' : '';      // цены, оферта, реквизиты — открытые страницы платных услуг
     if (shop) {
       const body = shop === 'pay' ? await Pay.payPage(url.searchParams.get('order')) : shop === 'offer' ? Pay.offerPage() : Pay.contactsPage();
@@ -373,7 +376,7 @@ server.on('upgrade', (req, socket, head) => {
   const t = url.searchParams.get('token'), key = A.sid(t), s = db.sessions[key], u = s && db.users[s.user];
   wss.handleUpgrade(req, socket, head, ws => {
     if (!s || !u || u.deleted || u.banned) { ws.send(JSON.stringify({ ev: 'session.killed', d: { reason: u && u.banned ? 'Аккаунт заблокирован' : 'Сеанс недействителен' } })); return ws.close(); }
-    onConnect(ws, key, s, u, ipOf(req));
+    onConnect(ws, key, s, u, ipOf(req), String(req.headers['user-agent'] || ''));
   });
 });
 function presence(u, online) { for (const uid of C.audience(u)) if (C.canSee(u, uid, 'lastSeen')) emit(uid, 'presence', { user: u.id, online, seen: u.seen }); }
@@ -385,8 +388,8 @@ function initData(c) {
   const rooms = G.roomsFor(u.id); rooms.forEach(r => r.peers.forEach(p => add(p.user)));
   return { me: C.selfUser(u), settings: u.settings || null, chats: views, servers: (u.servers || []).map(sid => db.servers[sid]).filter(Boolean).map(s => G.serverView(s, u.id)), users, flags: A.pubFlags(), tg: Tg.botName() || undefined, rooms, conn: c.id, session: db.sessions[c.token].id, sys: db.meta.sys, time: now(), prices: { premium: R.PREMIUM_PRICE, boost: R.BOOST_PRICE, leaf: R.LEAF } };
 }
-function onConnect(ws, tok, sess, u, ip) {
-  const c = { id: C.id(), uid: u.id, token: tok, ip, ws, alive: true, n: 0, raw: s => { if (ws.readyState === 1) ws.send(s); }, send: (ev, d) => c.raw(JSON.stringify({ ev, d })), close: () => ws.close() };
+function onConnect(ws, tok, sess, u, ip, ua) {
+  const c = { id: C.id(), uid: u.id, token: tok, ip, ua: ua || '', ws, alive: true, n: 0, raw: s => { if (ws.readyState === 1) ws.send(s); }, send: (ev, d) => c.raw(JSON.stringify({ ev, d })), close: () => ws.close() };
   const first = !C.conns.has(u.id);
   if (first) C.conns.set(u.id, new Set());
   C.conns.get(u.id).add(c); C.connById.set(c.id, c);

@@ -189,6 +189,8 @@ const api = {
     limit('reg:' + meta.ip, 120, 3600e3);
     if (setupNeeded()) limit('setup:' + meta.ip, 10, 600e3);
     needSetup(b.setup);
+    // Сервис 18+: без явного подтверждения возраста аккаунт не создаём (требование RuStore и раздел 5А оферты).
+    need(b.adult === true, 'Сервис доступен с 18 лет. Подтвердите, что вам есть 18 лет.');
     const username = str(b.username, 32), password = typeof b.password === 'string' ? b.password : '';
     need(USERNAME_RE.test(username), 'Username: латиница, цифры и _, от 3 до 32 символов, начинается с буквы');
     need(!C.usernameTaken(username), 'Этот username уже занят. Кто-то разделся раньше вас.');
@@ -198,6 +200,9 @@ const api = {
     const u = createUser({ username, hash, name: str(b.name, 64) || username, ref: str(b.ref, 32) });
     try { Funnel.register(u, Funnel.cleanUtm(b.utm) || Funnel.cleanUtm(b), str(b.ref, 32)); } catch (e) { console.warn('[funnel]', e.message); }
     if (b.agree === true) u.policy = { v: C.POLICY, ts: now() };      // галочка на форме регистрации; без неё приложение спросит согласие при первом входе
+    // Отметка о том, что человек подтвердил 18 лет при регистрации. Нужна для отчёта по правилам сервиса
+    // и на случай запроса магазина: сервис заявлен как 18+, и это подтверждение должно быть видно.
+    if (b.adult === true) u.adult = { ts: now(), v: '18+' };
     return createSession(u, meta);
   },
   async login(b, meta) {

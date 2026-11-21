@@ -26,7 +26,7 @@ function okEndpoint(e) { try { const u = new URL(e); if (process.env.PUSH_ALLOW_
 
 function vapid(endpoint) {
   const aud = new URL(endpoint).origin, head = b64u(JSON.stringify({ typ: 'JWT', alg: 'ES256' }));
-  const body = b64u(JSON.stringify({ aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: process.env.VAPID_SUBJECT || 'mailto:admin@nudist.app' }));
+  const body = b64u(JSON.stringify({ aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: process.env.VAPID_SUBJECT || 'https://95-174-95-148.sslip.io' }));
   const sig = crypto.sign('sha256', Buffer.from(head + '.' + body), { key: signer(), dsaEncoding: 'ieee-p1363' });
   return 'vapid t=' + head + '.' + body + '.' + b64u(sig) + ', k=' + keys().pub;
 }

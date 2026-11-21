@@ -57,7 +57,7 @@ const TOKEN = '123456:TEST-only-token', sent = [], docs = [];
       ws.on('message', d => { const q = JSON.parse(String(d)); if (q.ev === 'init') { c.me = q.d.me; return res(c); } if (q.ev) return c.evs.push(q); const x = w.get(q.id); if (x) { w.delete(q.id); q.e !== undefined ? x.no(new Error(q.e)) : x.ok(q.r); } });
       c.rpc = (m, p) => new Promise((ok, no) => { const i = ++n; w.set(i, { ok, no }); ws.send(JSON.stringify({ id: i, m, p: p || {} })); setTimeout(() => { if (w.has(i)) { w.delete(i); no(new Error('нет ответа на ' + m)); } }, 8000); });
       c.fail = (m, p) => c.rpc(m, p).then(() => null, e => e.message); c.close = () => ws.close(); });
-    const reg = async u => { const r = await post('/api/register', { username: u, password: 'Tgtest-' + u, name: u, agree: true }); await sleep(150); return conn(r.token); };
+    const reg = async u => { const r = await post('/api/register', { username: u, password: 'Tgtest-' + u, name: u, agree: true, adult: true }); await sleep(150); return conn(r.token); };
 
     // первый на сервере — главный админ; второй — обычный, у него привяжем Telegram «вручную»
     const adm = await reg('tg_adm'), bob = await reg('tg_bob'), cat = await reg('tg_cat');

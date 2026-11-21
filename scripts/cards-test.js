@@ -23,7 +23,7 @@ const ck = (n, ok, x) => { total++; if (!ok) { bad++; console.log('  ✗ ПРО�
       ws.on('message', d => { const q = JSON.parse(String(d)); if (q.ev === 'init') { c.me = q.d.me; return res(c); } if (q.ev === 'cards') { c.last = q.d; c.evs.push(q); return; } if (q.ev) return c.evs.push(q); const x = w.get(q.id); if (x) { w.delete(q.id); q.e !== undefined ? x.no(new Error(q.e)) : x.ok(q.r); } });
       c.rpc = (m, p) => new Promise((ok, no) => { const i = ++n; w.set(i, { ok, no }); ws.send(JSON.stringify({ id: i, m, p: p || {} })); setTimeout(() => { if (w.has(i)) { w.delete(i); no(new Error('нет ответа на ' + m)); } }, 8000); });
       c.fail = (m, p) => c.rpc(m, p).then(() => null, e => e.message); c.close = () => ws.close(); });
-    const reg = async u => { const r = await post('/api/register', { username: u, password: 'Cards-test-' + u, name: u, agree: true }); await sleep(150); return conn(r.token); };
+    const reg = async u => { const r = await post('/api/register', { username: u, password: 'Cards-test-' + u, name: u, agree: true, adult: true }); await sleep(150); return conn(r.token); };
     const a = await reg('card_anna'), b = await reg('card_boris'), c1 = await reg('card_vika'), d1 = await reg('card_gleb');
 
     const g = await a.rpc('cards.new', { seats: 4 });

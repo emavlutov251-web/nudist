@@ -10,7 +10,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   let dead = false; srv.on('exit', () => { dead = true; });
   let up = false; for (let i = 0; i < 60 && !up; i++) { await sleep(250); try { up = (await fetch(base + '/api/health')).ok; } catch (e) {} }
   const post = async (p, b) => (await fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) })).json();
-  const tok = (await post('/api/register', { username: 'fz_one', password: 'Fuzz-test-1', name: 'a', agree: true })).token;
+  const tok = (await post('/api/register', { username: 'fz_one', password: 'Fuzz-test-1', name: 'a', agree: true, adult: true })).token;
   const ws = new WS(`ws://127.0.0.1:${port}/ws?token=${tok}`);
   await sleep(500);
   const junk = ['{', 'null', '[]', '{"id":1}', '{"id":2,"m":null}', '{"id":3,"m":123}', '{"id":4,"m":"cards.get","p":"строка"}', '{"id":5,"m":"cards.get","p":[1,2]}',

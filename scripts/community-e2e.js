@@ -44,7 +44,7 @@ const dbOf = dir => JSON.parse(fs.readFileSync(path.join(dir, 'db.json'), 'utf8'
   let log1 = ''; srv1.stdout.on('data', d => log1 += d); srv1.stderr.on('data', d => log1 += d);
   let up = false; for (let i = 0; i < 60 && !up; i++) { await sleep(250); try { up = (await fetch('http://127.0.0.1:39917/api/health')).ok; } catch (e) { /* ждём */ } }
   ck('сервер фазы 1 поднялся', up);
-  const reg = async u => (await fetch('http://127.0.0.1:39917/api/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: u, password: 'Comm-e2e-' + u, name: u, agree: true }) })).json();
+  const reg = async u => (await fetch('http://127.0.0.1:39917/api/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: u, password: 'Comm-e2e-' + u, name: u, agree: true, adult: true }) })).json();
   const winner = await reg('e2e_winner');
   const idle = await reg('e2e_idle');
   await sleep(1200);

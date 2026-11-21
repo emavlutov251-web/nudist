@@ -35,7 +35,7 @@ async function run(MSGS, USERS) {
   try {
     // 1) маленькая настоящая база: 20 человек, одна группа, по сообщению от каждого — чтобы взять с них образцы записей
     let S = await boot(dir); const toks = [];
-    for (let i = 0; i < 20; i++) toks.push((await S.post('/api/register', { username: 'load_' + i, password: 'Load-test-12345', name: 'Нагрузка ' + i, agree: true })).token);
+    for (let i = 0; i < 20; i++) toks.push((await S.post('/api/register', { username: 'load_' + i, password: 'Load-test-12345', name: 'Нагрузка ' + i, agree: true, adult: true })).token);
     let cs = []; for (const t of toks) cs.push(await S.conn(t));
     const grp = await cs[0].rpc('chat.create', { type: 'group', title: 'Нагрузка', members: cs.slice(1).map(c => c.me.id) });
     for (const c of cs) await c.rpc('msg.send', { chat: grp.id, text: 'Сообщение обычной длины: привет, как дела, что нового? Увидимся вечером на пляже.' });

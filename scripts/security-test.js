@@ -29,7 +29,7 @@ async function server(extraEnv) {
   if (!up) throw new Error('сервер не поднялся:\n' + S.log.slice(-1500));
   S.post = async (p, body, headers) => { const r = await fetch(S.base + p, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body) }); let j = null; try { j = await r.json(); } catch (e) { /* не JSON */ } return { status: r.status, j: j || {} }; };
   S.stop = async () => { srv.kill(); await sleep(300); fs.rmSync(dir, { recursive: true, force: true }); };
-  S.reg = async (username, extra) => { const r = await S.post('/api/register', { username, password: 'Sec-test-' + username, name: username, agree: true, ...extra }); return r.j; };
+  S.reg = async (username, extra) => { const r = await S.post('/api/register', { username, password: 'Sec-test-' + username, name: username, agree: true, adult: true, ...extra }); return r.j; };
   S.conn = tok => new Promise((res, rej) => {
     const ws = new WS(`ws://127.0.0.1:${port}/ws?token=${tok}`); let n = 0; const wait = new Map(), c = { evs: [], tok, ws };
     const t = setTimeout(() => rej(new Error('WebSocket молчит')), 5000);

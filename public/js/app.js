@@ -116,7 +116,7 @@ function TgEnter() {
     if (alive.current && !quiet) setBusy(false);
   };
   useEffect(() => { go({}, true); return () => { alive.current = false; clearTimeout(timer.current); }; }, []);
-  const submit = e => { e.preventDefault(); if (st.phase === 'agree') { if (!agree) return setSt(s => ({ ...s, err: 'Чтобы создать аккаунт, примите политику конфиденциальности' })); setSt(s => ({ ...s, err: '' })); go({ agree: true, username: f.username.trim(), name: f.name.trim() }); } else go({ totp: f.totp.trim() }); };
+  const submit = e => { e.preventDefault(); if (st.phase === 'agree') { if (!agree) return setSt(s => ({ ...s, err: 'Чтобы создать аккаунт, подтвердите возраст 18+ и примите политику конфиденциальности' })); setSt(s => ({ ...s, err: '' })); go({ agree: true, adult: true, username: f.username.trim(), name: f.name.trim() }); } else go({ totp: f.totp.trim() }); };
   return html`<div class="auth">
     <section class="auth-brand"><div class="auth-logo"><${Logo} s=${132} /></div><h1 class="wordmark">НУДИСТ</h1><p class="slogan">Из Telegram — в два касания.</p></section>
     <section class="auth-form">
@@ -132,7 +132,7 @@ function TgEnter() {
             <p class="hint">Telegram подтвердил, что это вы${st.tg ? ` (@${st.tg})` : ''}. Выберите имя в «Нудисте». Пароль придумывать не нужно: входить будете через Telegram.</p>
             <label class="fld"><span>Как вас зовут</span><input value=${f.name} onInput=${e => setF({ ...f, name: e.target.value })} maxlength="64" autocomplete="name" /></label>
             <label class="fld"><span>Username</span><input value=${f.username} onInput=${e => setF({ ...f, username: e.target.value })} placeholder="latinica_bez_probelov" autocomplete="username" required /></label>
-            <label class="agree"><input type="checkbox" checked=${agree} onChange=${e => setAgree(e.target.checked)} /><span>Я принимаю <a role="button" tabindex="0" onClick=${e => { e.preventDefault(); setPolicy(true); }}>политику конфиденциальности</a></span></label>`
+            <label class="agree"><input type="checkbox" checked=${agree} onChange=${e => setAgree(e.target.checked)} /><span>Мне есть 18 лет. Я принимаю <a role="button" tabindex="0" onClick=${e => { e.preventDefault(); setPolicy(true); }}>политику конфиденциальности</a> и <a href="/offer#content" target="_blank" rel="noopener">правила сообщества</a></span></label>`
           : html`<h2>Двухфакторная защита</h2><label class="fld"><span>Код из приложения-аутентификатора</span><input value=${f.totp} onInput=${e => setF({ ...f, totp: e.target.value })} inputmode="numeric" placeholder="6 цифр или код восстановления" required autofocus /></label>`}
           ${st.err && html`<p class="err" role="alert">${st.err}</p>`}
           <button class="btn big" disabled=${busy}>${busy ? 'Секунду…' : st.phase === 'agree' ? 'Создать аккаунт' : 'Войти'}</button>
@@ -164,7 +164,7 @@ function Auth() {
   const submit = e => {
     e.preventDefault();
     go(async () => {
-      if (mode === 'register') { if (!agree) throw new Error('Чтобы зарегистрироваться, примите политику конфиденциальности'); const r = await http('register', { username: f.username, password: f.password, name: f.name, agree: true, setup: f.setup || undefined, ref: pendingRef() || undefined, utm: pendingUtm() }); if (r.token) local.set('just.reg', '1'); if (done(r)) { clearRef(); clearUtm(); } }
+      if (mode === 'register') { if (!agree) throw new Error('Чтобы зарегистрироваться, подтвердите возраст 18+ и примите политику конфиденциальности'); const r = await http('register', { username: f.username, password: f.password, name: f.name, agree: true, adult: true, setup: f.setup || undefined, ref: pendingRef() || undefined, utm: pendingUtm() }); if (r.token) local.set('just.reg', '1'); if (done(r)) { clearRef(); clearUtm(); } }
       else if (mode === 'login') { const r = await http('login', { username: f.username, password: f.password, code: f.totp || undefined }); if (!done(r) && r.need === 'totp') setStep('totp'); }
       else if (mode === 'recover') done(await http('recover', { username: f.username, code: f.rec, password: f.password }));
     });
@@ -191,7 +191,7 @@ function Auth() {
             <label class="fld"><span>${mode === 'recover' ? 'Новый пароль' : 'Пароль'}</span><input type="password" value=${f.password} onInput=${set('password')} placeholder="минимум 6 символов" autocomplete=${mode === 'login' ? 'current-password' : 'new-password'} required minlength="6" /></label>
             ${mode === 'register' && cfg && cfg.setup && html`<label class="fld"><span>Код установки</span><input value=${f.setup} onInput=${set('setup')} placeholder="из журнала сервера или файла setup-code.txt" autocomplete="off" required /></label>`}
             ${step === 'totp' && html`<label class="fld"><span>Код двухфакторной защиты</span><input value=${f.totp} onInput=${set('totp')} inputmode="numeric" placeholder="6 цифр или код восстановления" autofocus required /></label>`}`}
-          ${mode === 'register' && html`<label class="agree"><input type="checkbox" checked=${agree} onChange=${e => { setAgree(e.target.checked); if (e.target.checked) setErr(''); }} /><span>Я принимаю <a role="button" tabindex="0" onClick=${e => { e.preventDefault(); setPolicy(true); }} onKeyDown=${e => { if (e.key === 'Enter') { e.preventDefault(); setPolicy(true); } }}>политику конфиденциальности</a></span></label>`}
+          ${mode === 'register' && html`<label class="agree"><input type="checkbox" checked=${agree} onChange=${e => { setAgree(e.target.checked); if (e.target.checked) setErr(''); }} /><span>Мне есть 18 лет. Я принимаю <a role="button" tabindex="0" onClick=${e => { e.preventDefault(); setPolicy(true); }} onKeyDown=${e => { if (e.key === 'Enter') { e.preventDefault(); setPolicy(true); } }}>политику конфиденциальности</a> и <a href="/offer#content" target="_blank" rel="noopener">правила сообщества</a></span></label>`}
           ${err && html`<p class="err" role="alert">${err}</p>`}
           <button class="btn big" disabled=${busy}>${busy ? 'Секунду…' : mode === 'register' ? 'Раздеться и войти' : mode === 'recover' ? 'Сменить пароль и войти' : 'Войти'}</button>
           ${cfg && cfg.tg && (mode === 'login' || mode === 'register') && html`<a class="btn big ghost tg-btn" href=${tg ? tg.url : 'https://t.me/' + cfg.tg} target="_blank" rel="noopener" onClick=${tgGo}><${Icon} n="send" s=${18} /> ${mode === 'register' ? 'Через Telegram — без пароля' : 'Войти через Telegram'}</a>`}

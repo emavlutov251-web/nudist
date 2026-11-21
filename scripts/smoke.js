@@ -23,7 +23,7 @@ const post = (p, body, headers) => fetch(BASE + p, { method: 'POST', headers: { 
   for (let i = 0; i < 40 && !up; i++) { await sleep(250); try { up = (await fetch(BASE + '/api/health')).ok; } catch (e) { /* ещё не поднялся */ } }
   ok(up, 'сервер поднялся и отвечает на /api/health');
   const page = await fetch(BASE + '/'); ok(page.ok && (await page.text()).includes('<html'), 'главная страница отдаётся');
-  const cred = { username: 'smoke_' + Date.now().toString(36), password: 'Leaf-smoke-12345', name: 'Smoke' };
+  const cred = { username: 'smoke_' + Date.now().toString(36), password: 'Leaf-smoke-12345', name: 'Smoke', agree: true, adult: true };
   const reg = await (await post('/api/register', cred)).json(); ok(reg.token, 'регистрация выдаёт сессию');
   const login = await (await post('/api/login', cred)).json(); ok(login.token, 'вход по паролю работает');
   const init = await new Promise((res, rej) => {

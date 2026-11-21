@@ -57,7 +57,7 @@ async function fromS3(tmp) {
     ck('сервер поднялся на этой копии', up, up ? '' : log.slice(-600));
     if (up) {
       const name = 'restore_' + Date.now().toString(36);
-      const reg = await (await fetch(base + '/api/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: name, password: 'Restore-check-1', name: 'Проверка', agree: true }) })).json();
+      const reg = await (await fetch(base + '/api/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: name, password: 'Restore-check-1', name: 'Проверка', agree: true, adult: true }) })).json();
       ck('на восстановленном сервере работает регистрация, новый человек не получает прав', !!reg.token);
       const known = humans.find(u => u.username);
       const found = reg.token && known && await new Promise(res => {

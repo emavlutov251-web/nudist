@@ -73,12 +73,12 @@ async function enter(t, b, meta) {
   if (u) { const s2 = A.second(u, { code: b.totp }); if (s2) return s2; }      /* двухфакторную защиту Telegram не заменяет; код 2FA приходит в поле totp (code занят кодом входа) */
   else {
     need(db.flags.registration, 'Регистрация временно закрыта. Пляж переполнен.'); need(!A.setupNeeded(), 'Сервер ещё не настроен: первым регистрируется владелец, по username и коду установки.');
-    if (b.agree !== true) return { need: 'agree', name: t.name, username: freeName(t.username), tg: t.username };
+    if (b.agree !== true || b.adult !== true) return { need: 'agree', adult: true, name: t.name, username: freeName(t.username), tg: t.username };
     A.limit('reg:' + meta.ip, 120, 3600e3);
     const username = str(b.username, 32).replace(/^@/, ''), name = str(b.name, 64) || t.name;
     need(C.USERNAME_RE.test(username), 'Username: латиница, цифры и _, от 3 до 32 символов, начинается с буквы'); need(!C.usernameTaken(username), 'Этот username уже занят. Выберите другой.');
     need(!byTg(t.id), 'Этот Telegram уже привязан к аккаунту');
-    u = A.createUser({ username, name, ref: str(b.ref, 32) }); u.tg = { id: t.id, username: t.username, at: now() }; u.policy = { v: C.POLICY, ts: now() }; index = null; save();
+    u = A.createUser({ username, name, ref: str(b.ref, 32) }); u.tg = { id: t.id, username: t.username, at: now() }; u.policy = { v: C.POLICY, ts: now() }; u.adult = { ts: now(), v: '18+' };      // 18+ подтверждён на том же шаге, что и политика index = null; save();
   }
   if (t.username !== u.tg.username) { u.tg.username = t.username; save(); }
   const s = A.createSession(u, meta); const row = db.sessions[A.sid(s.token)]; if (row) row.via = 'tg';      // вход подтверждён Telegram — такой сеанс может сразу задать пароль
