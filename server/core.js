@@ -214,7 +214,9 @@ function broadcastUser(u) { for (const uid of audience(u)) emit(uid, 'user', pub
 
 // ───── чаты и права
 const dmId = (a, b) => 'dm_' + [a, b].sort().join('_');
-const st = (chat, uid) => (chat.st[uid] = chat.st[uid] || { read: 0 });
+// chat.st может отсутствовать у служебных комнат (игры «Рейв») — без этой подстраховки одно такое
+// поле роняло userChats(), и человек при входе видел вечную загрузку вместо чатов.
+const st = (chat, uid) => { const m = (chat.st = chat.st && typeof chat.st === 'object' ? chat.st : {}); return (m[uid] = m[uid] || { read: 0 }); };
 const DEFAULT_RIGHTS = { admin: { send: 1, pin: 1, info: 1, invite: 1, ban: 1, del: 1, promote: 0, audit: 1, mention: 1, voice: 1 }, mod: { send: 1, pin: 1, info: 0, invite: 1, ban: 1, del: 1, promote: 0, audit: 1, mention: 0, voice: 1 } };
 
 function sPerms(s, uid) {
@@ -529,7 +531,7 @@ function addToChat(chat, uid, role = 'member', extra) {
   chat.joins = chat.joins || {}; chat.joins[today()] = (chat.joins[today()] || 0) + 1;
 }
 function removeFromChat(chat, uid) {
-  delete chat.members[uid]; delete chat.st[uid];
+  delete chat.members[uid]; if (chat.st) delete chat.st[uid];
   const u = db.users[uid]; if (u && u.chats) u.chats = u.chats.filter(x => x !== chat.id);
   emit(uid, 'chat.gone', { id: chat.id });
 }

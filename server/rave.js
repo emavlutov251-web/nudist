@@ -176,7 +176,7 @@ R.getChat = ((orig) => (c, cid, o) => {
     need(r, 'Комната закрылась');
     need(r.users.has(c.id), 'Сначала зайдите в комнату');
     let ch = db.chats[id];
-    if (!ch) { ch = db.chats[id] = { id, type: 'group', title: r.title || 'Рейв', members: {}, pos: 0, ts: now() }; voiceRooms.add(id); }
+    if (!ch) { ch = db.chats[id] = { id, type: 'group', title: r.title || 'Рейв', members: {}, st: {}, seq: 0, pos: 0, ts: now() }; voiceRooms.add(id); }
     ch.members[c.uid] = { role: r.by === c.uid ? 'owner' : 'member' };
     return ch;
   }
